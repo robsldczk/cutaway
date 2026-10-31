@@ -20,7 +20,8 @@ pub struct RoleGuess {
     pub reason: String,
 }
 
-fn tokens(name: &str) -> Vec<String> {
+/// Lower-case name tokens of a file (camel case split, extension dropped).
+pub fn tokens(name: &str) -> Vec<String> {
     let stem = name.rsplit_once('.').map(|(s, _)| s).unwrap_or(name);
     // split camel case too: "PaulRoom" -> "Paul Room"
     let mut spaced = String::new();
@@ -40,22 +41,15 @@ fn tokens(name: &str) -> Vec<String> {
         .collect()
 }
 
-/// Guesses the role of one file from its name.
-pub fn guess_by_name(
+/// The character a file name points to (name, part of the name, a close spelling or an
+/// alias), with confidence and reason. Room keywords are ignored, so "Sara-Director_v001"
+/// names Sara.
+pub fn character_in_name(
     file: &str,
     characters: &[String],
     aliases: &BTreeMap<String, String>,
-) -> RoleGuess {
+) -> Option<(String, f64, String)> {
     let toks = tokens(file);
-    if let Some(k) = toks.iter().find(|t| ROOM_KEYWORDS.contains(&t.as_str())) {
-        return RoleGuess {
-            file: file.into(),
-            role: Role::Room,
-            character: None,
-            confidence: 0.95,
-            reason: format!("room keyword '{k}'"),
-        };
-    }
     let mut best: Option<(String, f64, String)> = None;
     let mut consider = |ch: &str, conf: f64, why: String| {
         if best.as_ref().map(|b| conf > b.1).unwrap_or(true) {
@@ -85,6 +79,26 @@ pub fn guess_by_name(
             consider(ch, 0.9, format!("alias '{alias}'"));
         }
     }
+    best
+}
+
+/// Guesses the role of one file from its name.
+pub fn guess_by_name(
+    file: &str,
+    characters: &[String],
+    aliases: &BTreeMap<String, String>,
+) -> RoleGuess {
+    let toks = tokens(file);
+    if let Some(k) = toks.iter().find(|t| ROOM_KEYWORDS.contains(&t.as_str())) {
+        return RoleGuess {
+            file: file.into(),
+            role: Role::Room,
+            character: None,
+            confidence: 0.95,
+            reason: format!("room keyword '{k}'"),
+        };
+    }
+    let best = character_in_name(file, characters, aliases);
     match best {
         Some((ch, conf, why)) => RoleGuess {
             file: file.into(),

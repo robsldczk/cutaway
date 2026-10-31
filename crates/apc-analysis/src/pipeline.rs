@@ -20,7 +20,7 @@ use crate::align::{actions_in, active_scenes, align, dialogue_in, units_of, Alig
 use crate::asr::{AsrProvider, AsrRequest, Transcript};
 use crate::edges::refine;
 use crate::error::Result;
-use crate::sessions::{group_sessions, FileSpan};
+use crate::sessions::{group_sessions, pair_rooms_by_name, FileSpan, NamedFile};
 use crate::wordmap::{coverage, map_words};
 
 /// Feedback window after a take, direction window before it (seconds).
@@ -227,7 +227,22 @@ pub fn analyze(
     let groups = if covered && !matched.is_empty() {
         matched
     } else {
-        group_sessions(&spans)
+        let named: Vec<NamedFile> = sources
+            .iter()
+            .map(|d| NamedFile {
+                id: d.src.id.clone(),
+                name: d.src.original_name.clone(),
+                role: d.src.role,
+                character: d.src.character.clone(),
+            })
+            .collect();
+        let characters: Vec<String> = doc.characters.keys().cloned().collect();
+        let aliases: BTreeMap<String, String> = doc
+            .characters
+            .values()
+            .flat_map(|c| c.aliases.iter().map(move |a| (a.clone(), c.id.clone())))
+            .collect();
+        pair_rooms_by_name(group_sessions(&spans), &named, &characters, &aliases)
     };
     let mut sessions: Vec<Session> = Vec::new();
     let mut report = MatchReport::default();

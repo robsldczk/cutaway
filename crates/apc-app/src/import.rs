@@ -1,14 +1,15 @@
 //! The Import › Files page: script and audio, the cast (recording → character, director
 //! room → recordings), "Needs you" fixes and Redo match. Matching groups files into
-//! sessions by timecode, else by the folder they were dropped in; links the user set by
-//! hand (`link_locked`) survive a redo.
+//! sessions by timecode, else by the folder they were dropped in, then pairs a room file
+//! named after a character with that character's recordings. Links the user set by hand
+//! (`link_locked`) survive a redo.
 
 use std::collections::{BTreeMap, HashMap};
 
 use serde_json::{json, Value};
 
 use apc_analysis::pipeline::stable_id;
-use apc_analysis::sessions::{group_sessions, FileSpan};
+use apc_analysis::sessions::{group_sessions, pair_rooms_by_name, FileSpan, NamedFile};
 use apc_core::*;
 
 use crate::error::{AppError, Result};
@@ -96,7 +97,18 @@ pub fn match_files(svc: &mut Service) -> Result<Value> {
             batch: batch_of(s),
         })
         .collect();
-    let mut groups = group_sessions(&spans);
+    let named: Vec<NamedFile> = files
+        .iter()
+        .map(|s| NamedFile {
+            id: s.id.clone(),
+            name: s.original_name.clone(),
+            role: s.role,
+            character: s.character.clone(),
+        })
+        .collect();
+    let characters: Vec<String> = doc.characters.keys().cloned().collect();
+    let mut groups =
+        pair_rooms_by_name(group_sessions(&spans), &named, &characters, &svc.aliases());
     // hand-linked files stay together as they were
     let mut locked: Vec<Vec<String>> = Vec::new();
     for s in files.iter().filter(|s| s.link_locked) {

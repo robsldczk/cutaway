@@ -419,3 +419,93 @@ fn closing_snapshots_unsaved_changes_and_returns_to_no_project() {
     );
     assert!(s.call("close_project", &json!({})).unwrap()["snapshot"].is_null());
 }
+
+/// Rob's naming: one folder, no timecode, "Sara-Session_v001" with "Sara-Director_v001".
+#[test]
+fn director_files_link_only_to_the_recording_they_are_named_after() {
+    env();
+    let dir = tempfile::tempdir().unwrap();
+    let demo = dir.path().join("demo");
+    apc_app::demo::write_session(&demo).unwrap();
+    let drop = dir.path().join("Session 2026-10-31");
+    std::fs::create_dir_all(&drop).unwrap();
+    // the recordings are the demo's (BWF timecode, transcripts); the director files are
+    // tones without timecode, with the room transcript
+    let mut paths = Vec::new();
+    for (i, (name, from)) in [
+        ("Sara-Session_v001", "Sara"),
+        ("Sara-Director_v001", ""),
+        ("Paul-Session_v001", "Paul"),
+        ("Paul-Director_v001", ""),
+    ]
+    .iter()
+    .enumerate()
+    {
+        let p = drop.join(format!("{name}.wav"));
+        if from.is_empty() {
+            let sr = 48000u32;
+            let s: Vec<f32> = (0..sr)
+                .map(|k| {
+                    0.2 * (k as f32 * (220.0 + 60.0 * i as f32) * std::f32::consts::TAU / sr as f32)
+                        .sin()
+                })
+                .collect();
+            apc_media::wav::write_wav(&p, sr, 1, &s).unwrap();
+            std::fs::copy(demo.join("Room.json"), drop.join(format!("{name}.json"))).unwrap();
+        } else {
+            std::fs::copy(demo.join(format!("{from}.wav")), &p).unwrap();
+            std::fs::copy(
+                demo.join(format!("{from}.json")),
+                drop.join(format!("{name}.json")),
+            )
+            .unwrap();
+        }
+        paths.push(p.to_string_lossy().into_owned());
+    }
+    let mut s = apc_app::Session::new("test");
+    s.call(
+        "create_episode",
+        &json!({ "parent": dir.path().to_string_lossy(), "name": "Ep" }),
+    )
+    .unwrap();
+    s.call(
+        "import_script",
+        &json!({ "path": demo.join("Demo Episode.fountain").to_string_lossy() }),
+    )
+    .unwrap();
+    s.call("import_audio", &json!({ "paths": paths, "copy": true }))
+        .unwrap();
+
+    let check = |s: &mut apc_app::Session| {
+        let v = s.call("import_view", &json!({})).unwrap();
+        for (ch, rec, room) in [
+            ("SARA", "Sara-Session_v001.wav", "Sara-Director_v001.wav"),
+            ("PAUL", "Paul-Session_v001.wav", "Paul-Director_v001.wav"),
+        ] {
+            let card = v["cast"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|c| c["id"] == ch)
+                .unwrap()
+                .clone();
+            let r = &card["recordings"][0];
+            assert_eq!(r["file"], rec);
+            let rooms: Vec<&str> = r["rooms"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x["file"].as_str().unwrap())
+                .collect();
+            assert_eq!(rooms, vec![room], "{ch}");
+            assert!(r["shared_with"].as_array().unwrap().is_empty(), "Only {ch}");
+        }
+        assert!(v["fixes"].as_array().unwrap().is_empty(), "{}", v["fixes"]);
+    };
+    // the analysis on its own (no match yet) pairs them
+    s.call("run_alignment", &json!({})).unwrap();
+    check(&mut s);
+    // and so does Redo match
+    s.call("match_files", &json!({})).unwrap();
+    check(&mut s);
+}
