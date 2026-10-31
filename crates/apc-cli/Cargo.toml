@@ -7,6 +7,8 @@ license.workspace = true
 publish.workspace = true
 
 [features]
+# Local speech recognition, as in the desktop app (D46). `--no-default-features` builds without it.
+default = ["parakeet"]
 parakeet = ["apc-app/parakeet"]
 
 [dependencies]

@@ -191,3 +191,8 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 ### D45 Director room files pair by name (Rob, 2026-10-31)
 - **Finding:** without overlapping timecode, every file dropped from one folder became one session, so each director room file was linked to every recording ("Sara-Director_v001" with Paul's session too).
 - **Choice:** after grouping by timecode or folder, a room file whose name points to a character (name, part of it, close spelling or alias; room keywords ignored) becomes a session with that character's recordings only. With several recordings of the character, the ones sharing the most other name tokens win ("v001" with "v001"). It looks in its own group first, then in all groups (recordings with timecode, director files without). Room files that name nobody stay with the rest of their group as an ensemble room. Redo match and the analysis use the same rule; hand-set links still win.
+
+### D46 Parakeet on by default (Rob, 2026-10-31)
+- **Supersedes "off by default" in D23.** The desktop app and the `cutaway` CLI build with the `parakeet` feature (sherpa-onnx, static ONNX Runtime downloaded by its build script). `cargo build -p apc-cli --no-default-features` still builds without it. Episodes whose files all have transcript sidecars keep using them.
+- **First run:** the ~490 MB model downloads before the analysis starts, shown as its own progress ("Downloading the speech model (once): …"), into `<app support>/cutaway/models/`.
+- **Checked:** the TARMAC fixture without its transcript files, through the CLI release build: 31 takes on 8 lines, room sync +0.275 s, 2 picks, 1 min 28 s for 2 × 9 min on this Mac (Stage 0 with MacWhisper transcripts: 36 takes on 9 lines).

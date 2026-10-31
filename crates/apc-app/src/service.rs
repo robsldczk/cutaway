@@ -228,6 +228,49 @@ impl Service {
         }
     }
 
+    /// Downloads the speech model once, with progress, before an analysis needs it (instead
+    /// of a silent ~490 MB download behind "Transcribing …").
+    pub fn prepare_asr(&self, progress: &dyn Fn(apc_analysis::Progress)) -> Result<()> {
+        let all_sidecars = self
+            .doc()
+            .sources
+            .values()
+            .filter(|s| s.role != Role::Unknown)
+            .all(|s| s.transcript.is_some());
+        let models =
+            apc_analysis::asr::ModelManager::new(apc_analysis::asr::ModelManager::default_root());
+        let spec = &apc_analysis::asr::PARAKEET_TDT_V3;
+        if all_sidecars || !cfg!(feature = "parakeet") || models.is_installed(spec) {
+            return Ok(());
+        }
+        models
+            .ensure(spec, &|_, got, total| {
+                let mb = got as f64 / 1e6;
+                let (fraction, message) = match total {
+                    Some(t) if t > 0 => (
+                        got as f64 / t as f64,
+                        format!(
+                            "Downloading the speech model (once): {mb:.0} of {:.0} MB",
+                            t as f64 / 1e6
+                        ),
+                    ),
+                    _ => (
+                        0.0,
+                        format!("Downloading the speech model (once): {mb:.0} MB"),
+                    ),
+                };
+                progress(apc_analysis::Progress {
+                    stage: "model".into(),
+                    fraction,
+                    message,
+                });
+            })
+            .map_err(|e| {
+                AppError::Other(format!("the speech model could not be downloaded: {e}"))
+            })?;
+        Ok(())
+    }
+
     /// Cached audio analysis (envelope, peaks) of a source.
     pub fn analysis_of(&mut self, source_id: &str) -> Option<Arc<AudioAnalysis>> {
         if let Some(a) = self.media.get(source_id) {
@@ -423,6 +466,7 @@ impl Service {
     /// Runs the whole analysis and applies it as one undoable command.
     pub fn analyze(&mut self, progress: &dyn Fn(apc_analysis::Progress)) -> Result<MatchReport> {
         self.bus.refresh()?;
+        self.prepare_asr(progress)?;
         let (ai, warn) = self.ai_runner();
         let asr = self.asr_provider();
         let out = apc_analysis::analyze(

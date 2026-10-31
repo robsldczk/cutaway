@@ -10,6 +10,11 @@ publish.workspace = true
 name = "cutaway_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# Local speech recognition (Parakeet through sherpa-onnx, D23/D46). On for the desktop app.
+default = ["parakeet"]
+parakeet = ["apc-app/parakeet"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
