@@ -347,7 +347,8 @@ pub trait SoundGenerateProvider: Send + Sync {
 
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
-- [ ] Pushed and PR `dev → main` opened: blocked (pushes refused by the session's permission check, `gh` not installed). Steps for Rob in RUN_REPORT.
+- [x] Pushed `dev` (after the run, at Rob's request)
+- [ ] PR `dev → main`: needs `gh` and a `main` branch on the remote (steps in RUN_REPORT)
 
 ---
 
@@ -383,3 +384,4 @@ pub trait SoundGenerateProvider: Send + Sync {
 - 2026-10-31 M6 + M7 done: Svelte 5 UI to the Option C prototype with tokens in app/src/theme (Options deck/pills/notes, Arrange rows/strips/pauses/reorder, box editor comp + edit modes, inspector, unmatched bin, settings, history/versions, export, importer + summary card, welcome), Tauri shell (rpc + dialogs + Finder open). Edit page (dialogue lanes, SFX layers, ambience, music, ripple/⌥ move, nudge, gain, fades, pin/unanchor, anchor lines), sound bucket (spotting, search, generate, choose, place, merge, library tab, drag to timeline). Playwright smoke tests green (takes with arrows, play/stop, delete word + undo). M7 service tests green (anchoring after take swap and gap change, pinned stays, Edit→Options sync, spotting on demo and fixture S2).
 - 2026-10-31 M8 partly done: portability fixes and a blocking Windows CI job; the job itself has not run because pushes from this session are refused.
 - 2026-10-31 End of run: RUN_REPORT written. Next run starts with: push + PR, first Windows CI result, Parakeet recall on the fixture (VAD chunking), Epidemic/MCP sound providers, single-take audition in the box editor.
+- 2026-10-31 dev pushed to origin (7d3ffc4..513913f) after the run, at Rob's request.

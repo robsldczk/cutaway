@@ -2,7 +2,7 @@
 
 Branch `dev`, 10 commits on top of the untouched package commit. `scripts/check.sh` is green: fmt, clippy `-D warnings`, 84 Rust tests passing (2 live-service tests ignored by design), UI lint and typecheck. The 2 Playwright UI tests pass.
 
-**Nothing was pushed after the plan commit.** Pushes from this session were refused by the session's permission check after M0, so `origin/dev` stops at `chore: workspace, Tauri app skeleton, check.sh and CI`. Everything since then exists only in the local repository. `gh` isn't installed either, so the pull request wasn't opened. See *What Rob needs to do* below.
+**Pushed:** pushes were refused by the session's permission check during the run; after the run Rob asked again and `dev` was pushed in full. `gh` isn't installed and `main` doesn't exist on the remote yet, so the pull request isn't open. See *What Rob needs to do* below.
 
 ## What was built
 
@@ -22,7 +22,7 @@ Branch `dev`, 10 commits on top of the untouched package commit. `scripts/check.
 
 ## What wasn't done, and why
 
-- **Pushes and the PR:** refused by the session's permission check; `gh` not installed. All work is committed locally on `dev`.
+- **The PR:** `gh` not installed and no `main` branch on the remote (D17). `dev` is pushed.
 - **Parakeet acceptance:** the pipeline works with Parakeet, but recognition on this session gives 26 of the 35+ takes (missed repeats of "Lunch.", most "Whoa"s, some takes near chunk edges). Likely causes, in order: speech overlapped by bleed, the 25 s chunking, and the short-line rule depending on segment boundaries. Next step: run Parakeet with VAD-based chunks and compare its word stream against the MacWhisper transcript line by line.
 - **Windows CI:** written, never run.
 - **Separate analysis process:** analysis runs on a worker thread with its own DB connection (D29); the CLI is the process-separated path.
@@ -50,9 +50,8 @@ cargo test --release -p apc-analysis --features parakeet --test fixture_tarmac -
 
 ## What Rob needs to do
 
-1. **Push and open the PR.** `main` doesn't exist on the remote yet (D17). From the repo:
+1. **Open the PR.** `dev` is pushed; `main` doesn't exist on the remote yet (D17). From the repo:
    ```sh
-   git push origin dev
    git push origin "$(git rev-list --max-parents=0 dev)":refs/heads/main   # main = the untouched package commit
    gh pr create --base main --head dev --title "Cutaway: first build run (M0–M8)" --body-file docs/RUN_REPORT.md
    ```
