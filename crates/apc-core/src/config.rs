@@ -24,7 +24,7 @@ impl Default for AiConfig {
         AiConfig {
             provider: "claude-code".into(),
             model: "claude-sonnet-5-5".into(),
-            effort: "high".into(),
+            effort: "medium".into(),
             batch: "scene".into(),
             timeout_s: 300,
         }
@@ -175,7 +175,7 @@ mod tests {
         let c = ProjectConfig::default();
         assert_eq!(c.ai.provider, "claude-code");
         assert_eq!(c.ai.model, "claude-sonnet-5-5");
-        assert_eq!(c.ai.effort, "high");
+        assert_eq!(c.ai.effort, "medium");
         assert_eq!(c.sound.generate.variations, 3);
         let t = c.to_toml().unwrap();
         assert!(t.contains("[ai]"));

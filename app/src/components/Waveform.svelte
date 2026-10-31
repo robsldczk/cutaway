@@ -17,7 +17,7 @@
 </script>
 
 <svg class="wv {cls}" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true">
-  <path d={path} {fill} />
+  <path d={path} style:fill={fill} />
 </svg>
 
 <style>

@@ -2,7 +2,7 @@
   import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { fmt } from '../lib/format';
-  import { charColor, charLabel, itemShade, mix, MIX_BASE, rgba, shade, solid } from '../lib/colors';
+  import { base, charColor, charLabel, itemShade, mix, rgba, shade, solid } from '../lib/colors';
   import { openEditor } from '../lib/keys';
   import type { ItemView } from '../lib/types';
 
@@ -59,7 +59,7 @@
     const nt = it.takes.length;
     const edges = nt > 2 ? `, 7px 0 0 -3px ${rgba(shd, 0.18)}, 14px 0 0 -6px ${rgba(shd, 0.1)}` : nt > 1 ? `, 7px 0 0 -3px ${rgba(shd, 0.18)}` : '';
     const dim = nt === 0 ? 0.5 : 1;
-    return `border-radius: ${Math.round(24 * sc)}px; padding: ${Math.round(16 * sc)}px ${Math.round(22 * sc)}px ${Math.round(18 * sc)}px; opacity: ${(Math.max(0.35, 1 - d * 0.12) * dim).toFixed(2)}; background: linear-gradient(115deg, ${rgba(shd, 0.2)} 0%, ${rgba(shd, 0.06)} 40%, rgba(255,255,255,0.025) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.09)${edges}, 0 18px 50px rgba(0,0,0,0.35)${it.takes[it.take_index ?? 0]?.partial ? '; outline: 1px dashed var(--text-5); outline-offset: -1px' : ''}`;
+    return `border-radius: ${Math.round(24 * sc)}px; padding: ${Math.round(16 * sc)}px ${Math.round(22 * sc)}px ${Math.round(18 * sc)}px; opacity: ${(Math.max(0.35, 1 - d * 0.12) * dim).toFixed(2)}; background: linear-gradient(115deg, ${rgba(shd, 0.2)} 0%, ${rgba(shd, 0.06)} 40%, rgb(var(--veil-rgb) / 0.025) 100%); box-shadow: inset 0 1px 0 rgb(var(--veil-rgb) / 0.09)${edges}, 0 18px 50px rgb(var(--shadow-rgb) / 0.35)${it.takes[it.take_index ?? 0]?.partial ? '; outline: 1px dashed var(--text-5); outline-offset: -1px' : ''}`;
   }
 
   function textOf(it: ItemView): string {
@@ -78,8 +78,8 @@
   function wordStyle(w: { start_s: number; end_s: number; deleted: boolean }) {
     if (w.deleted) return 'color: var(--text-dim); text-decoration: line-through';
     if (!live || w.end_s < app.pos) return 'color: var(--text-strong)';
-    if (w.start_s <= app.pos) return `transform: scale(1.22); color: #FFF4EC; text-shadow: 0 0 22px ${rgba(sh, 0.95)}`;
-    return 'color: rgba(243,241,236,0.42)';
+    if (w.start_s <= app.pos) return `transform: scale(1.22); color: var(--text-strong); text-shadow: 0 0 22px ${rgba(sh, 0.95)}`;
+    return 'color: rgb(var(--ink-rgb) / 0.42)';
   }
 
   const deck = $derived.by(() => {
@@ -91,20 +91,20 @@
       const osh = shade(color.rgb, o);
       out.push({
         num: o + 1,
-        style: `border-radius: ${R}px; transform: translateX(${di * 16}px) scaleY(${(1 - di * 0.07).toFixed(2)}); z-index: ${4 - di}; background: linear-gradient(${110 + o * 14}deg, ${solid(mix(osh, MIX_BASE, 0.5 - di * 0.08))}, ${solid(mix(osh, MIX_BASE, 0.22))}); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08), 6px 0 18px rgba(0,0,0,0.35)`,
+        style: `border-radius: ${R}px; transform: translateX(${di * 16}px) scaleY(${(1 - di * 0.07).toFixed(2)}); z-index: ${4 - di}; background: linear-gradient(${110 + o * 14}deg, ${solid(mix(osh, base(), 0.5 - di * 0.08))}, ${solid(mix(osh, base(), 0.22))}); box-shadow: inset 0 0 0 1px rgb(var(--veil-rgb) / 0.08), 6px 0 18px rgb(var(--shadow-rgb) / 0.35)`,
       });
     }
     return out;
   });
 
   const boxStyle = $derived(
-    `${cur && !cur.takes.length ? 'opacity: 0.55; ' : ''}min-height: ${Math.round(190 * sc)}px; border-radius: ${R}px; padding: ${Math.round(24 * sc)}px ${Math.round(34 * sc)}px; background: linear-gradient(${110 + k * 14}deg, ${solid(mix(sh, MIX_BASE, 0.48))} 0%, ${solid(mix(sh, MIX_BASE, 0.2))} 50%, var(--mix-base) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.13), inset 0 0 0 1px ${rgba(sh, 0.34)}, 0 24px 90px ${rgba(sh, app.playing ? 0.34 : 0.18)}, 0 18px 50px rgba(0,0,0,0.4)${take?.partial ? '; outline: 1px dashed var(--text-4); outline-offset: -2px' : ''}`,
+    `${cur && !cur.takes.length ? 'opacity: 0.55; ' : ''}min-height: ${Math.round(190 * sc)}px; border-radius: ${R}px; padding: ${Math.round(24 * sc)}px ${Math.round(34 * sc)}px; background: linear-gradient(${110 + k * 14}deg, ${solid(mix(sh, base(), 0.48))} 0%, ${solid(mix(sh, base(), 0.2))} 50%, var(--mix-base) 100%); box-shadow: inset 0 1px 0 rgb(var(--veil-rgb) / 0.13), inset 0 0 0 1px ${rgba(sh, 0.34)}, 0 24px 90px ${rgba(sh, app.playing ? 0.34 : 0.18)}, 0 18px 50px rgb(var(--shadow-rgb) / 0.4)${take?.partial ? '; outline: 1px dashed var(--text-4); outline-offset: -2px' : ''}`,
   );
 
   function pillStyle(i: number, partial: boolean) {
     const psh = shade(color.rgb, i);
     let st = i === k ? `background: ${rgba(psh, 0.92)}; color: var(--text-on-pill)` : `background: var(--glass-fill-3); color: var(--text-3); box-shadow: inset 0 -2px 0 ${rgba(psh, 0.85)}`;
-    if (partial) st += '; outline: 1px dashed rgba(240,238,232,0.45); outline-offset: -1px';
+    if (partial) st += '; outline: 1px dashed rgb(var(--ink-rgb) / 0.45); outline-offset: -1px';
     return st;
   }
 
@@ -131,7 +131,7 @@
                 <div class="nmrow">
                   <span class="nm" style="font-size: 12px; color: {color.name}">{charLabel(app.view, cur.character)}</span>
                   {#if take?.favorite}<span style="font-size: 13px; color: {color.name}" title={take.favorite_origin === 'director' ? 'Director pick' : 'Your favorite'}>★</span>{/if}
-                  {#if cur.low_confidence}<button class="lowc" title="Low confidence: open the inspector" aria-label="Low confidence" onclick={() => (app.drawer = 'inspector')}></button>{/if}
+                  {#if cur.low_confidence}<button class="lowc" title="Low confidence: open the inspector (⌘I)" aria-label="Low confidence" onclick={() => (app.drawer = 'inspector')}></button>{/if}
                   {#if cur.edited_in_edit}<button class="edited" onclick={() => app.setPage('edit')} title="Edited on the Edit page">edited in Edit</button>{/if}
                 </div>
                 <span class="pos" data-testid="take-pos">{cur.takes.length ? `${k + 1} / ${cur.takes.length}` : 'no takes'}</span>
@@ -199,7 +199,7 @@
     padding: 8px 16px;
     border-radius: 14px;
     background: var(--glass-fill-1);
-    color: rgba(240, 238, 232, 0.5);
+    color: rgb(var(--ink-rgb) / 0.5);
     backdrop-filter: var(--glass-blur-soft);
     -webkit-backdrop-filter: var(--glass-blur-soft);
     white-space: nowrap;
@@ -294,7 +294,7 @@
     transform: translateY(-50%);
     font-size: 10px;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.78);
+    color: rgb(var(--veil-rgb) / 0.78);
   }
   .abox {
     display: flex;
@@ -309,7 +309,7 @@
     position: relative;
     margin: 0;
     font-style: italic;
-    color: rgba(240, 238, 232, 0.58);
+    color: rgb(var(--ink-rgb) / 0.58);
   }
   .line {
     position: relative;
@@ -362,7 +362,7 @@
     margin: 4px 0 0;
     font-size: 14px;
     line-height: 1.4;
-    color: rgba(240, 238, 232, 0.88);
+    color: rgb(var(--ink-rgb) / 0.88);
   }
   .lab {
     font-size: 10px;

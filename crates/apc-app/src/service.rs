@@ -45,9 +45,24 @@ pub struct Service {
     pub last_report: Option<MatchReport>,
     pub jobs: crate::jobs::Jobs,
     pub player: crate::player::Player,
+    /// API keys of sound services (OS credential store; in memory with `CUTAWAY_SECRETS=memory`).
+    pub secrets: Arc<dyn apc_sound::secrets::SecretStore>,
+}
+
+fn default_secrets() -> Arc<dyn apc_sound::secrets::SecretStore> {
+    if std::env::var("CUTAWAY_SECRETS").as_deref() == Ok("memory") {
+        Arc::new(apc_sound::secrets::MemoryStore::default())
+    } else {
+        Arc::new(apc_sound::secrets::Keychain::new())
+    }
 }
 
 impl Service {
+    /// The API key of a sound service (credential store, then environment). Never leaves the core.
+    pub fn api_key(&self, s: apc_sound::secrets::KeyedService) -> Option<String> {
+        apc_sound::secrets::api_key(self.secrets.as_ref(), s)
+    }
+
     /// Opens an episode file (or the folder containing it).
     pub fn open(path: &Path, client: &str) -> Result<Self> {
         let file = project::find_episode_file(path)?;
@@ -75,6 +90,7 @@ impl Service {
             last_report: None,
             jobs: crate::jobs::Jobs::default(),
             player: crate::player::Player::default(),
+            secrets: default_secrets(),
         })
     }
 

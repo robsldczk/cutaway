@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte';
   import Sheet from './Sheet.svelte';
+  import Connections from './Connections.svelte';
 
   const v = $derived(app.view);
   let breath = $state(app.view?.breath_gap_s ?? 0.3);
@@ -48,6 +49,15 @@
     <div class="ctl">
       <label class="chk"><input type="checkbox" checked={v?.room_tone.enabled ?? false} onchange={(e) => locTone((e.currentTarget as HTMLInputElement).checked)} /> {v?.scene.place || 'location'} has a room tone</label>
     </div>
+    <span class="lab">Appearance</span>
+    <div class="ctl">
+      <div class="seg" role="group" aria-label="Theme">
+        <button class:on={app.theme === 'dark'} onclick={() => app.setTheme('dark')}>Dark</button>
+        <button class:on={app.theme === 'light'} onclick={() => app.setTheme('light')} data-testid="theme-light">Light</button>
+      </div>
+    </div>
+    <span class="lab">Connections</span>
+    <div class="ctl col"><Connections /></div>
     <span class="lab">AI</span>
     <div class="ctl col">
       <span>Provider: {app.status?.ai_provider}{app.status?.ai_warning ? ' (rules: ' + app.status.ai_warning + ')' : ''}</span>
@@ -99,5 +109,23 @@
   .row {
     display: flex;
     gap: 8px;
+  }
+  .seg {
+    display: inline-flex;
+    padding: 3px;
+    border-radius: var(--radius-pill);
+    background: var(--glass-fill-2);
+  }
+  .seg button {
+    height: 28px;
+    padding: 0 14px;
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+    color: var(--text-3);
+  }
+  .seg button.on {
+    background: var(--button-light-active);
+    color: var(--text-on-light);
+    font-weight: 600;
   }
 </style>

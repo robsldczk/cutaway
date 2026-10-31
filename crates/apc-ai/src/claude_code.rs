@@ -165,7 +165,7 @@ mod tests {
     #[ignore = "live Claude Code call; run with --ignored when the CLI is installed"]
     fn live_pick_detection() {
         use crate::task::*;
-        let p = ClaudeCodeProvider::new("claude-sonnet-5-5", "high", 300);
+        let p = ClaudeCodeProvider::new("claude-sonnet-5-5", "medium", 300);
         let runner = crate::runner::AiRunner::new(std::sync::Arc::new(p), None, None);
         let input = PickDetectInput {
             takes: vec![PickCandidate {

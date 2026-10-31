@@ -323,6 +323,35 @@ pub struct PlayP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct ConnectP {
+    /// `epidemic` or `elevenlabs`.
+    pub service: String,
+    pub api_key: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct ServiceP {
+    pub service: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct FetchP {
+    /// Remote id from `search_sounds` (Epidemic Sound).
+    pub remote_id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub cue_id: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct PlayTakeP {
+    pub take_id: String,
+    #[serde(default)]
+    pub from_s: f64,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct PeaksP {
     pub source_id: String,
     pub t0: f64,
@@ -386,6 +415,10 @@ registry! {
     "search_sounds", SearchSoundsP, Read, true, "Search the library (and connected services) for a query or a cue.";
     "generate_sound", GenerateP, Write, true, "Generate sound variations for a cue or prompt (ElevenLabs).";
     "import_sounds", ImportSoundsP, Write, true, "Import files into the library (sorted and tagged), optionally onto a cue or the timeline.";
+    "connections", NoParams, Read, true, "Which sound services are connected (keys are never shown).";
+    "connect_service", ConnectP, Write, false, "Store an API key for a sound service in the OS keychain (checked first). Not available over MCP.";
+    "disconnect_service", ServiceP, Write, false, "Remove a sound service's API key from the keychain.";
+    "fetch_sound", FetchP, Write, true, "Download a remote search result (Epidemic Sound) into the library as licensed, and attach it to a cue.";
     "list_library", LibraryP, Read, true, "Library sounds, optionally filtered by a query.";
     "delete_asset", DeleteAssetP, Destructive, true, "Remove a sound from the library (the file moves to Backups/Trash).";
     "place_sound", PlaceSoundP, Write, true, "Place a sound on the timeline, anchored to a line/word or at an absolute time.";
@@ -394,6 +427,7 @@ registry! {
     "export_cut_list", ExportP, Write, true, "Export the as-cut transcript / cut list (format csv or md).";
     "export_mix", ExportMixP, Write, true, "Bounce a scene to WAV or MP3.";
     "play", PlayP, Read, false, "Play the scene from a time (audio device, or a virtual clock without one).";
+    "play_take", PlayTakeP, Read, false, "Audition one take alone (loudness-matched) from a time within it.";
     "stop", NoParams, Read, false, "Stop playback.";
     "playhead", NoParams, Read, false, "Playhead position and state.";
     "peaks", PeaksP, Read, false, "Waveform peaks of a source range.";
@@ -739,6 +773,20 @@ impl Service {
                 let p: ImportSoundsP = parse(params)?;
                 crate::sound::import(self, &p.paths, p.cue_id, p.scene, p.at_s)
             }
+            "connections" => crate::sound::connections(self),
+            "connect_service" => {
+                let p: ConnectP = parse(params)?;
+                crate::sound::connect(self, &p.service, &p.api_key)
+            }
+            "disconnect_service" => {
+                let p: ServiceP = parse(params)?;
+                crate::sound::disconnect(self, &p.service)
+            }
+            "fetch_sound" => {
+                let p: FetchP = parse(params)?;
+                let title = if p.title.is_empty() { p.remote_id.clone() } else { p.title.clone() };
+                crate::sound::fetch(self, &p.remote_id, &title, p.cue_id)
+            }
             "list_library" => {
                 let p: LibraryP = parse(params)?;
                 let lib = self.library();
@@ -802,6 +850,10 @@ impl Service {
                 let p: PlayP = parse(params)?;
                 let sid = scene_id(self, p.scene.as_deref())?;
                 crate::player::play(self, &sid, p.from_s, p.until_s)
+            }
+            "play_take" => {
+                let p: PlayTakeP = parse(params)?;
+                crate::player::play_take(self, &p.take_id, p.from_s)
             }
             "stop" => crate::player::stop(self),
             "playhead" => crate::player::playhead(self),

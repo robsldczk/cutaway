@@ -6,6 +6,11 @@ import './theme/tokens.css';
 import './theme/base.css';
 
 document.title = brand.displayName;
+try {
+  if (localStorage.getItem('cutaway.theme') === 'light') document.documentElement.dataset.theme = 'light';
+} catch {
+  /* storage blocked: dark */
+}
 
 const target = document.getElementById('app');
 if (!target) throw new Error('missing #app');

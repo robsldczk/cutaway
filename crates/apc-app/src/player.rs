@@ -16,6 +16,8 @@ use crate::service::Service;
 #[derive(Default)]
 pub struct Player {
     engine: Option<Engine>,
+    /// Take being auditioned alone (positions are then seconds into the take).
+    take_id: Option<String>,
     tried: bool,
     clock: Option<(Instant, f64, f64)>,
     stopped_at: f64,
@@ -43,6 +45,52 @@ pub fn play(svc: &mut Service, scene_id: &str, from_s: f64, until_s: Option<f64>
     let Some(sched) = schedule(svc, scene_id) else {
         return Ok(json!({ "playing": false }));
     };
+    svc.player.take_id = None;
+    start(svc, sched, scene_id, from_s, until_s)
+}
+
+/// Plays one take alone, loudness-matched, from `from_s` seconds into it.
+pub fn play_take(svc: &mut Service, take_id: &str, from_s: f64) -> Result<Value> {
+    let t = svc
+        .doc()
+        .takes
+        .get(take_id)
+        .cloned()
+        .ok_or_else(|| crate::AppError::Params(format!("no take '{take_id}'")))?;
+    let scene_id = svc
+        .doc()
+        .lines
+        .get(&t.line_id)
+        .map(|l| l.scene_id.clone())
+        .unwrap_or_default();
+    let clip = apc_audio::ScheduledClip {
+        source_id: t.source_id.clone(),
+        src_in: t.t0,
+        src_out: t.t1,
+        start_s: 0.0,
+        gain_db: apc_media::loudness::match_gain_db(t.lufs, MixSettings::default().target_lufs),
+        fade_in_s: 0.005,
+        fade_out_s: 0.005,
+        lane: "audition".into(),
+        loop_len_s: None,
+        owner: t.line_id.clone(),
+    };
+    let sched = PlaySchedule {
+        clips: vec![clip],
+        duration_s: t.duration(),
+    };
+    let r = start(svc, sched, &scene_id, from_s.clamp(0.0, t.duration()), None)?;
+    svc.player.take_id = Some(take_id.to_string());
+    Ok(r)
+}
+
+fn start(
+    svc: &mut Service,
+    sched: PlaySchedule,
+    scene_id: &str,
+    from_s: f64,
+    until_s: Option<f64>,
+) -> Result<Value> {
     let duration = sched.duration_s;
     let use_device = std::env::var("CUTAWAY_NO_AUDIO").is_err();
     if !svc.player.tried && use_device {
@@ -99,7 +147,11 @@ pub fn playhead(svc: &mut Service) -> Result<Value> {
         svc.player.clock = None;
         svc.player.stopped_at = pos;
     }
-    if playing && svc.bus.refresh().unwrap_or(false) && svc.player.rev != svc.bus.rev() {
+    if playing
+        && svc.player.take_id.is_none()
+        && svc.bus.refresh().unwrap_or(false)
+        && svc.player.rev != svc.bus.rev()
+    {
         if let (Some(sid), Some(e)) = (svc.player.scene_id.clone(), &svc.player.engine) {
             if let Some(s) = schedule(svc, &sid) {
                 e.load(
@@ -111,5 +163,7 @@ pub fn playhead(svc: &mut Service) -> Result<Value> {
         }
         svc.player.rev = svc.bus.rev();
     }
-    Ok(json!({ "position_s": pos, "playing": playing, "scene_id": svc.player.scene_id }))
+    Ok(
+        json!({ "position_s": pos, "playing": playing, "scene_id": svc.player.scene_id, "take_id": svc.player.take_id }),
+    )
 }

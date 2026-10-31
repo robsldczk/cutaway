@@ -198,7 +198,7 @@
     const isCur = r.it.line_id === app.curId;
     const dragging = drag?.id === r.it.line_id;
     const ov = prevGap < 0 ? Math.round(-prevGap * 44 * sc) : 0;
-    return `height: ${S}px; margin-top: ${-ov}px; z-index: ${dragging ? 30 : 2}; transform: translateY(${dragging ? drag!.dy.toFixed(1) : 0}px)${dragging ? ' rotate(-1deg)' : ''}; transition: ${dragging ? 'none' : 'transform .2s'}; mix-blend-mode: ${ov > 0 ? 'screen' : 'normal'}; background: linear-gradient(90deg, ${rgba(shd, isCur ? 0.44 : 0.28)}, ${rgba(shd, 0.1)} 60%, rgba(255,255,255,0.03)); box-shadow: inset 0 0 0 ${isCur ? 1.5 : 1}px ${rgba(shd, isCur ? 0.75 : 0.2)}${dragging ? ', 0 30px 60px rgba(0,0,0,0.55)' : isCur ? `, 0 16px 60px ${rgba(shd, 0.22)}` : ''}`;
+    return `height: ${S}px; margin-top: ${-ov}px; z-index: ${dragging ? 30 : 2}; transform: translateY(${dragging ? drag!.dy.toFixed(1) : 0}px)${dragging ? ' rotate(-1deg)' : ''}; transition: ${dragging ? 'none' : 'transform .2s'}; mix-blend-mode: ${ov > 0 ? 'screen' : 'normal'}; background: linear-gradient(90deg, ${rgba(shd, isCur ? 0.44 : 0.28)}, ${rgba(shd, 0.1)} 60%, rgb(var(--veil-rgb) / 0.03)); box-shadow: inset 0 0 0 ${isCur ? 1.5 : 1}px ${rgba(shd, isCur ? 0.75 : 0.2)}${dragging ? ', 0 30px 60px rgb(var(--shadow-rgb) / 0.55)' : isCur ? `, 0 16px 60px ${rgba(shd, 0.22)}` : ''}`;
   }
 </script>
 
@@ -232,8 +232,8 @@
             <span class="vline" style="background: var(--locator); left: {lf * 100}%"></span><span class="flag" style="left: {lf * 100}%"></span>
             {#if app.playing || app.pos > r.it.start_s}<span class="vline phead" style="left: {pf * 100}%"></span>{/if}
           {/if}
-          <span class="hdl" role="slider" tabindex="-1" aria-valuenow={tr.h} onmousedown={(e) => grabTrim(e, r.it, 'h')} title="Drag to trim the head" style="left: calc({tr.h * 100}% - 5px); background: {hc ? 'var(--warn)' : 'rgba(243,241,236,0.9)'}"></span>
-          <span class="hdl" role="slider" tabindex="-1" aria-valuenow={tr.t} onmousedown={(e) => grabTrim(e, r.it, 't')} title="Drag to trim the tail" style="left: calc({tr.t * 100}% - 5px); background: {tc ? 'var(--warn)' : 'rgba(243,241,236,0.9)'}"></span>
+          <span class="hdl" role="slider" tabindex="-1" aria-valuenow={tr.h} onmousedown={(e) => grabTrim(e, r.it, 'h')} title="Drag to trim the head" style="left: calc({tr.h * 100}% - 5px); background: {hc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>
+          <span class="hdl" role="slider" tabindex="-1" aria-valuenow={tr.t} onmousedown={(e) => grabTrim(e, r.it, 't')} title="Drag to trim the tail" style="left: calc({tr.t * 100}% - 5px); background: {tc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>
         {:else}
           <span class="none">no takes</span>
         {/if}
@@ -243,7 +243,7 @@
       {@const g = gapOf(r)}
       <div class="gaprow" onmousedown={(e) => grabGap(e, r)} title="Drag up or down to change the pause" style="height: {Math.round((18 + Math.max(g, 0) * 14) * sc)}px" role="slider" tabindex="-1" aria-valuenow={g} data-testid="gap-row">
         <div class="gapline"></div>
-        <div class="gappill" style="color: {g < 0 ? 'var(--overlap)' : 'rgba(240,238,232,0.78)'}">
+        <div class="gappill" style="color: {g < 0 ? 'var(--overlap)' : 'rgb(var(--ink-rgb) / 0.78)'}">
           <span class="num">{g < 0 ? `overlap ${(-g).toFixed(2)} s` : `‖ ${g.toFixed(2)} s`}</span>
           {#if r.acts.length}<span class="script ellip actx">{r.acts.join(' ')}</span>{/if}
         </div>
@@ -286,10 +286,10 @@
     height: 28px;
     border-radius: 7px;
     cursor: grab;
-    color: rgba(240, 238, 232, 0.5);
+    color: rgb(var(--ink-rgb) / 0.5);
   }
   .grip:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgb(var(--veil-rgb) / 0.1);
     color: var(--text-strong);
   }
   .who {
@@ -299,27 +299,27 @@
   .txt {
     flex: 1;
     min-width: 0;
-    color: rgba(240, 238, 232, 0.86);
+    color: rgb(var(--ink-rgb) / 0.86);
   }
   .moved {
     color: var(--text-strong);
-    box-shadow: inset 0 0 0 1px rgba(240, 238, 232, 0.4);
+    box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.4);
   }
   .cuts {
-    color: #1a1408;
+    color: var(--text-on-pill);
     background: var(--warn);
   }
   .dur {
     flex: none;
     font-size: var(--fs-small);
-    color: rgba(240, 238, 232, 0.58);
+    color: rgb(var(--ink-rgb) / 0.58);
     font-variant-numeric: tabular-nums;
   }
   .strip {
     position: relative;
     border-radius: 8px;
     overflow: hidden;
-    background: rgba(0, 0, 0, 0.25);
+    background: rgb(var(--shadow-rgb) / 0.25);
     cursor: text;
   }
   .shade {
@@ -340,7 +340,7 @@
     width: 10px;
     border-radius: 3px;
     cursor: ew-resize;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 0 0 1px rgb(var(--shadow-rgb) / 0.45);
     z-index: 3;
   }
   .none {
@@ -363,7 +363,7 @@
     right: 24px;
     top: 50%;
     height: 1px;
-    background: rgba(255, 255, 255, 0.09);
+    background: rgb(var(--veil-rgb) / 0.09);
   }
   .gappill {
     position: absolute;
@@ -379,11 +379,11 @@
     background: var(--pill);
     font-size: var(--fs-small);
     white-space: nowrap;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+    box-shadow: inset 0 0 0 1px rgb(var(--veil-rgb) / 0.09);
   }
   .gaprow:hover .gappill {
     color: var(--text-strong);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+    box-shadow: inset 0 0 0 1px rgb(var(--veil-rgb) / 0.35);
   }
   .num {
     font-variant-numeric: tabular-nums;

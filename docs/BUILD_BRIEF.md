@@ -79,7 +79,7 @@ Commit as `docs: implementation plan`, push to `dev`, then start M0 immediately.
 - **Note linking:** feedback = room speech within 8 s after a take; direction = up to 30 s before it.
 - **AI provider:**
   - The `AiProvider` trait with schema-validated JSON in and out.
-  - `ClaudeCodeProvider` calls `claude -p` with `--output-format json`. The model comes from project config, default `claude-sonnet-5-5`, effort `high`.
+  - `ClaudeCodeProvider` calls `claude -p` with `--output-format json`. The model comes from project config, default `claude-sonnet-5-5`, effort `medium` (changed from high, D35).
   - `MockProvider` for tests.
   - Versioned prompt files in `crates/apc-ai/prompts/`.
   - Results cached by input hash + prompt version + provider + model; every call logged to `Logs/ai-calls.jsonl`.

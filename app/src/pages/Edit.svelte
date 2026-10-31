@@ -234,7 +234,7 @@
               {#each (ev?.placements ?? []).filter((p) => p.lane === ln.group && (ln.group !== 'sfx' || p.layer === ln.layer)) as p (p.id)}
                 {@const dx = drag?.id === p.id ? drag.dx : 0}
                 <div class="clip snd" class:sel={sel?.id === p.id} role="button" tabindex="-1" onmousedown={(e) => track(e, p.id, 'sound', (dt) => moveSound(p, dt))} title={p.name} style="left: {x(p.start_s) + dx}px; width: {Math.max(4, x(p.len_s))}px">
-                  <Waveform peaks={p.peaks} fill="rgba(240,238,232,0.45)" />
+                  <Waveform peaks={p.peaks} fill="rgb(var(--ink-rgb) / 0.45)" />
                   <span class="cl">{p.name}</span>
                   {#if p.fade_in_s > 0.02}<span class="fade in" style="width: {x(p.fade_in_s)}px"></span>{/if}
                   {#if p.fade_out_s > 0.02}<span class="fade out" style="width: {x(p.fade_out_s)}px"></span>{/if}
@@ -358,7 +358,7 @@
   }
   .ruler {
     height: 26px;
-    background: rgba(255, 255, 255, 0.045);
+    background: rgb(var(--veil-rgb) / 0.045);
     cursor: ew-resize;
   }
   .tick {
@@ -366,7 +366,7 @@
     bottom: 0;
     width: 1px;
     height: 8px;
-    background: rgba(240, 238, 232, 0.35);
+    background: rgb(var(--ink-rgb) / 0.35);
   }
   .tl {
     position: absolute;
@@ -388,8 +388,8 @@
     cursor: grab;
   }
   .clip.snd {
-    background: rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 -3px 0 rgba(240, 238, 232, 0.6);
+    background: rgb(var(--veil-rgb) / 0.08);
+    box-shadow: inset 0 -3px 0 rgb(var(--ink-rgb) / 0.6);
   }
   .clip.snd.sel {
     box-shadow: inset 0 0 0 2px var(--text-strong);
@@ -404,7 +404,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+    text-shadow: 0 1px 6px rgb(var(--shadow-rgb) / 0.9);
   }
   .pin {
     position: absolute;
@@ -421,11 +421,11 @@
   }
   .fade.in {
     left: 0;
-    background: linear-gradient(90deg, rgba(8, 9, 12, 0.7), transparent);
+    background: linear-gradient(90deg, rgb(var(--night-rgb) / 0.7), transparent);
   }
   .fade.out {
     right: 0;
-    background: linear-gradient(270deg, rgba(8, 9, 12, 0.7), transparent);
+    background: linear-gradient(270deg, rgb(var(--night-rgb) / 0.7), transparent);
   }
   .anchor {
     position: absolute;

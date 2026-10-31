@@ -7,7 +7,9 @@ use serde_json::{json, Value};
 use apc_ai::task::{ScriptItem, SoundSpotInput, SoundTagInput, SpotCueType, SpotScene};
 use apc_core::ids::new_id;
 use apc_core::*;
-use apc_sound::providers::{ElevenLabsProvider, EpidemicProvider, LibrarySearchProvider};
+use apc_sound::epidemic::EpidemicProvider;
+use apc_sound::providers::{ElevenLabsProvider, LibrarySearchProvider};
+use apc_sound::secrets::KeyedService;
 use apc_sound::{GenerateRequest, SoundGenerateProvider, SoundQuery, SoundSearchProvider};
 
 use crate::error::{AppError, Result};
@@ -170,7 +172,7 @@ pub fn search(
                 local: local.clone(),
             }
             .search(&q),
-            "epidemic" => EpidemicProvider.search(&q),
+            "epidemic" => EpidemicProvider::new(svc.api_key(KeyedService::Epidemic)).search(&q),
             other => Err(apc_sound::SoundError::Unavailable(
                 other.into(),
                 "unknown provider".into(),
@@ -271,7 +273,9 @@ pub fn generate(
     let mut made = Vec::new();
     for p in &cfg.sound.generate.providers {
         let r = match p.as_str() {
-            "elevenlabs" => ElevenLabsProvider::from_env().generate(&req),
+            "elevenlabs" => {
+                ElevenLabsProvider::with_key(svc.api_key(KeyedService::Elevenlabs)).generate(&req)
+            }
             "magnific" => apc_sound::providers::McpGenerateProvider { server: None }.generate(&req),
             other => Err(apc_sound::SoundError::Unavailable(
                 other.into(),
@@ -433,4 +437,74 @@ pub fn place(svc: &mut Service, p: PlaceSoundP) -> Result<Value> {
         gain_db: 0.0,
     };
     Ok(svc.exec(&Command::PlaceSound { placement })?.result)
+}
+
+/// Stores an API key in the credential store after checking it (Epidemic: a test search).
+pub fn connect(svc: &mut Service, service: &str, api_key: &str) -> Result<Value> {
+    let s = KeyedService::parse(service)?;
+    let key = api_key.trim();
+    if key.len() < 8 {
+        return Err(AppError::Params("that doesn't look like an API key".into()));
+    }
+    if s == KeyedService::Epidemic {
+        EpidemicProvider::new(Some(key.to_string())).verify()?;
+    }
+    svc.secrets.set(s.id(), key)?;
+    Ok(serde_json::to_value(apc_sound::secrets::status(
+        svc.secrets.as_ref(),
+        s,
+    ))?)
+}
+
+pub fn disconnect(svc: &mut Service, service: &str) -> Result<Value> {
+    let s = KeyedService::parse(service)?;
+    svc.secrets.delete(s.id())?;
+    Ok(serde_json::to_value(apc_sound::secrets::status(
+        svc.secrets.as_ref(),
+        s,
+    ))?)
+}
+
+pub fn connections(svc: &Service) -> Result<Value> {
+    Ok(serde_json::to_value(
+        KeyedService::ALL
+            .iter()
+            .map(|s| apc_sound::secrets::status(svc.secrets.as_ref(), *s))
+            .collect::<Vec<_>>(),
+    )?)
+}
+
+/// Downloads a remote search result (Epidemic Sound) into the library, licensed, and
+/// attaches it to the cue. Counts as one download against the plan.
+pub fn fetch(
+    svc: &mut Service,
+    remote_id: &str,
+    title: &str,
+    cue_id: Option<String>,
+) -> Result<Value> {
+    let ep = EpidemicProvider::new(svc.api_key(KeyedService::Epidemic));
+    let file = ep.download(remote_id, title, &svc.paths.cache.join("downloads"))?;
+    let cue_desc = cue_id
+        .as_ref()
+        .and_then(|c| svc.doc().cues.get(c))
+        .map(|c| c.description.clone());
+    let mut a = import_one(
+        svc,
+        &file,
+        AssetSource::Licensed,
+        None,
+        Some("epidemic".into()),
+        cue_desc,
+    )?;
+    if a.license.is_none() {
+        a.license = Some(format!("Epidemic Sound, sound effect {remote_id}"));
+        svc.exec(&Command::AddAsset { asset: a.clone() })?;
+    }
+    if let Some(c) = &cue_id {
+        svc.exec(&Command::AttachCandidate {
+            cue_id: c.clone(),
+            asset_id: a.id.clone(),
+        })?;
+    }
+    Ok(json!({ "asset": a }))
 }

@@ -134,3 +134,25 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Auditioning a single take lane** plays the comp (the engine plays the scene timeline); clicking a take lane moves the locator to the same script word. Listed as an open question.
 - **Finder drops:** a script imports a version; audio imports as role tracks on Options/Arrange, into the library with the bucket open, and into the library plus a placement at the playhead on the Edit page.
 - **Fonts** are bundled (`@fontsource`, SIL OFL) so the app works offline.
+
+### D34 In/out wins over the inspector key (Rob, 2026-10-31)
+- **Supersedes D15.** I and O set in and out at the locator on Options and Arrange; the inspector is ⌘I (or the low-confidence dot, or a long press).
+
+### D35 Claude at medium effort (Rob, 2026-10-31)
+- **Supersedes the "high effort" default of D4 and D24.** `ai.effort` defaults to `medium`; the provider still passes it through `CUTAWAY_AI_EFFORT` and extra CLI flags through `CUTAWAY_CLAUDE_ARGS` until the CLI flag is confirmed on a machine with `claude` installed.
+
+### D36 Parakeet: speech-region decoding (Rob asked for one improvement cycle, 2026-10-31)
+- **Finding:** with fixed 25 s chunks Parakeet returned nothing for whole stretches that were mostly silence (5:38–5:50, 8:50–9:20 on the fixture) and merged quick repeats.
+- **Choice:** decode speech regions found in the loudness envelope (start at +10 dB over the noise floor, last while above +4 dB, gaps < 0.35 s merged, 0.25 s padding, ≤ 25 s). Region ends also end transcript segments.
+- **Result:** Paul's track 376 → 563 words (MacWhisper: 678), decoding twice as fast; takes 26 → 31 of 35+; Science T4 and edible picks found. Still missing: most of the five "Whoooaaah!" takes (spelled W, WOO, Wow, Ooooooo), "Mh-hm", and "Lunch" T4's explicit pick (Parakeet drops "…was the right one"). The fixture test stays ignored with these numbers.
+
+### D37 Sound service keys in the OS keychain (Rob, 2026-10-31)
+- **Context:** connect Epidemic Sound with an API key without anyone being able to steal it.
+- **Choice:** keys are stored with the `keyring` crate (MIT/Apache-2.0) in the macOS Keychain / Windows Credential Manager under the bundle id, one entry per service. `connect_service` checks the key with a test search before storing it; no method ever returns a key; keys never enter the project file, the command log, `ai-calls.jsonl` or exports; `connect_service`/`disconnect_service` are not MCP tools (an AI client never handles keys). The CLI reads keys from a hidden prompt. Environment variables still work as a fallback. ElevenLabs uses the same store.
+- **Epidemic API:** `GET /v0/sound-effects/search` and `/v0/sound-effects/{id}/download?quality=high` on `https://api.epidemicsound.com` with `Authorization: Bearer <key>` and an anonymous `x-partner-user-id` (hash of bundle id + OS user). Search results are remote candidates; "Get" downloads one into the library as licensed (one download against the plan). `length` is taken as seconds (not stated in the docs).
+
+### D38 Light theme
+- **Choice:** colours that the prototype used at many alphas became four RGB bases (`--ink-rgb`, `--veil-rgb`, `--night-rgb`, `--shadow-rgb`); components use `rgb(var(--ink-rgb) / a)`. The light theme redefines the bases and the panels (warm paper `#F2EFE8`, white glass, dark ink), uses darker label tints per character colour (`nameLight` in `palette.ts`) and mixes take gradients toward the paper colour. The choice is per viewer (Settings → Appearance), dark by default.
+
+### D39 Single-take audition (Rob, 2026-10-31)
+- **Choice:** `play_take` plays one take alone at matched loudness; in the box editor clicking a take lane plays it from the click, ▶ marks the source, and Space plays the last source (comp or take), as in the prototype.

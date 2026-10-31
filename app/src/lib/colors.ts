@@ -1,9 +1,11 @@
-import { colorOf, mix, MIX_BASE, rgba, shade, solid, type Rgb } from '../theme';
+import { colorOf, MIX_BASES, mix, rgba, shade, solid, type Rgb } from '../theme';
+import { app } from './app.svelte';
 import type { ItemView, SceneView } from './types';
 
+/** A character's colour; the label tint follows the theme. */
 export function charColor(view: SceneView | null, character: string | null) {
-  const c = view?.characters.find((x) => x.id === character);
-  return colorOf(c?.color_index ?? 0);
+  const c = colorOf(view?.characters.find((x) => x.id === character)?.color_index ?? 0);
+  return { rgb: c.rgb, name: app.theme === 'light' ? c.nameLight : c.name };
 }
 
 export function charLabel(view: SceneView | null, character: string | null): string {
@@ -15,4 +17,9 @@ export function itemShade(view: SceneView | null, it: ItemView, takeIndex = it.t
   return shade(charColor(view, it.character).rgb, takeIndex);
 }
 
-export { mix, MIX_BASE, rgba, shade, solid };
+/** The colour gradients mix toward in the current theme. */
+export function base(): Rgb {
+  return MIX_BASES[app.theme];
+}
+
+export { mix, rgba, shade, solid };

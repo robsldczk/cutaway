@@ -103,6 +103,17 @@ pub enum Cmd {
         key: String,
         value: String,
     },
+    /// Connect a sound service (epidemic, elevenlabs): the API key goes into the OS keychain.
+    /// The key is read from a hidden prompt, or from stdin when piped.
+    Connect {
+        service: String,
+    },
+    /// Remove a sound service's API key from the keychain.
+    Disconnect {
+        service: String,
+    },
+    /// Which sound services are connected.
+    Connections,
     /// Call any service method with JSON params.
     Call {
         method: String,
@@ -144,6 +155,23 @@ pub enum SfxCmd {
     },
     /// Add files to the show library.
     Import { paths: Vec<PathBuf> },
+}
+
+/// Reads a secret without echo (or the first line of stdin when it isn't a terminal).
+fn read_secret(prompt: &str) -> anyhow::Result<String> {
+    use std::io::IsTerminal;
+    let key = if std::io::stdin().is_terminal() {
+        rpassword::prompt_password(prompt)?
+    } else {
+        let mut s = String::new();
+        std::io::stdin().read_line(&mut s)?;
+        s
+    };
+    let key = key.trim().to_string();
+    if key.is_empty() {
+        return Err(anyhow!("no key given"));
+    }
+    Ok(key)
 }
 
 fn find_project(p: &Option<PathBuf>) -> anyhow::Result<PathBuf> {
@@ -292,6 +320,20 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                     }
                     call(&mut sess, m, p)
                 }
+                Cmd::Connect { service } => {
+                    let key = read_secret(&format!("{service} API key (input hidden): "))?;
+                    call(
+                        &mut sess,
+                        "connect_service",
+                        json!({ "service": service, "api_key": key }),
+                    )
+                }
+                Cmd::Disconnect { service } => call(
+                    &mut sess,
+                    "disconnect_service",
+                    json!({ "service": service }),
+                ),
+                Cmd::Connections => call(&mut sess, "connections", json!({})),
                 Cmd::Status => call(&mut sess, "project_status", json!({})),
                 Cmd::Report => call(&mut sess, "match_report", json!({})),
                 Cmd::Undo => call(&mut sess, "undo", json!({})),

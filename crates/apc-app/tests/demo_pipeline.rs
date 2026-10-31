@@ -123,3 +123,29 @@ fn demo_cut_list_golden() {
         "cut list changed; run with UPDATE_GOLDEN=1 if intended"
     );
 }
+
+#[test]
+fn a_single_take_can_be_auditioned() {
+    with_mock();
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo::create(dir.path(), "test", true).unwrap();
+    let take = svc
+        .doc()
+        .takes
+        .values()
+        .find(|t| t.take_no == 1)
+        .unwrap()
+        .clone();
+    let r = svc
+        .call("play_take", &json!({ "take_id": take.id, "from_s": 0.2 }))
+        .unwrap();
+    assert_eq!(r["playing"], true);
+    assert!((r["duration_s"].as_f64().unwrap() - take.duration()).abs() < 1e-9);
+    let ph = svc.call("playhead", &json!({})).unwrap();
+    assert_eq!(ph["take_id"], take.id.as_str());
+    assert!(ph["position_s"].as_f64().unwrap() >= 0.2);
+    svc.call("stop", &json!({})).unwrap();
+    // playing the scene again leaves audition mode
+    svc.call("play", &json!({ "scene": "1" })).unwrap();
+    assert!(svc.call("playhead", &json!({})).unwrap()["take_id"].is_null());
+}

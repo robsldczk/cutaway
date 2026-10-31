@@ -1,27 +1,40 @@
 /*
  * Design tokens of the default skin ("Option C", docs/design/prototype/).
  * Components read only these variables. A new skin redefines the same names, either in
- * its own file or under [data-theme="<name>"].
+ * its own file or under [data-theme="<name>"]. Dark is the default; light is
+ * [data-theme="light"].
+ *
+ * The four *-rgb bases carry the colours the prototype uses at many alphas:
+ *   ink    text and lines             veil   glass fills and outlines
+ *   night  dims, scrims, trim shades  shadow drop shadows
+ * Components write rgb(var(--ink-rgb) / 0.58) instead of a literal colour.
  */
 :root {
   color-scheme: dark;
+
+  --ink-rgb: 240 238 232;
+  --veil-rgb: 255 255 255;
+  --night-rgb: 8 9 12;
+  --shadow-rgb: 0 0 0;
+  --highlight-rgb: 255 255 255;
+  --locator-rgb: 159 214 255;
 
   /* stage */
   --stage-bg: #0b0d12;
   --stage-glow-1: rgba(46, 58, 110, 0.38);
   --stage-glow-2: rgba(224, 138, 90, 0.08);
   --stage-glow-3: rgba(94, 184, 176, 0.07);
-  --stage-paper-line: rgba(255, 255, 255, 0.022);
-  --stage-hairline: rgba(240, 238, 232, 0.26);
+  --stage-paper-line: rgb(var(--veil-rgb) / 0.022);
+  --stage-hairline: rgb(var(--ink-rgb) / 0.26);
 
   /* text: 1 is the dialogue, 5 the quietest hint */
   --text-strong: #f3f1ec;
   --text-1: #f0eee8;
-  --text-2: rgba(240, 238, 232, 0.84);
-  --text-3: rgba(240, 238, 232, 0.68);
-  --text-4: rgba(240, 238, 232, 0.55);
-  --text-5: rgba(240, 238, 232, 0.42);
-  --text-dim: rgba(243, 241, 236, 0.28);
+  --text-2: rgb(var(--ink-rgb) / 0.84);
+  --text-3: rgb(var(--ink-rgb) / 0.68);
+  --text-4: rgb(var(--ink-rgb) / 0.55);
+  --text-5: rgb(var(--ink-rgb) / 0.42);
+  --text-dim: rgb(var(--ink-rgb) / 0.28);
   --text-on-light: #14161c;
   --text-on-pill: #15100c;
   --link: #c3b7e6;
@@ -30,37 +43,38 @@
   /* glass */
   --glass-blur: blur(22px) saturate(140%);
   --glass-blur-soft: blur(10px);
-  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), inset 0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 18px 50px rgba(0, 0, 0, 0.35);
-  --glass-fill-1: rgba(255, 255, 255, 0.03);
-  --glass-fill-2: rgba(255, 255, 255, 0.04);
-  --glass-fill-3: rgba(255, 255, 255, 0.06);
-  --glass-fill-4: rgba(255, 255, 255, 0.07);
-  --glass-hover: rgba(255, 255, 255, 0.08);
-  --glass-active: rgba(255, 255, 255, 0.13);
-  --glass-outline: rgba(255, 255, 255, 0.08);
+  --glass-shadow: inset 0 1px 0 rgb(var(--highlight-rgb) / 0.09), inset 0 0 0 1px rgb(var(--veil-rgb) / 0.04),
+    0 18px 50px rgb(var(--shadow-rgb) / 0.35);
+  --glass-fill-1: rgb(var(--veil-rgb) / 0.03);
+  --glass-fill-2: rgb(var(--veil-rgb) / 0.04);
+  --glass-fill-3: rgb(var(--veil-rgb) / 0.06);
+  --glass-fill-4: rgb(var(--veil-rgb) / 0.07);
+  --glass-hover: rgb(var(--veil-rgb) / 0.08);
+  --glass-active: rgb(var(--veil-rgb) / 0.13);
+  --glass-outline: rgb(var(--veil-rgb) / 0.08);
   --panel: rgba(20, 22, 29, 0.8);
   --panel-solid: rgba(22, 24, 31, 0.94);
   --chip: rgba(20, 22, 29, 0.9);
   --pill: rgba(24, 26, 33, 0.94);
-  --scrim: rgba(8, 9, 12, 0.6);
-  --scrim-light: rgba(8, 9, 12, 0.55);
-  --trim-shade: rgba(8, 9, 12, 0.74);
-  --kbd: rgba(255, 255, 255, 0.1);
+  --scrim: rgb(var(--night-rgb) / 0.6);
+  --scrim-light: rgb(var(--night-rgb) / 0.55);
+  --trim-shade: rgb(var(--night-rgb) / 0.74);
+  --kbd: rgb(var(--veil-rgb) / 0.1);
 
   /* accents */
-  --locator: #9fd6ff;
-  --locator-soft: rgba(159, 214, 255, 0.55);
+  --locator: rgb(var(--locator-rgb));
+  --locator-soft: rgb(var(--locator-rgb) / 0.55);
   --warn: #e6b84c;
   --warn-glow: rgba(230, 184, 76, 0.8);
+  --ok: #9dd6a0;
   --playhead: #f3f1ec;
-  --playhead-glow: rgba(240, 238, 232, 0.8);
+  --playhead-glow: rgb(var(--ink-rgb) / 0.8);
   --overlap: #e9ddff;
   --button-light: #f3f1ec;
-  --button-light-active: rgba(240, 238, 232, 0.92);
+  --button-light-active: rgb(var(--ink-rgb) / 0.92);
   --danger: #e7a0a8;
 
-  /* character mixing base (rgb) for gradients: see palette.ts */
+  /* character gradients mix toward this (see palette.ts) */
   --mix-base: rgb(25, 27, 35);
 
   /* shape */
@@ -106,18 +120,62 @@
   }
 }
 
-/* Light theme comes second: the same names, redefined. Not tuned yet (see RUN_REPORT). */
+/* Light: warm paper, ink-dark text, the same glass recipe with dark veils and white highlights. */
 [data-theme='light'] {
   color-scheme: light;
-  --stage-bg: #f4f2ee;
-  --stage-glow-1: rgba(120, 140, 220, 0.18);
-  --text-strong: #14161c;
+
+  --ink-rgb: 28 30 38;
+  --veil-rgb: 28 30 38;
+  --night-rgb: 238 235 228;
+  --shadow-rgb: 60 50 30;
+  --highlight-rgb: 255 255 255;
+  --locator-rgb: 30 120 200;
+
+  --stage-bg: #f2efe8;
+  --stage-glow-1: rgba(120, 136, 210, 0.22);
+  --stage-glow-2: rgba(224, 138, 90, 0.12);
+  --stage-glow-3: rgba(94, 184, 176, 0.12);
+  --stage-paper-line: rgb(var(--veil-rgb) / 0.035);
+  --stage-hairline: rgb(var(--ink-rgb) / 0.18);
+
+  --text-strong: #15171d;
   --text-1: #1d2027;
-  --text-2: rgba(20, 22, 28, 0.84);
-  --text-3: rgba(20, 22, 28, 0.68);
-  --text-4: rgba(20, 22, 28, 0.55);
-  --text-5: rgba(20, 22, 28, 0.42);
-  --panel: rgba(255, 255, 255, 0.8);
-  --panel-solid: rgba(255, 255, 255, 0.94);
-  --mix-base: rgb(236, 234, 230);
+  --text-2: rgb(var(--ink-rgb) / 0.86);
+  --text-3: rgb(var(--ink-rgb) / 0.68);
+  --text-4: rgb(var(--ink-rgb) / 0.56);
+  --text-5: rgb(var(--ink-rgb) / 0.44);
+  --text-dim: rgb(var(--ink-rgb) / 0.3);
+  --text-on-light: #f6f3ec;
+  --text-on-pill: #15100c;
+  --link: #5b47a0;
+  --link-hover: #3d2d7a;
+
+  --glass-shadow: inset 0 1px 0 rgb(var(--highlight-rgb) / 0.7), inset 0 0 0 1px rgb(var(--veil-rgb) / 0.06),
+    0 14px 40px rgb(var(--shadow-rgb) / 0.14);
+  --glass-fill-1: rgb(255 255 255 / 0.45);
+  --glass-fill-2: rgb(255 255 255 / 0.55);
+  --glass-fill-3: rgb(255 255 255 / 0.62);
+  --glass-fill-4: rgb(255 255 255 / 0.7);
+  --glass-hover: rgb(var(--veil-rgb) / 0.06);
+  --glass-active: rgb(var(--veil-rgb) / 0.1);
+  --glass-outline: rgb(var(--veil-rgb) / 0.1);
+  --panel: rgba(252, 250, 246, 0.82);
+  --panel-solid: rgba(252, 250, 246, 0.96);
+  --chip: rgba(252, 250, 246, 0.92);
+  --pill: rgba(252, 250, 246, 0.96);
+  --scrim: rgb(var(--night-rgb) / 0.65);
+  --scrim-light: rgb(var(--night-rgb) / 0.6);
+  --trim-shade: rgb(var(--night-rgb) / 0.78);
+  --kbd: rgb(var(--veil-rgb) / 0.08);
+
+  --warn: #b7800f;
+  --warn-glow: rgba(183, 128, 15, 0.5);
+  --ok: #2f7d3a;
+  --playhead: #1d2027;
+  --overlap: #5b47a0;
+  --button-light: #1d2027;
+  --button-light-active: #1d2027;
+  --danger: #a8323f;
+
+  --mix-base: rgb(246, 243, 236);
 }

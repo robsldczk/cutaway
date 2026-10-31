@@ -14,6 +14,9 @@
   const nScript = $derived(Math.max(1, it?.tokens.length ?? 1));
 
   let mode = $state<'comp' | 'edit'>('comp');
+  /** What Space plays: the comp, or one take alone (prototype `edSrc`). */
+  let src = $state<'comp' | string>('comp');
+  const srcTake = $derived(src === 'comp' ? undefined : it?.takes.find((t) => t.id === src));
   let showWords = $state(true);
   let selSeg = $state<number | null>(null);
   let selWords = $state<number[]>([]);
@@ -32,7 +35,10 @@
     return t ? [{ take_id: t.id, from_word: 0, to_word: nScript, nudge_s: 0 }] : [];
   });
 
-  const edPos = $derived(clamp((app.pos - (it?.start_s ?? 0)) / boxDur, 0, 1));
+  const auditioning = $derived(!!app.audition && app.audition === srcTake?.id);
+  const edPos = $derived(
+    auditioning && srcTake ? clamp(app.pos / srcTake.duration, 0, 1) : clamp((app.pos - (it?.start_s ?? 0)) / boxDur, 0, 1),
+  );
   const edLoc = $derived(clamp((app.locator - (it?.start_s ?? 0)) / boxDur, 0, 1));
 
   // comp lane pieces in box-relative fractions
@@ -141,12 +147,13 @@
         paint = null;
         const t = it.takes[lane];
         if (!painting || !p || !t) {
-          // click: put the locator at the same script position
+          // click: listen to this take from here, and put the locator at the same script word
+          src = t.id;
+          void app.playTake(t.id, f0 * t.duration);
           const at = f0 * t.duration;
           const w = t.words.find((x) => at >= x.t0 && at <= x.t1);
           const lw = w?.script_idx != null ? it.words.find((x) => x.script_idx === w.script_idx) : undefined;
           app.locator = lw ? lw.start_s : it.start_s + f0 * boxDur;
-          if (!app.playing) app.pos = app.locator;
           return;
         }
         const [a, b] = [Math.min(p.a, p.b) * t.duration, Math.max(p.a, p.b) * t.duration];
@@ -272,8 +279,15 @@
     );
   }
 
+  async function playSource(fromLocator = false) {
+    if (app.playing) return app.stop();
+    if (srcTake) return app.playTake(srcTake.id, 0);
+    return playComp(fromLocator);
+  }
+
   async function playComp(fromLocator = false) {
     if (app.playing) return app.stop();
+    src = 'comp';
     const from = fromLocator || (app.locator > it.start_s && app.locator < it.end_s) ? app.locator : it.start_s;
     await app.play(from, it.end_s + 0.15);
   }
@@ -287,7 +301,7 @@
     let h = true;
     if (key === 'Escape') close();
     else if (key === ' ' && e.shiftKey) void playComp(true);
-    else if (key === ' ') void playComp();
+    else if (key === ' ') void playSource();
     else if ((key === 'z' || key === 'Z') && (e.metaKey || e.ctrlKey)) void (e.shiftKey ? app.redo() : app.undo());
     else if ((key === 'ArrowLeft' || key === 'ArrowRight') && selSeg != null && mode === 'comp' && comp[selSeg]) {
       const d = (key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 0.02 : 0.005);
@@ -314,7 +328,7 @@
     return () => window.removeEventListener('keydown', onKey, true);
   });
 
-  const hl = (shd: [number, number, number]) => `color: #FFFFFF; font-weight: 700; text-shadow: 0 0 12px ${rgba(shd, 1)}, 0 1px 6px rgba(0,0,0,0.9)`;
+  const hl = (shd: [number, number, number]) => `color: var(--text-strong); font-weight: 700; text-shadow: 0 0 12px ${rgba(shd, 1)}, 0 1px 6px rgb(var(--shadow-rgb) / 0.9)`;
   const compInfo = $derived.by(() => {
     const used = [...new Set(comp.map((c) => takeIdx(c.take_id) + 1))];
     return comp.length <= 1 ? `whole T${used[0] ?? k + 1}` : `${comp.length} parts from ${used.map((u) => 'T' + u).join(' ')}`;
@@ -323,7 +337,7 @@
 
 {#if it}
   <div class="dim" aria-hidden="true"></div>
-  <div class="glass ed" role="dialog" aria-modal="true" aria-label="Box editor" data-testid="box-editor" style="background: linear-gradient(160deg, {rgba(sh, 0.18)} 0%, rgba(22,24,31,0.9) 32%, rgba(20,22,29,0.94) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), inset 0 0 0 1px rgba(255,255,255,0.05), 0 40px 120px rgba(0,0,0,0.6)">
+  <div class="glass ed" role="dialog" aria-modal="true" aria-label="Box editor" data-testid="box-editor" style="background: linear-gradient(160deg, {rgba(sh, 0.18)} 0%, var(--panel) 32%, var(--panel-solid) 100%); box-shadow: inset 0 1px 0 rgb(var(--veil-rgb) / 0.12), inset 0 0 0 1px rgb(var(--veil-rgb) / 0.05), 0 40px 120px rgb(var(--shadow-rgb) / 0.6)">
     <div class="head">
       <div class="title">
         <div class="r"><span class="nm" style="font-size: 12px; color: {color.name}">{charLabel(app.view, it.character)}</span><span class="info">Line {it.number} · {it.takes.length} takes · {boxDur.toFixed(1)} s</span></div>
@@ -349,10 +363,10 @@
         </div>
       </div>
       <div class="lane">
-        <button class="lbl comp">
-          <span class="t">Comp</span><span class="sub">{mode === 'edit' ? 'click words, ⌫ deletes' : compInfo}</span>
+        <button class="lbl comp" class:src={src === 'comp'} onclick={() => (src = 'comp')} title="Listen to the comp (Space)">
+          <span class="t">{src === 'comp' ? '▶ ' : ''}Comp</span><span class="sub">{mode === 'edit' ? 'click words, ⌫ deletes' : compInfo}</span>
         </button>
-        <div class="area complane" bind:this={areaEl} data-testid="comp-lane">
+        <div class="area complane" bind:this={areaEl} data-testid="comp-lane" style={src === 'comp' ? 'box-shadow: inset 0 0 0 1.5px rgb(var(--ink-rgb) / 0.7)' : ''}>
           {#each pieces as pc, i (i)}
             {@const gsh = shadeOf(pc.p.take_id)}
             <div class="seg" class:sel={selSeg != null && comp[selSeg]?.take_id === pc.p.take_id} onmousedown={(e) => mode === 'comp' && segDown(e, pc.p.take_id)} role="button" tabindex="-1" title="Click to listen from here, drag sideways to nudge" style="left: {pc.a * 100}%; width: {pc.w * 100}%; background: {rgba(gsh, 0.16)}; box-shadow: inset 0 -3px 0 {rgba(gsh, 0.95)}{selSeg != null && comp[selSeg]?.take_id === pc.p.take_id ? `, inset 0 0 0 2px ${rgba(gsh, 1)}` : ''}">
@@ -369,7 +383,7 @@
               <button class="ew" class:editable={mode === 'edit'} class:deleted={w.deleted} class:picked={selWords.includes(w.idx)} data-testid="comp-word" data-deleted={w.deleted} onclick={() => mode === 'edit' && toggleWord(w.idx, w.deleted)} style="left: {((w.start_s - it.start_s) / boxDur) * 100}%; min-width: {Math.max(0.5, ((w.end_s - w.start_s) / boxDur) * 100)}%; font-size: 14px{on ? '; ' + hl(wsh) : ''}">{w.text}</button>
             {/each}
           {/if}
-          {#each seams as s, i (i)}<span class="seam" style="left: {s.x * 100}%; background: {s.warn ? 'var(--warn)' : 'rgba(240,238,232,0.75)'}{s.warn ? '; box-shadow: 0 0 10px var(--warn-glow)' : ''}"></span>{/each}
+          {#each seams as s, i (i)}<span class="seam" style="left: {s.x * 100}%; background: {s.warn ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.75)'}{s.warn ? '; box-shadow: 0 0 10px var(--warn-glow)' : ''}"></span>{/each}
           {#if mode === 'edit'}
             {#each cuts as c (c.idx)}
               <button class="cut" style="left: {c.x * 100}%" title="Close or keep the pause at this cut" onclick={() => app.cmd({ cmd: 'set_cut_pause', line_id: it.line_id, cut: c.idx, keep: !c.keep })}>{c.keep ? 'keep pause' : 'close'}</button>
@@ -382,18 +396,18 @@
           {/if}
         </div>
       </div>
-      <div class="lane hintrow"><span class="nm lbl0">Takes</span><span class="hintt">Click a take to place the locator there. Drag across it to paint that stretch into the comp.</span></div>
+      <div class="lane hintrow"><span class="nm lbl0">Takes</span><span class="hintt">Click a take to listen from there. Drag across it to paint that stretch into the comp.</span></div>
       {#each it.takes as t, i (t.id)}
         {@const lsh = shade(color.rgb, i)}
         {@const used = usedBars(t)}
         <div class="lane">
           <button class="lbl" onclick={() => app.cmd({ cmd: 'select_take', line_id: it.line_id, take_id: t.id })} aria-label="Use whole take {i + 1}" title="Use the whole take" style="box-shadow: inset 3px 0 0 {rgba(lsh, 0.95)}">
-            <span class="t2">T{i + 1}{t.favorite ? ' ★' : ''}{i === k ? ' · picked' : ''}</span><span class="sub ellip">{t.direction || t.feedback || t.heard}</span>
+            <span class="t2">{src === t.id ? '▶ ' : ''}T{i + 1}{t.favorite ? ' ★' : ''}{i === k ? ' · picked' : ''}</span><span class="sub ellip">{t.direction || t.feedback || t.heard}</span>
           </button>
-          <div class="area take" onmousedown={(e) => laneDown(e, i)} role="button" tabindex="-1" style="background: {rgba(lsh, 0.05)}{t.partial ? '; outline: 1px dashed rgba(240,238,232,0.3); outline-offset: -1px' : ''}">
+          <div class="area take" data-testid="take-lane" onmousedown={(e) => laneDown(e, i)} role="button" tabindex="-1" style="background: {rgba(lsh, src === t.id ? 0.1 : 0.05)}{src === t.id ? `; box-shadow: inset 0 0 0 1.5px ${rgba(lsh, 0.9)}` : ''}{t.partial ? '; outline: 1px dashed rgb(var(--ink-rgb) / 0.3); outline-offset: -1px' : ''}">
             <Waveform peaks={t.peaks} fill={rgba(lsh, used.length ? 0.72 : 0.42)} />
             {#each used as u, j (j)}<div class="used" style="left: {u.a * 100}%; width: {(u.b - u.a) * 100}%; background: {rgba(lsh, 1)}"></div>{/each}
-            {#if showWords}{#each t.words as w, wi (wi)}<span class="ew static" style="left: {(w.t0 / t.duration) * 100}%; width: {((w.t1 - w.t0) / t.duration) * 100}%">{w.text}</span>{/each}{/if}
+            {#if showWords}{#each t.words as w, wi (wi)}<span class="ew static" style="left: {(w.t0 / t.duration) * 100}%; width: {((w.t1 - w.t0) / t.duration) * 100}%{auditioning && src === t.id && app.pos >= w.t0 && app.pos <= w.t1 ? '; ' + hl(lsh) : ''}">{w.text}</span>{/each}{/if}
             {#if paint && paint.lane === i}<div class="paint" style="left: {Math.min(paint.a, paint.b) * 100}%; width: {Math.abs(paint.b - paint.a) * 100}%; background: {rgba(lsh, 0.25)}; box-shadow: inset 0 0 0 1px {rgba(lsh, 0.95)}"></div>{/if}
           </div>
         </div>
@@ -410,9 +424,9 @@
         <span><span class="kb">M</span> comp / edit</span>
         <span class="leg"><span class="sw"></span>seam cuts a word</span>
       </div>
-      <button class="playb" onclick={() => playComp()} style="background: {rgba(sh, 0.22)}; box-shadow: inset 0 0 0 1px {rgba(sh, 0.45)}">
+      <button class="playb" data-testid="play-source" onclick={() => playSource()} style="background: {rgba(sh, 0.22)}; box-shadow: inset 0 0 0 1px {rgba(sh, 0.45)}">
         <span class="pc">{#if app.playing}<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" fill="var(--text-on-light)" /></svg>{:else}<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="var(--text-on-light)" /></svg>{/if}</span>
-        Play comp <span class="kb">Space</span>
+        {srcTake ? `Play T${takeIdx(srcTake.id) + 1}` : 'Play comp'} <span class="kb">Space</span>
       </button>
     </div>
   </div>
@@ -489,7 +503,7 @@
     color: var(--text-3);
   }
   .modes button.on {
-    background: rgba(240, 238, 232, 0.14);
+    background: rgb(var(--ink-rgb) / 0.14);
     color: var(--text-strong);
     font-weight: 600;
   }
@@ -502,7 +516,7 @@
     background: var(--glass-fill-3);
   }
   .b.on {
-    background: rgba(240, 238, 232, 0.14);
+    background: rgb(var(--ink-rgb) / 0.14);
     color: var(--text-strong);
     font-weight: 600;
   }
@@ -516,7 +530,7 @@
     color: var(--text-on-light);
   }
   .done .kb {
-    background: rgba(0, 0, 0, 0.1);
+    background: rgb(var(--shadow-rgb) / 0.1);
     color: var(--text-on-light);
   }
   .lanes {
@@ -551,7 +565,10 @@
   }
   .lbl.comp {
     background: var(--glass-fill-3);
+  }
+  .lbl.comp.src {
     box-shadow: inset 3px 0 0 var(--text-strong);
+    background: var(--glass-active);
   }
   .t {
     font-size: 12px;
@@ -582,14 +599,14 @@
   .ruler {
     height: 26px;
     cursor: ew-resize;
-    background: rgba(255, 255, 255, 0.045);
+    background: rgb(var(--veil-rgb) / 0.045);
   }
   .tick {
     position: absolute;
     bottom: 0;
     width: 1px;
     height: 8px;
-    background: rgba(240, 238, 232, 0.35);
+    background: rgb(var(--ink-rgb) / 0.35);
   }
   .tl {
     position: absolute;
@@ -603,7 +620,7 @@
     height: 84px;
     cursor: default;
     background: var(--glass-fill-1);
-    box-shadow: inset 0 0 0 1.5px rgba(240, 238, 232, 0.7);
+    box-shadow: inset 0 0 0 1px var(--glass-outline);
   }
   .take {
     height: 58px;
@@ -648,10 +665,10 @@
     text-align: left;
     font-family: var(--font-script);
     font-size: 13px;
-    color: rgba(248, 246, 240, 0.86);
+    color: rgb(var(--ink-rgb) / 0.86);
     text-shadow:
-      0 1px 8px rgba(0, 0, 0, 0.95),
-      0 0 2px rgba(0, 0, 0, 0.9);
+      0 1px 8px rgb(var(--shadow-rgb) / 0.95),
+      0 0 2px rgb(var(--shadow-rgb) / 0.9);
     white-space: nowrap;
     pointer-events: none;
     transition: color 0.1s;
@@ -667,10 +684,10 @@
     padding: 1px 2px;
   }
   .ew.editable:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgb(var(--veil-rgb) / 0.12);
   }
   .ew.picked {
-    background: rgba(240, 238, 232, 0.25);
+    background: rgb(var(--ink-rgb) / 0.25);
   }
   .ew.deleted {
     color: var(--text-dim);
@@ -692,7 +709,7 @@
     top: 8px;
     height: 10px;
     border-radius: 3px;
-    background: rgba(159, 214, 255, 0.25);
+    background: rgb(var(--locator-rgb) / 0.25);
     cursor: ew-resize;
     z-index: 4;
   }
@@ -701,7 +718,7 @@
     top: 0;
     bottom: 0;
     width: 8px;
-    background: rgba(243, 241, 236, 0.85);
+    background: rgb(var(--ink-rgb) / 0.85);
     cursor: ew-resize;
     z-index: 5;
     border-radius: 3px;

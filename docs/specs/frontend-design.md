@@ -195,7 +195,7 @@ A floating glass bar at the bottom centre (`min(820px, 94%)`, 30 px radius):
 
 ## Inspector (on demand)
 
-Opened with I (Options and Edit pages) or a long press on a box. A right-hand glass drawer that shows everything hidden from the main view:
+Opened with ⌘I or a long press on a box. A right-hand glass drawer that shows everything hidden from the main view:
 - source timecode in/out, duration, match score,
 - the full room transcript before and after the take,
 - tags, favorite origin (director pick or you),
@@ -291,8 +291,8 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 | F | Favorite take |
 | E | Open box editor |
 | Esc | Close box editor / inspector / drawers |
-| I | Inspector (Options, Edit) |
-| I / O | In / out at the locator (Arrange) |
+| I / O | In / out at the locator (Options, Arrange) |
+| ⌘I | Inspector |
 | P | Apply take to selected passage |
 | U | Unmatched bin |
 | B | Sound bucket |
@@ -326,4 +326,4 @@ Recorded in `docs/DECISIONS.md` (D11–D16). In short:
 - **Scene list:** a compact numbered rail that expands into the list (was: a full sidebar).
 - **Arrange:** waveform strips with head/tail trim, I/O at the locator, pause rows you drag, and overlap by negative pause (overlap was V2).
 - **Box editor:** comp by painting across take lanes with nudgeable segments and seam warnings; Edit mode keeps word delete and pause tools in the same lanes.
-- **Keyboard:** adds F, ⇧ Space, , and ., Alt+Up/Down, −/+, ?, U; I means in-point on Arrange and inspector elsewhere.
+- **Keyboard:** adds F, ⇧ Space, , and ., Alt+Up/Down, −/+, ?, U; I/O set in and out everywhere (as in the prototype and Resolve), the inspector moves to ⌘I.

@@ -7,7 +7,19 @@ export type Page = 'options' | 'arrange' | 'edit';
 export type Overlay = null | 'help' | 'editor' | 'settings' | 'history' | 'export' | 'import';
 export type Drawer = null | 'inspector' | 'unmatched' | 'bucket';
 
+export type Theme = 'dark' | 'light';
+
+function storedTheme(): Theme {
+  try {
+    return localStorage.getItem('cutaway.theme') === 'light' ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
+
 class AppState {
+  /** Dark first; the choice is remembered per viewer. */
+  theme = $state<Theme>(storedTheme());
   status = $state<Status | null>(null);
   view = $state<SceneView | null>(null);
   edit = $state<EditView | null>(null);
@@ -18,6 +30,8 @@ class AppState {
   passageTo = $state<string | null>(null);
   playing = $state(false);
   pos = $state(0);
+  /** Take auditioned alone in the box editor (`pos` is then seconds into the take). */
+  audition = $state<string | null>(null);
   locator = $state(0);
   scale = $state(1);
   overlay = $state<Overlay>(null);
@@ -49,6 +63,16 @@ class AppState {
     if (bi < 0) return [];
     const [lo, hi] = a <= bi ? [a, bi] : [bi, a];
     return this.lines.slice(lo, hi + 1);
+  }
+
+  setTheme(t: Theme) {
+    this.theme = t;
+    document.documentElement.dataset.theme = t;
+    try {
+      localStorage.setItem('cutaway.theme', t);
+    } catch {
+      /* private mode: the choice lasts for this session */
+    }
   }
 
   say(msg: string) {
@@ -218,6 +242,16 @@ class AppState {
   async play(from: number, until?: number) {
     const r = await this.run(() => call<{ playing: boolean }>('play', { scene: this.sceneId, from_s: from, until_s: until }));
     if (!r?.playing) return;
+    this.audition = null;
+    this.playing = true;
+    this.pos = from;
+    this.startPolling();
+  }
+
+  async playTake(takeId: string, from: number) {
+    const r = await this.run(() => call<{ playing: boolean }>('play_take', { take_id: takeId, from_s: from }));
+    if (!r?.playing) return;
+    this.audition = takeId;
     this.playing = true;
     this.pos = from;
     this.startPolling();
@@ -227,6 +261,11 @@ class AppState {
     await this.run(() => call('stop'));
     this.playing = false;
     this.stopPolling();
+    if (this.audition) {
+      // back on the scene timeline at the line being edited
+      this.audition = null;
+      if (this.cur) this.pos = this.cur.start_s;
+    }
   }
 
   async togglePlay() {
@@ -275,8 +314,10 @@ class AppState {
       try {
         const p = await call<{ position_s: number; playing: boolean }>('playhead');
         this.pos = p.position_s;
-        const it = this.lineAt(p.position_s);
-        if (it && it.line_id !== this.curId) this.curId = it.line_id;
+        if (!this.audition) {
+          const it = this.lineAt(p.position_s);
+          if (it && it.line_id !== this.curId) this.curId = it.line_id;
+        }
         if (!p.playing) {
           this.playing = false;
           this.stopPolling();

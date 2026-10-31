@@ -126,7 +126,7 @@
   </div>
 </section>
 <div class="hint">
-  {#if app.page === 'options'}Space play · ⇧Space from locator · ← → takes · ↑ ↓ or scroll for lines · F favorite · E edit · ? all keys
+  {#if app.page === 'options'}Space play · ⇧Space from locator · ← → takes · ↑ ↓ or scroll for lines · I O in/out · F favorite · E edit · ? all keys
   {:else if app.page === 'arrange'}Space play · ⇧Space from locator · click waveform for locator · I O in/out · ⌥↑ ⌥↓ move · ? all keys
   {:else}Space play · drag clips (⌥ moves one clip alone) · ⌥← ⌥→ nudge · B bucket · ? all keys{/if}
 </div>
@@ -194,8 +194,8 @@
     font-size: 10px;
     font-weight: 700;
     line-height: 1;
-    color: rgba(10, 10, 14, 0.8);
-    box-shadow: inset -1px 0 0 rgba(10, 11, 15, 0.75);
+    color: rgb(var(--night-rgb) / 0.8);
+    box-shadow: inset -1px 0 0 rgb(var(--night-rgb) / 0.75);
   }
   .head {
     top: -6px;
@@ -203,7 +203,7 @@
     width: 3px;
     border-radius: 2px;
     background: var(--playhead);
-    box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 0 8px rgb(var(--shadow-rgb) / 0.6);
   }
   .btns {
     display: flex;

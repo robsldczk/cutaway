@@ -31,9 +31,9 @@ export function onKey(e: KeyboardEvent) {
   else if (k === 'ArrowRight' && app.page !== 'edit') void app.stepTake(1);
   else if (k === 'f' || k === 'F') void app.toggleFav();
   else if (k === 'e' || k === 'E') openEditor();
-  else if ((k === 'i' || k === 'I') && app.page === 'arrange') void setInOut('in');
-  else if ((k === 'o' || k === 'O') && app.page === 'arrange') void setInOut('out');
-  else if (k === 'i' || k === 'I') app.drawer = app.drawer === 'inspector' ? null : 'inspector';
+  else if (mod && (k === 'i' || k === 'I')) app.drawer = app.drawer === 'inspector' ? null : 'inspector';
+  else if ((k === 'i' || k === 'I') && app.page !== 'edit') void setInOut('in');
+  else if ((k === 'o' || k === 'O') && app.page !== 'edit') void setInOut('out');
   else if (k === 'p' || k === 'P') void app.applyPassage();
   else if (k === 'u' || k === 'U') app.drawer = app.drawer === 'unmatched' ? null : 'unmatched';
   else if (k === 'b' || k === 'B') app.drawer = app.drawer === 'bucket' ? null : 'bucket';

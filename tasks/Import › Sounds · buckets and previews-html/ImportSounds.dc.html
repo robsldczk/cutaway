@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Import · Sounds</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&amp;family=Figtree:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D12}
+a{color:#C3B7E6}a:hover{color:#DCD6E6}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.ui{font-family:Figtree,system-ui,sans-serif;color:#F0EEE8}
+.nm{font-weight:600;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.glass{backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);background:rgba(255,255,255,0.04);box-shadow:inset 0 1px 0 rgba(255,255,255,0.09),inset 0 0 0 1px rgba(255,255,255,0.05),0 18px 50px rgba(0,0,0,0.35)}
+.mut{color:rgba(240,238,232,0.64)}
+.ellip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tn{font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(255,255,255,0.07);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.09);white-space:nowrap}
+.btnp{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 16px;border-radius:999px;font-size:12.5px;font-weight:600;background:#F3F1EC;color:#14161C;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:999px;font-size:11px;font-weight:600;background:rgba(255,255,255,0.07);white-space:nowrap}
+.tab{height:36px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:500;color:rgba(240,238,232,0.68)}
+.tabon{background:rgba(240,238,232,0.92);color:#14161C;font-weight:600}
+.kb{display:inline-block;min-width:14px;text-align:center;font-size:10.5px;padding:1px 5px;border-radius:5px;background:rgba(255,255,255,0.1);color:rgba(240,238,232,0.85)}
+.bk{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:22px;background:rgba(20,22,29,0.62);min-width:0;cursor:pointer}
+.tiles{display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:6px}
+.tl{height:42px;border-radius:10px;display:flex;align-items:center;padding:0 5px;box-sizing:border-box}
+.srow{display:grid;grid-template-columns:32px minmax(0,1fr) 40px 32px 32px;gap:10px;align-items:center;padding:8px;border-radius:14px}
+.ib{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:rgba(240,238,232,0.75)}
+.ib:hover{background:rgba(255,255,255,0.08)}
+.field{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:38px;padding:5px 10px;border-radius:14px;background:rgba(255,255,255,0.05);box-sizing:border-box}
+@media (max-width:1100px){.side{display:none}.grid{right:28px !important;grid-template-columns:repeat(2, minmax(0, 1fr)) !important}}
+</style>
+</helmet>
+<div class="ui" style="position: relative; width: 100%; height: 900px; overflow: hidden; background: radial-gradient(ellipse 55% 45% at 40% 50%, rgba(46,58,110,0.28), transparent 70%), #0B0D12">
+
+<header style="position: absolute; top: 20px; left: 28px; right: 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; z-index: 10">
+<div style="font-size: 13px; font-weight: 600">TARMAC Ep. 2</div>
+<nav class="glass" aria-label="Pages" style="display: flex; padding: 4px; border-radius: 999px">
+<button class="tab tabon">Import</button><button class="tab">Options</button><button class="tab">Arrange</button><button class="tab">Edit</button>
+</nav>
+<button class="btn" style="height: 36px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="11 6 5 12 11 18"></polyline></svg>Back to Edit <span class="kb">⇧B</span></button>
+</header>
+
+<div style="position: absolute; top: 84px; left: 28px; right: 492px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+<div role="tablist" aria-label="Import" style="display: flex; padding: 3px; border-radius: 999px; background: rgba(255,255,255,0.05)"><button role="tab" aria-selected="false" class="tab" style="height: 32px; font-size: 12.5px">Files</button><button role="tab" aria-selected="true" class="tab tabon" style="height: 32px; font-size: 12.5px">Sounds</button></div>
+<span style="width: 1px; height: 22px; background: rgba(255,255,255,0.1)"></span>
+<div role="group" aria-label="Sort buckets" style="display: flex; padding: 3px; border-radius: 999px; background: rgba(255,255,255,0.05)"><button class="tab" style="height: 32px; font-size: 12.5px">Scene</button><button class="tab tabon" style="height: 32px; font-size: 12.5px">Tag</button><button class="tab" style="height: 32px; font-size: 12.5px">Show</button></div>
+<span style="flex: 1"></span>
+<button class="btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2 7 7 2-7 2-2 7-2-7-7-2 7-2z"></path></svg>Spot script</button>
+<button class="btnp"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>New bucket</button>
+</div>
+
+<main class="grid" style="position: absolute; top: 140px; bottom: 24px; left: 28px; right: 492px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: min-content; gap: 12px; overflow: auto">
+<sc-for list="{{buckets}}" as="b" hint-placeholder-count="6">
+<article class="bk glass" aria-label="Bucket {{b.name}}" style="{{b.style}}">
+<div style="display: flex; align-items: center; gap: 8px"><span class="ellip" style="flex: 1; min-width: 0; font-size: 15px; font-weight: 600">{{b.name}}</span><sc-for list="{{b.scenes}}" as="s" hint-placeholder-count="2"><span class="chip tn" style="background: transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.15)">{{s}}</span></sc-for></div>
+<div style="display: flex; gap: 5px; flex-wrap: wrap"><sc-for list="{{b.keys}}" as="k" hint-placeholder-count="3"><span class="chip" style="font-weight: 500; color: rgba(240,238,232,0.72)">{{k}}</span></sc-for></div>
+<div class="tiles"><sc-for list="{{b.tiles}}" as="t" hint-placeholder-count="4"><span class="tl" style="{{t.style}}"><svg viewBox="0 0 200 40" preserveAspectRatio="none" style="width: 100%; height: 30px" aria-hidden="true"><path d="{{t.d}}" fill="{{t.fill}}"></path></svg></span></sc-for></div>
+</article>
+</sc-for>
+<article class="bk" aria-label="New bucket" style="cursor: default; box-shadow: inset 0 0 0 1.5px rgba(240,238,232,0.4)">
+<input value="Fridge hum" aria-label="Bucket name" style="background: none; border: 0; outline: none; color: inherit; font: inherit; font-size: 15px; font-weight: 600; padding: 0">
+<div class="field" aria-label="Keywords"><span class="chip">fridge</span><span class="chip">hum</span><span class="chip">kitchen</span><span class="chip">low drone</span><input placeholder="Add keyword" aria-label="Add keyword" style="flex: 1; min-width: 80px; background: none; border: 0; outline: none; color: inherit; font: inherit; font-size: 12px"></div>
+<details open="" style="font-size: 12.5px"><summary class="mut" style="cursor: pointer; padding: 2px 0">Advanced</summary>
+<div style="display: flex; flex-direction: column; gap: 8px; padding-top: 8px">
+<div style="display: flex; justify-content: space-between"><span class="mut">Length</span><span class="tn">5 to 30 s</span></div>
+<div style="display: flex; justify-content: space-between"><span class="mut">Leave out</span><span>music, voices</span></div>
+<div style="display: flex; justify-content: space-between"><span class="mut">Scenes</span><span>Sc. 2, 7, 9</span></div>
+</div></details>
+<div style="display: flex; gap: 8px; justify-content: flex-end"><button class="btn" style="height: 32px">Cancel</button><button class="btnp" style="height: 32px">Create and search</button></div>
+</article>
+</main>
+
+<aside class="glass side" aria-label="Bucket UFO" style="position: absolute; top: 76px; bottom: 16px; right: 16px; width: 460px; box-sizing: border-box; border-radius: 28px; padding: 18px; display: flex; flex-direction: column; gap: 14px; background: rgba(20,22,29,0.84)">
+<div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 18px; font-weight: 600; flex: 1">UFO</span><span class="chip">Sc. 5</span><span class="chip">Sc. 6</span><button class="ib" aria-label="Close panel"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg></button></div>
+<div role="tablist" style="display: flex; padding: 3px; border-radius: 999px; background: rgba(255,255,255,0.05)"><button role="tab" aria-selected="true" class="tab tabon" style="flex: 1; height: 30px; font-size: 12px">Epidemic Sound</button><button role="tab" aria-selected="false" class="tab" style="flex: 1; height: 30px; font-size: 12px">ElevenLabs</button><button role="tab" aria-selected="false" class="tab" style="flex: 1; height: 30px; font-size: 12px">Library</button></div>
+<div style="display: flex; gap: 8px; align-items: center"><div class="field" style="flex: 1"><span class="chip">ufo hum</span><span class="chip">tractor beam</span><span class="chip">sci-fi rise</span></div><button class="btn" style="height: 38px">Search</button></div>
+
+<div style="flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 4px">
+<div class="nm mut" style="font-size: 10px; padding: 4px 8px">In this bucket</div>
+<sc-for list="{{kept}}" as="r" hint-placeholder-count="2">
+<div class="srow" style="background: rgba(216,182,87,0.1)">
+<button class="ib" aria-label="Play {{r.name}}" style="background: #D8B657; color: #1A1408; border-radius: 50%"><svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"></path></svg></button>
+<div style="min-width: 0; display: flex; flex-direction: column; gap: 3px"><span class="ellip" style="font-size: 12.5px; font-weight: 600">{{r.name}}</span><svg viewBox="0 0 200 40" preserveAspectRatio="none" style="width: 100%; height: 22px" aria-hidden="true"><path d="{{r.d}}" fill="#D8B657"></path></svg></div>
+<span class="mut tn" style="font-size: 11px">{{r.dur}}</span>
+<span class="ib" role="img" aria-label="Downloaded" style="color: #D8B657"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12 10 17 19 7"></polyline></svg></span>
+<button class="ib" aria-label="Remove {{r.name}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg></button>
+</div>
+</sc-for>
+<div class="nm mut" style="font-size: 10px; padding: 12px 8px 4px">Previews · not downloaded</div>
+<sc-for list="{{prev}}" as="r" hint-placeholder-count="5">
+<div class="srow" style="{{r.row}}">
+<button class="ib" aria-label="Play preview {{r.name}}" style="border-radius: 50%; box-shadow: inset 0 0 0 1.5px rgba(240,238,232,0.5)"><svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"></path></svg></button>
+<div style="min-width: 0; display: flex; flex-direction: column; gap: 3px"><span class="ellip mut" style="font-size: 12.5px">{{r.name}}</span><span style="position: relative; display: block; height: 22px; cursor: pointer"><svg viewBox="0 0 200 40" preserveAspectRatio="none" style="position: absolute; inset: 0; width: 100%; height: 22px" aria-hidden="true"><path d="{{r.d}}" fill="rgba(240,238,232,0.32)"></path></svg><sc-if value="{{r.playing}}" hint-placeholder-val="{{ false }}"><span style="position: absolute; top: -2px; bottom: -2px; width: 2px; background: #F3F1EC; left: {{r.pos}}%"></span></sc-if></span></div>
+<span class="mut tn" style="font-size: 11px">{{r.dur}}</span>
+<button class="ib" aria-label="Download {{r.name}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"></path><polyline points="7 10 12 15 17 10"></polyline><path d="M5 19h14"></path></svg></button>
+<button class="ib" aria-label="Dismiss {{r.name}}"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg></button>
+</div>
+</sc-for>
+<button class="btn" style="align-self: center; margin-top: 8px">Load 12 more</button>
+</div>
+</aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+function wave(seed, rise) {
+  var a = seed >>> 0; function r() { a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+  var top = '', bot = [], env = 0.3;
+  for (var i = 0; i <= 80; i++) { env = env * 0.8 + r() * 0.3; var x = i / 80; var shape = rise ? Math.pow(x, 0.7) * Math.min(1, (1 - x) * 8) : Math.min(1, x * 5) * Math.min(1, (1 - x) * 3); var h = Math.max(0.8, (0.3 + env) * shape * 17); top += (i ? 'L' : 'M') + (i * 2.5).toFixed(1) + ' ' + (20 - h).toFixed(1); bot.push('L' + (i * 2.5).toFixed(1) + ' ' + (20 + h).toFixed(1)); }
+  return top + bot.reverse().join('') + 'Z';
+}
+class Component extends DCLogic {
+  renderVals() {
+    var G = '#D8B657';
+    function tiles(seed, kept, prev) {
+      var out = [];
+      for (var i = 0; i < kept; i++) out.push({ d: wave(seed + i * 7), fill: G, style: 'background: rgba(216,182,87,0.16)' });
+      for (var j = 0; j < prev; j++) out.push({ d: wave(seed + 50 + j * 7), fill: 'rgba(240,238,232,0.3)', style: 'background: rgba(255,255,255,0.03); box-shadow: inset 0 0 0 1px rgba(240,238,232,0.18)' });
+      return out.slice(0, 4);
+    }
+    function b(name, scenes, keys, seed, kept, prev, sel) { return { name: name, scenes: scenes, keys: keys, tiles: tiles(seed, kept, prev), style: sel ? 'box-shadow: inset 0 0 0 1.5px #F3F1EC, 0 18px 50px rgba(0,0,0,0.35)' : '' }; }
+    return {
+      buckets: [
+        b('UFO', ['Sc. 5', 'Sc. 6'], ['ufo hum', 'tractor beam', 'sci-fi rise'], 3, 2, 2, true),
+        b('Phones', ['Sc. 3', 'Sc. 4', 'Sc. 8'], ['landline ring', 'rotary', 'hang up'], 11, 1, 3),
+        b('Food and foil', ['Sc. 2', 'Sc. 9'], ['foil crinkle', 'bite', 'steam'], 19, 2, 2),
+        b('Machines', ['Sc. 1', 'Sc. 6'], ['electric hum', 'power up', 'lab'], 27, 3, 1),
+        b('Doors and hatches', ['Sc. 7', 'Sc. 10'], ['metal hatch', 'cage door', 'knock'], 35, 0, 4),
+        b('Walla and crowd', ['Sc. 2', 'Sc. 7'], ['canteen walla', 'light crowd'], 43, 1, 3)
+      ],
+      kept: [
+        { name: 'UFO Hover Low', d: wave(201), dur: '0:18' },
+        { name: 'Tractor Beam Lift', d: wave(202, true), dur: '0:06' }
+      ],
+      prev: [
+        { name: 'Alien Craft Pass By', d: wave(301), dur: '0:09', row: 'background: rgba(255,255,255,0.05)', playing: true, pos: 38 },
+        { name: 'Sci-Fi Beam Rise 03', d: wave(302, true), dur: '0:04', row: '', playing: false, pos: 0 },
+        { name: 'Hovering Saucer Drone', d: wave(303), dur: '0:22', row: '', playing: false, pos: 0 },
+        { name: 'Energy Field Shimmer', d: wave(304, true), dur: '0:07', row: '', playing: false, pos: 0 },
+        { name: 'Spaceship Interior Hum', d: wave(305), dur: '0:30', row: '', playing: false, pos: 0 },
+        { name: 'Teleport Whoosh', d: wave(306, true), dur: '0:03', row: '', playing: false, pos: 0 }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

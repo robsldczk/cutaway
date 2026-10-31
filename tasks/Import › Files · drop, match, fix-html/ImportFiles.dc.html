@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Import · Files</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&amp;family=Figtree:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D12}
+a{color:#C3B7E6}a:hover{color:#DCD6E6}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.ui{font-family:Figtree,system-ui,sans-serif;color:#F0EEE8}
+.nm{font-weight:600;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.glass{backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);background:rgba(255,255,255,0.04);box-shadow:inset 0 1px 0 rgba(255,255,255,0.09),inset 0 0 0 1px rgba(255,255,255,0.05),0 18px 50px rgba(0,0,0,0.35)}
+.mut{color:rgba(240,238,232,0.64)}
+.ellip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tn{font-variant-numeric:tabular-nums}
+.btn{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:999px;font-size:12.5px;font-weight:600;background:rgba(255,255,255,0.07);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.09);white-space:nowrap}
+.btnp{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 18px;border-radius:999px;font-size:13px;font-weight:600;background:#F3F1EC;color:#14161C;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.tab{height:36px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:500;color:rgba(240,238,232,0.68)}
+.tabon{background:rgba(240,238,232,0.92);color:#14161C;font-weight:600}
+.kb{display:inline-block;min-width:14px;text-align:center;font-size:10.5px;padding:1px 5px;border-radius:5px;background:rgba(255,255,255,0.1);color:rgba(240,238,232,0.85)}
+.drop{display:flex;align-items:center;gap:16px;padding:18px 20px;border-radius:22px;border:1.5px dashed rgba(240,238,232,0.2);background:rgba(255,255,255,0.02)}
+.tile{width:46px;height:46px;border-radius:12px;flex:none;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.07)}
+.ccard{display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:22px;background:rgba(255,255,255,0.035)}
+.grp{display:flex;flex-direction:column;gap:4px}
+.frow{display:grid;grid-template-columns:118px minmax(0,1fr) 54px;gap:8px;align-items:center;min-height:34px;padding:0 8px 0 4px;border-radius:10px}
+.rec{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;font-size:11px;font-weight:700;background:rgba(240,238,232,0.9);color:#14161C;white-space:nowrap}
+.dir{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;font-size:11px;font-weight:700;box-shadow:inset 0 0 0 1.5px rgba(240,238,232,0.55);color:#F0EEE8;white-space:nowrap}
+.fix{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 6px 0 14px;border-radius:14px;background:rgba(255,255,255,0.04);flex-wrap:wrap}
+@media (max-width:1000px){.drops{grid-template-columns:1fr !important}.cast{grid-template-columns:1fr !important}}
+</style>
+</helmet>
+<div class="ui" style="position: relative; width: 100%; min-height: 900px; overflow: hidden; background: radial-gradient(ellipse 55% 45% at 50% 45%, rgba(46,58,110,0.28), transparent 70%), #0B0D12">
+
+<header style="position: absolute; top: 20px; left: 28px; right: 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; z-index: 10">
+<div style="font-size: 13px; font-weight: 600">TARMAC Ep. 2</div>
+<nav class="glass" aria-label="Pages" style="display: flex; padding: 4px; border-radius: 999px">
+<button class="tab tabon">Import</button><button class="tab">Options</button><button class="tab">Arrange</button><button class="tab">Edit</button>
+</nav>
+<button class="btn" style="height: 36px">Edit <span class="kb">⇧B</span></button>
+</header>
+
+<main style="position: relative; margin: 0 auto; padding: 84px 0 32px; width: min(1160px, 92%); display: flex; flex-direction: column; gap: 22px">
+
+<div role="tablist" aria-label="Import" style="display: flex; gap: 4px; padding: 3px; border-radius: 999px; background: rgba(255,255,255,0.05); align-self: flex-start">
+<button role="tab" aria-selected="true" class="tab tabon" style="height: 32px; font-size: 12.5px">Files</button><button role="tab" aria-selected="false" class="tab" style="height: 32px; font-size: 12.5px">Sounds</button>
+</div>
+
+<div class="drops" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+<div class="drop" aria-label="Script drop zone">
+<span class="tile" style="background: rgba(240,238,232,0.9); color: #14161C; font-size: 9px; font-weight: 700; letter-spacing: .08em">FTN</span>
+<div style="flex: 1; min-width: 0"><div class="ellip" style="font-size: 15px; font-weight: 600">v004 Rob test.fountain</div><div class="mut" style="font-size: 12.5px; margin-top: 3px">Script · 6 characters</div></div>
+<button class="btn">Replace</button>
+</div>
+<div class="drop" aria-label="Audio drop zone">
+<span class="tile"><svg width="24" height="18" viewBox="0 0 28 20" fill="none" stroke="#F3F1EC" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="2" y1="8" x2="2" y2="12"></line><line x1="7" y1="4" x2="7" y2="16"></line><line x1="12" y1="1" x2="12" y2="19"></line><line x1="17" y1="5" x2="17" y2="15"></line><line x1="22" y1="7" x2="22" y2="13"></line><line x1="26" y1="9" x2="26" y2="11"></line></svg></span>
+<div style="flex: 1; min-width: 0"><div style="font-size: 15px; font-weight: 600">47 audio files</div><div class="mut" style="font-size: 12.5px; margin-top: 3px">41 recordings · 6 director room files</div></div>
+<button class="btn">Add files</button>
+</div>
+</div>
+
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap">
+<h1 style="margin: 0; font-size: 22px; font-weight: 600">Cast</h1>
+<span class="rec"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><line x1="12" y1="18" x2="12" y2="21"></line></svg>Recording</span>
+<span class="mut" style="font-size: 12.5px">the actor’s mic</span>
+<span class="dir"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"></path><path d="M17 9a4 4 0 0 1 0 6"></path></svg>Director room</span>
+<span class="mut" style="font-size: 12.5px">talkback and notes</span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px"><span class="mut" style="font-size: 12.5px">Matched 2 min ago</span><button class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2 7 7 2-7 2-2 7-2-7-7-2 7-2z"></path></svg>Redo match</button></div>
+</div>
+
+<section aria-label="Needs you" style="display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 22px; box-shadow: inset 0 0 0 1.5px rgba(240,238,232,0.35)">
+<div style="display: flex; align-items: center; gap: 10px; padding: 0 4px 4px"><span style="width: 20px; height: 20px; border-radius: 50%; background: #F3F1EC; color: #14161C; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800">!</span><span style="font-size: 14px; font-weight: 600">4 need you</span></div>
+<div class="fix"><span class="ellip tn" style="flex: 1; min-width: 160px; font-size: 13px">Mix_03.wav</span><span class="mut" style="font-size: 12.5px">Recording or director room?</span><button class="btn" style="height: 32px">Recording</button><button class="btn" style="height: 32px">Director room</button></div>
+<div class="fix"><span class="rec" style="height: 22px">Recording</span><span class="ellip tn" style="flex: 1; min-width: 120px; font-size: 13px">Track_07.wav</span><span class="mut" style="font-size: 12.5px">No character</span><button class="btn" style="height: 32px">Assign<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button><button class="btn" style="height: 32px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2 7 7 2-7 2-2 7-2-7-7-2 7-2z"></path></svg>Suggest</button></div>
+<div class="fix"><span class="dir" style="height: 22px">Director room</span><span class="ellip tn" style="flex: 1; min-width: 120px; font-size: 13px">TB_pickups.wav</span><span class="mut" style="font-size: 12.5px">Not linked to any recording</span><button class="btn" style="height: 32px">Link to<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div>
+<div class="fix"><span style="flex: 1; min-width: 120px; display: flex; align-items: center; gap: 8px; font-size: 13px"><span class="dot" style="background: #D9B45A"></span>Nina</span><span class="mut" style="font-size: 12.5px">No recording found</span><button class="btn" style="height: 32px">Pick file</button></div>
+</section>
+
+<section class="cast" aria-label="Characters" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start">
+<sc-for list="{{cast}}" as="c" hint-placeholder-count="5">
+<article class="ccard">
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 999px; font-size: 12.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; background: {{c.col}}; color: #16110D">{{c.name}}</span>
+</div>
+<sc-for list="{{c.groups}}" as="g" hint-placeholder-count="2">
+<div class="grp">
+<div class="frow" style="background: rgba(255,255,255,0.05)">
+<button class="rec" aria-label="Change type of {{g.rec}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path></svg>Recording<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+<div style="min-width: 0"><div class="ellip tn" style="font-size: 12.5px; font-weight: 600">{{g.rec}}</div><svg viewBox="0 0 200 40" preserveAspectRatio="none" style="display: block; width: 100%; height: 12px" aria-hidden="true"><path d="{{g.w1}}" fill="{{c.col}}"></path></svg></div>
+<span class="mut tn" style="font-size: 11px; text-align: right">{{g.len}}</span>
+</div>
+<div class="frow" style="margin-left: 18px; position: relative">
+<span aria-hidden="true" style="position: absolute; left: -12px; top: -6px; width: 9px; height: 22px; border-left: 1.5px solid rgba(240,238,232,0.35); border-bottom: 1.5px solid rgba(240,238,232,0.35); border-bottom-left-radius: 6px"></span>
+<button class="dir" aria-label="Change type of {{g.room}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10z"></path></svg>Director room<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+<div style="min-width: 0"><div class="ellip tn mut" style="font-size: 12.5px">{{g.room}}</div><div class="ellip mut" style="font-size: 10.5px">{{g.shared}}</div></div>
+<span class="mut tn" style="font-size: 11px; text-align: right">{{g.sync}}</span>
+</div>
+</div>
+</sc-for>
+</article>
+</sc-for>
+</section>
+
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.06)">
+<label style="display: flex; align-items: center; gap: 10px; font-size: 13px"><input type="checkbox" checked="" style="width: 16px; height: 16px; accent-color: #F3F1EC">Remember my fixes for the whole show</label>
+<button class="btnp">Start analysis</button>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+function wave(seed) {
+  var a = seed >>> 0; function r() { a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+  var top = '', bot = [], env = 0.3;
+  for (var i = 0; i <= 80; i++) { env = env * 0.7 + r() * 0.45; var gate = Math.sin(i * 0.37 + seed) > -0.3 ? 1 : 0.1; var h = Math.max(0.8, env * gate * 18); top += (i ? 'L' : 'M') + (i * 2.5).toFixed(1) + ' ' + (20 - h).toFixed(1); bot.push('L' + (i * 2.5).toFixed(1) + ' ' + (20 + h).toFixed(1)); }
+  return top + bot.reverse().join('') + 'Z';
+}
+class Component extends DCLogic {
+  renderVals() {
+    var s = 1;
+    function g(rec, len, room, sync, shared) { return { rec: rec, len: len, room: room, sync: sync, shared: shared, w1: wave(s++ * 17) }; }
+    var ens = 'Ensemble · shared with 3 others';
+    return { cast: [
+      { name: 'Paul', col: '#E08A5A', groups: [g('PAUL_A_01.wav', '2:37', 'Regie_TB_A.wav', 'ref', ens), g('PAUL_solo_02.wav', '0:41', 'Regie_Paul_solo.wav', '+3 ms', 'Only Paul')] },
+      { name: 'Sara', col: '#5EB8B0', groups: [g('SARA_A_01.wav', '1:54', 'Regie_TB_A.wav', '+12 ms', ens), g('SARA_solo_01.wav', '1:12', 'Regie_Sara_solo.wav', '+9 ms', 'Only Sara')] },
+      { name: 'Norbert', col: '#9DB46A', groups: [g('NORB_A_01.wav', '2:15', 'Regie_TB_A.wav', '+8 ms', ens)] },
+      { name: 'The Colonel', col: '#A08FD0', groups: [g('Col_A_01.wav', '1:45', 'Regie_TB_A.wav', '−4 ms', ens), g('Col_phone_03.wav', '0:58', 'Regie_Col_phone.wav', '−2 ms', 'Only The Colonel')] },
+      { name: 'Dad', col: '#D68BA8', groups: [g('DAD_pickups.wav', '1:20', 'Regie_pickups.wav', '+5 ms', 'Only Dad')] }
+    ] };
+  }
+}
+</script>
+</body>
+</html>

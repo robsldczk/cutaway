@@ -106,10 +106,16 @@ pub struct ElevenLabsProvider {
 
 impl ElevenLabsProvider {
     pub fn from_env() -> Self {
-        ElevenLabsProvider {
-            api_key: std::env::var("ELEVENLABS_API_KEY")
+        Self::with_key(
+            std::env::var("ELEVENLABS_API_KEY")
                 .ok()
                 .filter(|k| !k.is_empty()),
+        )
+    }
+
+    pub fn with_key(api_key: Option<String>) -> Self {
+        ElevenLabsProvider {
+            api_key,
             endpoint: "https://api.elevenlabs.io/v1/sound-generation".into(),
         }
     }
@@ -137,7 +143,7 @@ impl SoundGenerateProvider for ElevenLabsProvider {
 
     fn generate(&self, req: &GenerateRequest) -> Result<Vec<GeneratedSound>> {
         let key = self.api_key.as_ref().ok_or_else(|| {
-            SoundError::Unavailable("elevenlabs".into(), "set ELEVENLABS_API_KEY".into())
+            SoundError::Unavailable("elevenlabs".into(), "not connected: add an API key in Settings → Connections (or set ELEVENLABS_API_KEY)".into())
         })?;
         std::fs::create_dir_all(&req.out_dir)?;
         let mut out = Vec::new();
@@ -164,22 +170,6 @@ impl SoundGenerateProvider for ElevenLabsProvider {
             });
         }
         Ok(out)
-    }
-}
-
-/// Epidemic Sound search. No public API client is wired yet (DECISIONS.md D28).
-pub struct EpidemicProvider;
-
-impl SoundSearchProvider for EpidemicProvider {
-    fn id(&self) -> &str {
-        "epidemic"
-    }
-
-    fn search(&self, _q: &SoundQuery) -> Result<Vec<SoundCandidate>> {
-        Err(SoundError::Unavailable(
-            "epidemic".into(),
-            "no Epidemic Sound API or MCP connection configured yet".into(),
-        ))
     }
 }
 
@@ -219,7 +209,7 @@ mod tests {
         });
         assert!(matches!(r, Err(SoundError::Unavailable(..))));
         assert!(matches!(
-            EpidemicProvider.search(&SoundQuery {
+            crate::epidemic::EpidemicProvider::new(None).search(&SoundQuery {
                 text: "x".into(),
                 tags: vec![],
                 max_results: 3

@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use apc_app::{demo, Service};
 
 fn env() {
+    std::env::set_var("CUTAWAY_SECRETS", "memory");
     std::env::set_var("CUTAWAY_AI_PROVIDER", "mock");
     std::env::set_var("CUTAWAY_NO_AUDIO", "1");
 }

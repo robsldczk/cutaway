@@ -221,13 +221,13 @@ The deterministic aligner handles the clear cases (most of them). Only ambiguous
 
 **First implementation: Claude Code CLI.**
 - **Call:** headless (`claude -p`) with the prompt and the input JSON, JSON output requested (`--output-format json`).
-- **Model:** set in project settings, default Sonnet 5.5 (`claude-sonnet-5-5`) with high effort. Settings live in a provider config, not in code:
+- **Model:** set in project settings, default Sonnet 5.5 (`claude-sonnet-5-5`) with medium effort *(changed in implementation: was high, Rob 2026-10-31, D35)*. Settings live in a provider config, not in code:
 
 ```toml
 [ai]
 provider = "claude-code"
 model = "claude-sonnet-5-5"
-effort = "high"
+effort = "medium"
 batch = "scene"
 timeout_s = 300
 

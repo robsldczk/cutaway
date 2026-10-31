@@ -10,6 +10,9 @@
   let picked = $state<string[]>([]);
   let adding = $state('');
   let busy = $state<string | null>(null);
+  interface Remote { provider: string; title: string; remote_id: string | null; duration_s: number }
+  /** Remote search results (Epidemic Sound) per cue, downloaded on demand. */
+  let remote = $state<Record<string, Remote[]>>({});
   const cues = $derived<CueView[]>(app.edit?.cues ?? []);
 
   $effect(() => {
@@ -32,7 +35,19 @@
   }
 
   const spot = () => act('spot', () => app.method('spot_sound_effects', { scene: app.sceneId }, false));
-  const search = (c: CueView) => act(c.cue.id, () => app.method('search_sounds', { cue_id: c.cue.id, attach: true }, false));
+  const search = (c: CueView) =>
+    act(c.cue.id, async () => {
+      const r = await app.method<{ results: Remote[]; unavailable: string[] }>('search_sounds', { cue_id: c.cue.id, attach: true }, false);
+      remote[c.cue.id] = (r?.results ?? []).filter((x) => x.remote_id);
+      const off = (r?.unavailable ?? []).filter((u) => !u.includes('not connected'));
+      if (off.length) app.say(off.join('; '));
+      if (!r?.results.length) app.say('Nothing found. Connect Epidemic Sound in Settings for more.');
+    });
+  const fetchRemote = (c: CueView, x: Remote) =>
+    act(c.cue.id, async () => {
+      await app.method('fetch_sound', { remote_id: x.remote_id, title: x.title, cue_id: c.cue.id }, false);
+      remote[c.cue.id] = (remote[c.cue.id] ?? []).filter((y) => y.remote_id !== x.remote_id);
+    });
   const generate = (c: CueView) => act(c.cue.id, () => app.method('generate_sound', { cue_id: c.cue.id }, false));
   const choose = (c: CueView, a: Asset) => act(c.cue.id, () => app.method('attach_sound', { cue_id: c.cue.id, asset_id: a.id, choose: true }, false));
   const accept = (c: CueView) => act(c.cue.id, () => app.cmd({ cmd: 'update_cue', cue_id: c.cue.id, patch: { accepted: true } }));
@@ -92,6 +107,13 @@
           <div class="cands">
             {#each c.candidates as a (a.id)}
               <button class="cand" class:chosen={c.cue.chosen === a.id} draggable="true" ondragstart={(e) => dragStart(e, a.id, c.cue.id, true)} onclick={() => choose(c, a)} title="Click to choose, drag onto the timeline">{a.file.split('/').pop()}</button>
+            {/each}
+          </div>
+        {/if}
+        {#if remote[c.cue.id]?.length}
+          <div class="remote">
+            {#each remote[c.cue.id] as x (x.remote_id)}
+              <div class="rrow"><span class="ellip">{x.title}</span><span class="muted">{x.duration_s ? `${x.duration_s.toFixed(0)} s · ` : ''}Epidemic</span><button onclick={() => fetchRemote(c, x)} disabled={busy === c.cue.id}>Get</button></div>
             {/each}
           </div>
         {/if}
@@ -220,6 +242,26 @@
   }
   .acts button:hover {
     color: var(--text-1);
+  }
+  .remote {
+    margin: 6px 0 0 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .rrow {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 11px;
+  }
+  .rrow .ellip {
+    flex: 1;
+    color: var(--text-2);
+  }
+  .rrow button {
+    color: var(--locator);
+    font-size: 11px;
   }
   .asset {
     display: flex;
