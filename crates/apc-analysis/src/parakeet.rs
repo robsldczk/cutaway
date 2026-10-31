@@ -113,26 +113,63 @@ impl ParakeetRuntime {
     }
 }
 
-/// Chunk boundaries (seconds): every ≤ 25 s, at the quietest 10 ms frame of the last 8 s.
-pub fn chunk_points(a: &AudioAnalysis) -> Vec<(f64, f64)> {
+/// Speech regions from the loudness envelope: start above the noise floor +10 dB, last
+/// while above +4 dB, gaps under 0.35 s merged, 0.25 s padding, long regions split at their quietest frame.
+/// Decoding regions instead of fixed chunks keeps the model from skipping whole stretches
+/// that are mostly silence, and keeps quick repeats ("Whoa. Whoa. Whoa.") apart.
+pub fn speech_regions(a: &AudioAnalysis) -> Vec<(f64, f64)> {
     let fps = apc_media::ENV_FPS as f64;
-    let total = a.info.duration_s;
-    let mut out = Vec::new();
-    let mut start = 0.0;
-    while start < total - 0.05 {
-        let hard_end = (start + MAX_CHUNK_S).min(total);
-        if hard_end >= total {
-            out.push((start, total));
-            break;
+    let n = a.env.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let floor = a.percentile(20.0).max(1e-5);
+    // Hysteresis: a region starts above +10 dB and lasts while the level stays above +4 dB,
+    // so quiet word endings ("…was the right one") stay inside it.
+    let start_thr = floor * 3.16;
+    let stay_thr = floor * 1.58;
+    let mut runs: Vec<(usize, usize)> = Vec::new();
+    let mut i = 0;
+    while i < n {
+        if a.env[i] <= start_thr {
+            i += 1;
+            continue;
         }
-        let lo = ((start + MIN_CHUNK_S) * fps) as usize;
-        let hi = ((hard_end * fps) as usize).min(a.env.len().saturating_sub(1));
-        let cut = (lo..=hi)
-            .min_by(|&x, &y| a.env[x].total_cmp(&a.env[y]))
-            .map(|i| i as f64 / fps)
-            .unwrap_or(hard_end);
-        out.push((start, cut));
-        start = cut;
+        let mut s = i;
+        while s > 0 && a.env[s - 1] > stay_thr {
+            s -= 1;
+        }
+        while i < n && a.env[i] > stay_thr {
+            i += 1;
+        }
+        runs.push((s, i));
+    }
+    let gap = (0.35 * fps) as usize;
+    let mut merged: Vec<(usize, usize)> = Vec::new();
+    for r in runs {
+        match merged.last_mut() {
+            Some(m) if r.0 - m.1 < gap => m.1 = r.1,
+            _ => merged.push(r),
+        }
+    }
+    let pad = (0.25 * fps) as usize;
+    let max_len = (MAX_CHUNK_S * fps) as usize;
+    let mut out = Vec::new();
+    for (s, e) in merged
+        .into_iter()
+        .filter(|(s, e)| e - s >= (0.12 * fps) as usize)
+    {
+        let (mut s, e) = (s.saturating_sub(pad), (e + pad).min(n));
+        while e - s > max_len {
+            let lo = s + (MIN_CHUNK_S * fps) as usize;
+            let hi = (s + max_len).min(e - 1);
+            let cut = (lo..=hi)
+                .min_by(|&x, &y| a.env[x].total_cmp(&a.env[y]))
+                .unwrap_or(hi);
+            out.push((s as f64 / fps, cut as f64 / fps));
+            s = cut;
+        }
+        out.push((s as f64 / fps, e as f64 / fps));
     }
     out
 }
@@ -154,7 +191,7 @@ impl ParakeetAsr {
 impl AsrProvider for ParakeetAsr {
     fn id(&self) -> &str {
         // includes the segmenter version, so cached transcripts are rebuilt when it changes
-        "parakeet-tdt-0.6b-v3-int8+seg2"
+        "parakeet-tdt-0.6b-v3-int8+vad2"
     }
 
     fn transcribe(&self, req: &AsrRequest) -> Result<Transcript, AsrError> {
@@ -167,14 +204,18 @@ impl AsrProvider for ParakeetAsr {
         let mut reader = AudioReader::open(&req.audio).map_err(|e| AsrError::Bad(e.to_string()))?;
         let info = reader.info();
         let mut words = Vec::new();
-        for (a, b) in chunk_points(&analysis) {
+        let mut regions: Vec<(usize, usize)> = Vec::new();
+        for (a, b) in speech_regions(&analysis) {
             let raw = reader
                 .read_range(a, b)
                 .map_err(|e| AsrError::Bad(e.to_string()))?;
             let mono = to_mono(&raw, info.channels);
+            let w0 = words.len();
             words.extend(rt.chunk(&mono, info.sample_rate, a));
+            regions.push((w0, words.len()));
         }
-        // Segments: sentences (punctuation) or pauses of 0.3 s, like sentence-level transcripts.
+        // Segments: speech regions, sentences (punctuation) or pauses of 0.3 s, like
+        // sentence-level transcripts.
         let mut t = Transcript {
             provider: self.id().into(),
             word_level: true,
@@ -183,7 +224,11 @@ impl AsrProvider for ParakeetAsr {
         let mut seg_start = 0usize;
         for i in 0..words.len() {
             let sentence_end = words[i].0.ends_with(['.', '?', '!']);
-            let last = i + 1 == words.len() || sentence_end || words[i + 1].1 - words[i].2 >= 0.3;
+            let region_end = regions.iter().any(|r| r.1 == i + 1);
+            let last = i + 1 == words.len()
+                || region_end
+                || sentence_end
+                || words[i + 1].1 - words[i].2 >= 0.3;
             let si = t.segments.len();
             t.words.push(TWord {
                 w: norm_word(&words[i].0),
