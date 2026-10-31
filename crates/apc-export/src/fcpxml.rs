@@ -46,7 +46,7 @@ pub fn esc(s: &str) -> String {
 
 /// `file:///…` URL with percent-encoding.
 pub fn file_url(p: &Path) -> String {
-    let abs = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let abs = apc_core::media::absolute(p).unwrap_or_else(|_| p.to_path_buf());
     let s = abs.to_string_lossy().replace('\\', "/");
     let mut out = String::from("file://");
     if !s.starts_with('/') {

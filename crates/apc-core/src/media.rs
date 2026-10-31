@@ -8,6 +8,16 @@ use crate::error::{CoreError, Result};
 use crate::model::{Document, Stored};
 use crate::project::EpisodePaths;
 
+/// Absolute path without the Windows verbatim prefix (`\\?\C:\…`), which other tools reject.
+pub fn absolute(p: &Path) -> std::io::Result<PathBuf> {
+    let abs = std::fs::canonicalize(p)?;
+    let s = abs.to_string_lossy();
+    Ok(match s.strip_prefix(r"\\?\") {
+        Some(rest) if !rest.starts_with("UNC") => PathBuf::from(rest),
+        _ => abs,
+    })
+}
+
 /// BLAKE3 of a file, hex.
 pub fn hash_file(path: &Path) -> Result<String> {
     let mut f = std::fs::File::open(path)?;
@@ -109,10 +119,10 @@ pub fn import_file(
         };
         (paths.relative(&dest), Stored::Copied, sidecar)
     } else {
-        let abs = std::fs::canonicalize(src)?;
+        let abs = absolute(src)?;
         let sidecar = sidecar_src
             .exists()
-            .then(|| std::fs::canonicalize(&sidecar_src).ok())
+            .then(|| absolute(&sidecar_src).ok())
             .flatten()
             .map(|p| p.to_string_lossy().into_owned());
         (
@@ -266,5 +276,18 @@ mod tests {
         assert_eq!(f.stored, Stored::Referenced);
         assert!(Path::new(&f.stored_path).is_absolute());
         assert!(!paths.audio.join("S").exists());
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    #[test]
+    fn absolute_has_no_verbatim_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("a b.wav");
+        std::fs::write(&f, b"x").unwrap();
+        let p = super::absolute(&f).unwrap();
+        assert!(p.is_absolute());
+        assert!(!p.to_string_lossy().starts_with(r"\\?\"));
     }
 }

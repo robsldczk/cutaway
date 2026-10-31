@@ -342,8 +342,8 @@ pub trait SoundGenerateProvider: Send + Sync {
 - [x] Tests: anchoring follows take swap / gap change, pinned stays; Edit→Options sync; spotting on S2 with mock AI
 
 ### M8: Windows readiness
-- [ ] Cross-platform paths, dialogs, audio device; ONNX DirectML/CPU provider selection
-- [ ] Windows CI job green (build + unit tests)
+- [x] Cross-platform paths (no Windows verbatim prefixes in stored paths or FCPXML URLs), dialogs (Tauri plugin), audio device (cpal default host); ONNX DirectML/CPU provider selection; LF line endings via .gitattributes
+- [ ] Windows CI job green (build + unit tests): not run, pushes are blocked in this session (see RUN_REPORT)
 
 ### End of run
 - [ ] `docs/RUN_REPORT.md`, PLAN updated, pushed, PR `dev → main`
@@ -380,3 +380,4 @@ pub trait SoundGenerateProvider: Send + Sync {
 - 2026-10-31 M4 done: apc-app service (method registry with schemas, views, jobs, player with virtual clock, sound glue, synthetic demo session, HTTP dev bridge), `cutaway` CLI with all spec commands, rmcp 3.8 MCP server (tools from the registry, 4 resource kinds, confirm for destructive tools). Parity test: CLI and MCP give identical results on the demo and the TARMAC fixture. apc-sound library/providers written early. Golden cut list on the demo session.
 - 2026-10-31 M5 done: schedule (gaps, ripple, anchors, loudness offsets, room-tone bed, lanes/layers), shared mixer with equal-power fades, offline render, cpal engine (feeder thread + ring buffer, ~60 Hz playhead, play/stop/seek, stop-at). Fixture S1 renders at exactly the layout length (23.240 s); splice click test green; engine smoke test played on this Mac's device.
 - 2026-10-31 M6 + M7 done: Svelte 5 UI to the Option C prototype with tokens in app/src/theme (Options deck/pills/notes, Arrange rows/strips/pauses/reorder, box editor comp + edit modes, inspector, unmatched bin, settings, history/versions, export, importer + summary card, welcome), Tauri shell (rpc + dialogs + Finder open). Edit page (dialogue lanes, SFX layers, ambience, music, ripple/⌥ move, nudge, gain, fades, pin/unanchor, anchor lines), sound bucket (spotting, search, generate, choose, place, merge, library tab, drag to timeline). Playwright smoke tests green (takes with arrows, play/stop, delete word + undo). M7 service tests green (anchoring after take swap and gap change, pinned stays, Edit→Options sync, spotting on demo and fixture S2).
+- 2026-10-31 M8 partly done: portability fixes and a blocking Windows CI job; the job itself has not run because pushes from this session are refused.
