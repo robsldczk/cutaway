@@ -153,7 +153,8 @@ impl ParakeetAsr {
 
 impl AsrProvider for ParakeetAsr {
     fn id(&self) -> &str {
-        PARAKEET_TDT_V3.id
+        // includes the segmenter version, so cached transcripts are rebuilt when it changes
+        "parakeet-tdt-0.6b-v3-int8+seg2"
     }
 
     fn transcribe(&self, req: &AsrRequest) -> Result<Transcript, AsrError> {
@@ -173,7 +174,7 @@ impl AsrProvider for ParakeetAsr {
             let mono = to_mono(&raw, info.channels);
             words.extend(rt.chunk(&mono, info.sample_rate, a));
         }
-        // Segments: split at pauses of 0.6 s or more.
+        // Segments: sentences (punctuation) or pauses of 0.3 s, like sentence-level transcripts.
         let mut t = Transcript {
             provider: self.id().into(),
             word_level: true,
@@ -181,7 +182,8 @@ impl AsrProvider for ParakeetAsr {
         };
         let mut seg_start = 0usize;
         for i in 0..words.len() {
-            let last = i + 1 == words.len() || words[i + 1].1 - words[i].2 >= 0.6;
+            let sentence_end = words[i].0.ends_with(['.', '?', '!']);
+            let last = i + 1 == words.len() || sentence_end || words[i + 1].1 - words[i].2 >= 0.3;
             let si = t.segments.len();
             t.words.push(TWord {
                 w: norm_word(&words[i].0),

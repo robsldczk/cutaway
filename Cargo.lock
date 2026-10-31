@@ -194,6 +194,7 @@ dependencies = [
  "apc-media",
  "cpal",
  "crossbeam-channel",
+ "hound",
  "serde",
  "tempfile",
  "thiserror 2.0.21",

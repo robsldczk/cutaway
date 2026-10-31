@@ -93,3 +93,13 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 ### D25 Mock AI provider
 - **Choice:** the mock answers every task with deterministic rules (Stage 0 pick phrases, keyword note condensing, keyword spotting) and can replay recorded responses from `<dir>/<task>/<input-hash>.json`. The `line_match` input carries the aligner's proposal and score; the mock confirms it.
 - **Reason:** tests run offline and deterministic; recorded responses from real runs can't be committed (they contain fixture text), so they stay in `fixtures/`.
+
+### D26 FCPXML details
+- **Context:** the brief asks for an FCPXML version Resolve imports (1.9 suggested), one track per role, source timecode, handles and crossfades.
+- **Choice:** FCPXML **1.9**. A 1080p25 sequence holds one empty gap in the spine; every clip is a connected `asset-clip` on its role's lane (`-1` = first character, then sound lanes) with `audioRole` `dialogue.<Name>` / `effects` / `music`. Times are exact rationals in 1/48000 s (not frame-rounded). Assets point at the original files (`media-rep`) and cover the whole file, so handles are always available in the NLE. Splices are butted within a lane with short `fadeIn`/`fadeOut` on both sides (connected clips on one lane can't overlap). Scene and note markers sit on the gap.
+- **Reason:** the smallest element set Resolve and Logic both read; sample-accurate edits matter more than frame alignment for dialogue. Needs Rob's manual import check (RUN_REPORT).
+
+### D27 Offline render before the real-time engine
+- **Context:** M3 allows an ffmpeg bounce until M5.
+- **Choice:** the schedule, mixer and offline render of the M5 engine were built during M3, so the bounce already uses the shared graph; ffmpeg is used only to encode MP3.
+- **Reason:** avoids a throwaway bounce path.

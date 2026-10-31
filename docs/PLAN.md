@@ -303,11 +303,12 @@ pub trait SoundGenerateProvider: Send + Sync {
 - [x] Acceptance test on `tarmac-ep2` (skips without fixtures) + synthetic demo test (runs in CI)
 
 ### M3: Export
-- [ ] FCPXML 1.9: one audio track (lane) per role, asset-clips with source TC, 1 s handles, crossfades, scene and note markers
-- [ ] SRT from final word timings
-- [ ] Cut list CSV + Markdown
-- [ ] Bounce per scene (offline render; MP3 via ffmpeg)
-- [ ] Structural FCPXML validation test, cut list golden test
+- [x] FCPXML 1.9: one audio track (lane) per role, asset-clips with source TC, 1 s handles, crossfades, scene and note markers
+- [x] SRT from final word timings
+- [x] Cut list CSV + Markdown
+- [x] Bounce per scene (offline render; MP3 via ffmpeg)
+- [x] Structural FCPXML validation test (DTD check runs when Final Cut Pro is installed)
+- [ ] Cut list golden test (needs the demo session; done in M4)
 
 ### M4: CLI and MCP server
 - [ ] `apc-app` service + method registry (JSON schemas)
@@ -375,3 +376,4 @@ pub trait SoundGenerateProvider: Send + Sync {
 - 2026-10-31 M0 done: workspace (10 crates + Tauri shell), brand.json + rebrand check, Svelte 5 app skeleton with bundled fonts, check.sh green, CI for macOS + Windows. `gh` CLI not installed: the PR at the end needs Rob (or gh).
 - 2026-10-31 M1 done: entity store + command bus (persisted undo/redo, multi-client rev sync), Fountain parser (matches Stage 0 unit numbering on the fixture, 27 PAUL lines), script versions with ID-keeping diff, autosave/rotation/named versions/revert, copy/reference import with BLAKE3 + relink, shared timing model. 39 tests. Push after M1 was refused by the session's permission check; commits stay local until a push is allowed.
 - 2026-10-31 M2 done: media (symphonia decode, envelopes, peaks, EBU R128, sync, BWF), AI layer (tasks + schemas, Claude Code + mock providers, versioned prompts, cache, call log), aligner port (bit-parallel fuzzy ratio, two passes, short-line rule, bleed, edges, overlaps), takes/types/word maps, room classification, note linking, picks. Fixture acceptance passes: 36 PAUL takes on 9 lines, 5/4/4/10 takes, one 'time machine' partial, picks Science T4 / Lunch T4 / edible T3 as defaults, room offset +0.275 s. Analysis runs in 1.2 s. Parakeet via sherpa-onnx behind the `parakeet` feature (fixture run pending at commit time).
+- 2026-10-31 M3 done: FCPXML 1.9 (lanes per role, source TC, fades, scene + note markers), SRT, cut list CSV/Markdown, per-scene bounce through the shared offline mixer (MP3 via ffmpeg). Structural FCPXML test green; no FCP DTD on this Mac. Schedule/mixer/offline render of M5 built early (D27). Parakeet fixture run: works end to end, 26/35+ takes (test ignored with reason).
