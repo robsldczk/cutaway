@@ -324,22 +324,22 @@ pub trait SoundGenerateProvider: Send + Sync {
 - [x] Tests: scheduler (gaps, ripple, anchors), offline length of S1 within 10 ms, no clicks at splices
 
 ### M6: Desktop app
-- [ ] Theme tokens + palette from the prototype; fonts
-- [ ] Bridge (Tauri + HTTP dev bridge), stores, keyboard map
-- [ ] Header, scene rail, transport + scene map, hint line, help overlay
-- [ ] Options page (deck, take pills, notes aside, action pills, word highlight, passage mode)
-- [ ] Arrange page (rows, waveform strips, trims, locator, I/O, gap drag, overlap, reorder)
-- [ ] Box editor (comp mode, edit mode)
-- [ ] Inspector, settings sheet, unmatched drawer, importer, summary card, history/versions, export panel
-- [ ] Playwright smoke tests (open project, arrow keys switch takes, play/stop, delete a word in the box editor and undo)
+- [x] Theme tokens + palette from the prototype; fonts
+- [x] Bridge (Tauri + HTTP dev bridge), stores, keyboard map
+- [x] Header, scene rail, transport + scene map, hint line, help overlay
+- [x] Options page (deck, take pills, notes aside, action pills, word highlight, passage mode)
+- [x] Arrange page (rows, waveform strips, trims, locator, I/O, gap drag, overlap, reorder)
+- [x] Box editor (comp mode, edit mode)
+- [x] Inspector, settings sheet, unmatched drawer, importer, summary card, history/versions, export panel
+- [x] Playwright smoke tests (open project, arrow keys switch takes, play/stop, delete a word in the box editor and undo)
 
 ### M7: Edit page, show library and sound
-- [ ] Edit page: dialogue lanes per role, SFX layers, ambience, music; ripple / Option-move; nudge, trim, fades, gain, anchors; "edited in Edit" markers
-- [ ] Show library (folders, dedup, tags), Finder drag-in to bucket / timeline
-- [ ] Bucket (cues per scene + show-wide, statuses, audition, editing, merge)
-- [ ] AI spotting per scene → anchored cues
-- [ ] Providers: library search, ElevenLabs, Epidemic (stub), MCP-client provider (stub)
-- [ ] Tests: anchoring follows take swap / gap change, pinned stays; Edit→Options sync; spotting on S2 with mock AI
+- [x] Edit page: dialogue lanes per role, SFX layers, ambience, music; ripple / Option-move; nudge, trim, fades, gain, anchors; "edited in Edit" markers
+- [x] Show library (folders, dedup, tags), Finder drag-in to bucket / timeline
+- [x] Bucket (cues per scene + show-wide, statuses, audition, editing, merge)
+- [x] AI spotting per scene → anchored cues
+- [x] Providers: library search, ElevenLabs, Epidemic (stub, D28), MCP-client provider (stub, D28)
+- [x] Tests: anchoring follows take swap / gap change, pinned stays; Edit→Options sync; spotting on S2 with mock AI
 
 ### M8: Windows readiness
 - [ ] Cross-platform paths, dialogs, audio device; ONNX DirectML/CPU provider selection
@@ -379,3 +379,4 @@ pub trait SoundGenerateProvider: Send + Sync {
 - 2026-10-31 M3 done: FCPXML 1.9 (lanes per role, source TC, fades, scene + note markers), SRT, cut list CSV/Markdown, per-scene bounce through the shared offline mixer (MP3 via ffmpeg). Structural FCPXML test green; no FCP DTD on this Mac. Schedule/mixer/offline render of M5 built early (D27). Parakeet fixture run: works end to end, 26/35+ takes (test ignored with reason).
 - 2026-10-31 M4 done: apc-app service (method registry with schemas, views, jobs, player with virtual clock, sound glue, synthetic demo session, HTTP dev bridge), `cutaway` CLI with all spec commands, rmcp 3.8 MCP server (tools from the registry, 4 resource kinds, confirm for destructive tools). Parity test: CLI and MCP give identical results on the demo and the TARMAC fixture. apc-sound library/providers written early. Golden cut list on the demo session.
 - 2026-10-31 M5 done: schedule (gaps, ripple, anchors, loudness offsets, room-tone bed, lanes/layers), shared mixer with equal-power fades, offline render, cpal engine (feeder thread + ring buffer, ~60 Hz playhead, play/stop/seek, stop-at). Fixture S1 renders at exactly the layout length (23.240 s); splice click test green; engine smoke test played on this Mac's device.
+- 2026-10-31 M6 + M7 done: Svelte 5 UI to the Option C prototype with tokens in app/src/theme (Options deck/pills/notes, Arrange rows/strips/pauses/reorder, box editor comp + edit modes, inspector, unmatched bin, settings, history/versions, export, importer + summary card, welcome), Tauri shell (rpc + dialogs + Finder open). Edit page (dialogue lanes, SFX layers, ambience, music, ripple/⌥ move, nudge, gain, fades, pin/unanchor, anchor lines), sound bucket (spotting, search, generate, choose, place, merge, library tab, drag to timeline). Playwright smoke tests green (takes with arrows, play/stop, delete word + undo). M7 service tests green (anchoring after take swap and gap change, pinned stays, Edit→Options sync, spotting on demo and fixture S2).

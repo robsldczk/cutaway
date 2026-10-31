@@ -1,1 +1,123 @@
-/* filled in M6 */ :root { --stage-bg: #0b0d12; --text-1: #f0eee8; --font-ui: Figtree, system-ui, sans-serif; }
+/*
+ * Design tokens of the default skin ("Option C", docs/design/prototype/).
+ * Components read only these variables. A new skin redefines the same names, either in
+ * its own file or under [data-theme="<name>"].
+ */
+:root {
+  color-scheme: dark;
+
+  /* stage */
+  --stage-bg: #0b0d12;
+  --stage-glow-1: rgba(46, 58, 110, 0.38);
+  --stage-glow-2: rgba(224, 138, 90, 0.08);
+  --stage-glow-3: rgba(94, 184, 176, 0.07);
+  --stage-paper-line: rgba(255, 255, 255, 0.022);
+  --stage-hairline: rgba(240, 238, 232, 0.26);
+
+  /* text: 1 is the dialogue, 5 the quietest hint */
+  --text-strong: #f3f1ec;
+  --text-1: #f0eee8;
+  --text-2: rgba(240, 238, 232, 0.84);
+  --text-3: rgba(240, 238, 232, 0.68);
+  --text-4: rgba(240, 238, 232, 0.55);
+  --text-5: rgba(240, 238, 232, 0.42);
+  --text-dim: rgba(243, 241, 236, 0.28);
+  --text-on-light: #14161c;
+  --text-on-pill: #15100c;
+  --link: #c3b7e6;
+  --link-hover: #dcd6e6;
+
+  /* glass */
+  --glass-blur: blur(22px) saturate(140%);
+  --glass-blur-soft: blur(10px);
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 18px 50px rgba(0, 0, 0, 0.35);
+  --glass-fill-1: rgba(255, 255, 255, 0.03);
+  --glass-fill-2: rgba(255, 255, 255, 0.04);
+  --glass-fill-3: rgba(255, 255, 255, 0.06);
+  --glass-fill-4: rgba(255, 255, 255, 0.07);
+  --glass-hover: rgba(255, 255, 255, 0.08);
+  --glass-active: rgba(255, 255, 255, 0.13);
+  --glass-outline: rgba(255, 255, 255, 0.08);
+  --panel: rgba(20, 22, 29, 0.8);
+  --panel-solid: rgba(22, 24, 31, 0.94);
+  --chip: rgba(20, 22, 29, 0.9);
+  --pill: rgba(24, 26, 33, 0.94);
+  --scrim: rgba(8, 9, 12, 0.6);
+  --scrim-light: rgba(8, 9, 12, 0.55);
+  --trim-shade: rgba(8, 9, 12, 0.74);
+  --kbd: rgba(255, 255, 255, 0.1);
+
+  /* accents */
+  --locator: #9fd6ff;
+  --locator-soft: rgba(159, 214, 255, 0.55);
+  --warn: #e6b84c;
+  --warn-glow: rgba(230, 184, 76, 0.8);
+  --playhead: #f3f1ec;
+  --playhead-glow: rgba(240, 238, 232, 0.8);
+  --overlap: #e9ddff;
+  --button-light: #f3f1ec;
+  --button-light-active: rgba(240, 238, 232, 0.92);
+  --danger: #e7a0a8;
+
+  /* character mixing base (rgb) for gradients: see palette.ts */
+  --mix-base: rgb(25, 27, 35);
+
+  /* shape */
+  --radius-box: 32px;
+  --radius-line: 24px;
+  --radius-snip: 18px;
+  --radius-panel: 30px;
+  --radius-dialog: 32px;
+  --radius-sheet: 26px;
+  --radius-rail: 22px;
+  --radius-btn: 14px;
+  --radius-lane: 12px;
+  --radius-chip: 8px;
+  --radius-pill: 999px;
+
+  /* type */
+  --font-ui: 'Figtree', system-ui, sans-serif;
+  --font-script: 'Courier Prime', 'Courier New', monospace;
+  --fs-dialogue-active: 24px;
+  --fs-dialogue: 18px;
+  --fs-snip: 15px;
+  --fs-paren-active: 14px;
+  --fs-paren: 13px;
+  --fs-action: 13px;
+  --fs-name: 11px;
+  --fs-ui: 13px;
+  --fs-small: 11px;
+  --name-tracking: 0.14em;
+
+  /* motion */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-scroll: cubic-bezier(0.22, 0.9, 0.25, 1);
+  --dur-flip: 0.45s;
+  --dur-scroll: 0.34s;
+  --dur-fast: 0.2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-flip: 0s;
+    --dur-scroll: 0s;
+    --dur-fast: 0s;
+  }
+}
+
+/* Light theme comes second: the same names, redefined. Not tuned yet (see RUN_REPORT). */
+[data-theme='light'] {
+  color-scheme: light;
+  --stage-bg: #f4f2ee;
+  --stage-glow-1: rgba(120, 140, 220, 0.18);
+  --text-strong: #14161c;
+  --text-1: #1d2027;
+  --text-2: rgba(20, 22, 28, 0.84);
+  --text-3: rgba(20, 22, 28, 0.68);
+  --text-4: rgba(20, 22, 28, 0.55);
+  --text-5: rgba(20, 22, 28, 0.42);
+  --panel: rgba(255, 255, 255, 0.8);
+  --panel-solid: rgba(255, 255, 255, 0.94);
+  --mix-base: rgb(236, 234, 230);
+}

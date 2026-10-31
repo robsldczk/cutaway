@@ -1,0 +1,84 @@
+// Keyboard map (docs/specs/frontend-design.md). The box editor handles its own keys.
+import { app } from './app.svelte';
+
+export function onKey(e: KeyboardEvent) {
+  const t = e.target as HTMLElement | null;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && e.key !== 'Escape') return;
+  if (app.overlay === 'editor') return;
+  const k = e.key;
+  const mod = e.metaKey || e.ctrlKey;
+  let handled = true;
+  if (mod && (k === 'z' || k === 'Z')) {
+    if (e.shiftKey) void app.redo();
+    else void app.undo();
+  } else if (mod && (k === 's' || k === 'S')) app.overlay = 'history';
+  else if (k === '?') app.overlay = app.overlay === 'help' ? null : 'help';
+  else if (k === 'Escape') {
+    if (app.overlay) app.overlay = null;
+    else if (app.drawer) app.drawer = null;
+    else app.passageTo = null;
+  } else if (app.overlay) handled = false;
+  else if (k === ' ' && e.shiftKey) void app.playFromLocator();
+  else if (k === ' ') void app.togglePlay();
+  else if (k === 'Enter') void app.playLineInContext();
+  else if (k === 'ArrowUp' && e.altKey && app.page === 'arrange') void moveLine(-1);
+  else if (k === 'ArrowDown' && e.altKey && app.page === 'arrange') void moveLine(1);
+  else if (k === 'ArrowUp' && e.shiftKey) app.extendPassage(-1);
+  else if (k === 'ArrowDown' && e.shiftKey) app.extendPassage(1);
+  else if (k === 'ArrowUp') app.go(-1);
+  else if (k === 'ArrowDown') app.go(1);
+  else if (k === 'ArrowLeft' && app.page !== 'edit') void app.stepTake(-1);
+  else if (k === 'ArrowRight' && app.page !== 'edit') void app.stepTake(1);
+  else if (k === 'f' || k === 'F') void app.toggleFav();
+  else if (k === 'e' || k === 'E') openEditor();
+  else if ((k === 'i' || k === 'I') && app.page === 'arrange') void setInOut('in');
+  else if ((k === 'o' || k === 'O') && app.page === 'arrange') void setInOut('out');
+  else if (k === 'i' || k === 'I') app.drawer = app.drawer === 'inspector' ? null : 'inspector';
+  else if (k === 'p' || k === 'P') void app.applyPassage();
+  else if (k === 'u' || k === 'U') app.drawer = app.drawer === 'unmatched' ? null : 'unmatched';
+  else if (k === 'b' || k === 'B') app.drawer = app.drawer === 'bucket' ? null : 'bucket';
+  else if (k === '1') app.setPage('options');
+  else if (k === '2') app.setPage('arrange');
+  else if (k === '3') app.setPage('edit');
+  else if (k === '+' || k === '=') app.scale = Math.min(1.3, Math.round((app.scale + 0.05) * 100) / 100);
+  else if (k === '-' || k === '_') app.scale = Math.max(0.8, Math.round((app.scale - 0.05) * 100) / 100);
+  else if (k === ',') void app.nudgeGap(-0.1);
+  else if (k === '.') void app.nudgeGap(0.1);
+  else handled = false;
+  if (handled) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}
+
+export function openEditor() {
+  const c = app.cur;
+  if (!c || c.takes.length === 0) return;
+  if (app.playing) void app.stop();
+  app.overlay = 'editor';
+}
+
+async function moveLine(d: number) {
+  const v = app.view;
+  const c = app.cur;
+  if (!v || !c) return;
+  const idx = v.items.findIndex((i) => i.line_id === c.line_id);
+  // move past the neighbouring line (and any spacer between)
+  let j = idx + d;
+  while (j >= 0 && j < v.items.length && v.items[j].kind !== 'line') j += d;
+  if (j < 0 || j >= v.items.length) return;
+  await app.cmd({ cmd: 'move_item', scene_id: v.scene.id, item_id: c.line_id, to_index: j });
+}
+
+async function setInOut(which: 'in' | 'out') {
+  const c = app.cur;
+  if (!c || c.take_index == null) return;
+  const take = c.takes[c.take_index];
+  const into = Math.max(0, Math.min(app.locator - c.start_s, c.end_s - c.start_s));
+  if (which === 'in') {
+    await app.cmd({ cmd: 'set_trim', line_id: c.line_id, head_s: c.head_s + into, tail_s: c.tail_s });
+  } else {
+    const tail = take.duration - c.head_s - into;
+    await app.cmd({ cmd: 'set_trim', line_id: c.line_id, head_s: c.head_s, tail_s: Math.max(0, tail) });
+  }
+}

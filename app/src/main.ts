@@ -3,6 +3,7 @@ import App from './App.svelte';
 import { brand } from './lib/brand';
 import './theme/fonts.css';
 import './theme/tokens.css';
+import './theme/base.css';
 
 document.title = brand.displayName;
 

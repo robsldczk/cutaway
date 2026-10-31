@@ -31,3 +31,9 @@ jobs:
       - name: scripts/check.sh
         shell: bash
         run: scripts/check.sh
+      - name: UI smoke tests (Playwright)
+        if: matrix.os == 'macos-latest'
+        working-directory: app
+        run: |
+          npx playwright install chromium
+          npm run test:e2e

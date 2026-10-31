@@ -122,3 +122,15 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Context:** Stage 0 drops takes quieter than −38 dB. On the demo session a reader's cue picked up by an open mic passed that threshold.
 - **Choice:** a take is bleed if it is below −38 dB **or** more than 10 dB below the median level of that mic's takes.
 - **Reason:** absolute thresholds depend on gain staging; the fixture results are unchanged.
+
+### D32 UI framework and testing
+- **Choice:** Svelte 5 (runes) + TypeScript + Vite inside Tauri 2. The UI reaches the core only through `rpc(method, params)`: a Tauri command in the app, the HTTP dev bridge (`cutaway serve`) in a browser. UI smoke tests run in Playwright (Chromium) against the bridge on a generated demo session, because Tauri's WebDriver isn't available on macOS.
+- **Reason:** Svelte was preferred in CLAUDE.md; the bridge makes the real core testable from a browser.
+
+### D33 UI details not settled by the prototype
+- **Playhead:** the UI polls `playhead` every 33 ms while playing (≈30 Hz on screen); the engine itself produces ≈60 Hz events. Simpler than event plumbing through two transports.
+- **Box editor lanes** are scaled per take (as in the prototype); painting snaps to word boundaries and is stored as script-word ranges, so the comp is text-aligned in the document even though lanes are drawn per take.
+- **Edit mode** in the box editor: click words then ⌫ to delete; click a struck word to restore; a chip on each cut toggles close/keep pause; drag the blue pause markers left to shorten a pause; edge handles trim head and tail.
+- **Auditioning a single take lane** plays the comp (the engine plays the scene timeline); clicking a take lane moves the locator to the same script word. Listed as an open question.
+- **Finder drops:** a script imports a version; audio imports as role tracks on Options/Arrange, into the library with the bucket open, and into the library plus a placement at the playhead on the Edit page.
+- **Fonts** are bundled (`@fontsource`, SIL OFL) so the app works offline.

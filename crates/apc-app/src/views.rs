@@ -64,6 +64,15 @@ pub struct LayoutWordView {
 }
 
 #[derive(Serialize)]
+pub struct PieceView {
+    pub take_id: String,
+    pub src_in: f64,
+    pub src_out: f64,
+    pub start_s: f64,
+    pub len_s: f64,
+}
+
+#[derive(Serialize)]
 pub struct ItemView {
     pub kind: &'static str,
     pub line_id: String,
@@ -85,6 +94,7 @@ pub struct ItemView {
     pub take_index: Option<usize>,
     pub takes: Vec<TakeView>,
     pub words: Vec<LayoutWordView>,
+    pub pieces: Vec<PieceView>,
     pub head_s: f64,
     pub tail_s: f64,
     pub comp: Vec<CompSegment>,
@@ -319,6 +329,17 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
                     end_s: w.end_s,
                     deleted: w.deleted,
                     script_idx: w.script_idx,
+                })
+                .collect(),
+            pieces: li
+                .pieces
+                .iter()
+                .map(|p| PieceView {
+                    take_id: p.take_id.clone(),
+                    src_in: p.src_in,
+                    src_out: p.src_out,
+                    start_s: p.start_s,
+                    len_s: p.len(),
                 })
                 .collect(),
             head_s: b.head_s,

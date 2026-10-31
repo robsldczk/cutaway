@@ -344,6 +344,7 @@ registry! {
     "create_show", CreateShowP, Write, true, "Create a show folder with its library (TARMAC/TARMAC.cutawayshow, Library/, Episodes/).";
     "create_episode", CreateEpisodeP, Write, true, "Create an episode (inside a show, or standalone) and open it.";
     "open_project", OpenP, Read, true, "Open an episode file or folder. Later calls work on it.";
+    "create_demo", CreateShowP, Write, false, "Create the synthetic demo session in parent/name, analyze it and open it.";
     "project_status", NoParams, Read, true, "Progress, match rate, flagged items, undo state and AI provider of the open episode.";
     "list_scenes", NoParams, Read, true, "Scenes with heading, place, line counts and flagged items.";
     "import_script", ImportScriptP, Write, true, "Import a Fountain/Throughline script as the next version (vNNN). Returns the change summary.";
@@ -810,7 +811,7 @@ impl Service {
                 let pk: Vec<f32> = a.peaks_range(p.t0, p.t1, p.buckets.unwrap_or(200)).into_iter().map(|(lo, hi)| lo.abs().max(hi.abs())).collect();
                 Ok(json!(pk))
             }
-            "create_show" | "create_episode" | "open_project" => {
+            "create_show" | "create_episode" | "open_project" | "create_demo" => {
                 Err(AppError::Other(format!("{name} is handled by the session")))
             }
             other => Err(AppError::UnknownMethod(other.into())),
@@ -871,6 +872,8 @@ impl Service {
             "can_undo": self.bus.can_undo()?,
             "can_redo": self.bus.can_redo()?,
             "ai_provider": self.config().ai.provider,
+            "room_tone": self.config().pacing.room_tone,
+            "breath_gap_s": self.config().pacing.breath_gap_s,
             "ai_warning": ai_warning,
             "jobs": self.jobs.list(),
         }))
@@ -914,6 +917,15 @@ impl Session {
                     p.show.as_deref().map(Path::new),
                     &self.client,
                 )?;
+                let file = svc.paths.file.to_string_lossy().into_owned();
+                self.service = Some(svc);
+                Ok(json!({ "file": file }))
+            }
+            "create_demo" => {
+                let p: CreateShowP = parse(params)?;
+                let dir = Path::new(&p.parent).join(&p.name);
+                std::fs::create_dir_all(&dir)?;
+                let svc = crate::demo::create(&dir, &self.client, true)?;
                 let file = svc.paths.file.to_string_lossy().into_owned();
                 self.service = Some(svc);
                 Ok(json!({ "file": file }))
