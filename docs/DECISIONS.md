@@ -68,3 +68,13 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Context:** results must be schema-validated JSON.
 - **Choice:** schemas are generated with `schemars` from the Rust I/O structs (and sent to the provider); validation is strict typed deserialization (`deny_unknown_fields`) plus range checks, instead of a JSON-Schema validator crate.
 - **Reason:** one definition for schema and type; far fewer dependencies.
+
+### D21 Show-level operations
+- **Context:** the command bus works on the episode document; aliases, library assets and locations live in the show file.
+- **Choice:** show-level operations write the show database directly and are logged in its `command_log`; they are not undoable from the episode history. Deleting a library asset moves its file to `Backups/Trash/` instead of deleting it.
+- **Reason:** one undo history per open document keeps the semantics simple; the show library changes rarely and destructive actions stay recoverable.
+
+### D22 Timing model details
+- **Context:** the specs fix "gap to the previous clip" but not how action lines and the breath gap combine.
+- **Choice:** the pause before a box is its `gap_s` override, else `(breath gap + enabled spacers since the previous box) × scene tightness`. Spacer length defaults to `0.6 s + 0.04 s per word` (max 2.5 s). Lines without takes take no time. A new script version resets the scene order to script order (ad-libs keep their place).
+- **Reason:** matches the prototype's single pause per gap row and keeps one number per gesture.

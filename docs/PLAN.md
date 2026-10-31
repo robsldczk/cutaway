@@ -277,14 +277,14 @@ pub trait SoundGenerateProvider: Send + Sync {
 - [x] Push `dev`
 
 ### M1: Core document and project folders
-- [ ] Show and episode folder creation (`Audio/ Script/ Backups/ Exports/ Cache/ Logs/ Library/`), `.cutawayshow` / `.cutaway` SQLite WAL
-- [ ] Entity store + typed document load
-- [ ] Command bus: execute, persist, undo, redo, discard redo tail; history
-- [ ] Autosave backups (10 min while changing; keep 20 + one per day), named versions, revert
-- [ ] Fountain parser (title page, `===`, scene headings, cues with extensions, parentheticals, `!`/`>`/`--`, notes/sections/synopses as metadata)
-- [ ] Script versioning: `vNNN <name>.fountain`, diff with stable IDs, deleted-line takes → unmatched, change summary
-- [ ] Media import: copy (default) / reference, BLAKE3 hash, relink by hash
-- [ ] Unit tests: undo/redo, autosave rotation, script diff (edit, delete, insert), relink
+- [x] Show and episode folder creation (`Audio/ Script/ Backups/ Exports/ Cache/ Logs/ Library/`), `.cutawayshow` / `.cutaway` SQLite WAL
+- [x] Entity store + typed document load
+- [x] Command bus: execute, persist, undo, redo, discard redo tail; history
+- [x] Autosave backups (10 min while changing; keep 20 + one per day), named versions, revert
+- [x] Fountain parser (title page, `===`, scene headings, cues with extensions, parentheticals, `!`/`>`/`--`, notes/sections/synopses as metadata)
+- [x] Script versioning: `vNNN <name>.fountain`, diff with stable IDs, deleted-line takes → unmatched, change summary
+- [x] Media import: copy (default) / reference, BLAKE3 hash, relink by hash
+- [x] Unit tests: undo/redo, autosave rotation, script diff (edit, delete, insert), relink
 
 ### M2: Import and analysis pipeline
 - [ ] Fountain parser checks against the TARMAC fixture
@@ -373,3 +373,4 @@ pub trait SoundGenerateProvider: Send + Sync {
 
 (dated lines, newest last)
 - 2026-10-31 M0 done: workspace (10 crates + Tauri shell), brand.json + rebrand check, Svelte 5 app skeleton with bundled fonts, check.sh green, CI for macOS + Windows. `gh` CLI not installed: the PR at the end needs Rob (or gh).
+- 2026-10-31 M1 done: entity store + command bus (persisted undo/redo, multi-client rev sync), Fountain parser (matches Stage 0 unit numbering on the fixture, 27 PAUL lines), script versions with ID-keeping diff, autosave/rotation/named versions/revert, copy/reference import with BLAKE3 + relink, shared timing model. 39 tests. Push after M1 was refused by the session's permission check; commits stay local until a push is allowed.
