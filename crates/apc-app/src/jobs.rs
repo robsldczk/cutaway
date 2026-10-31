@@ -38,15 +38,21 @@ impl Jobs {
         }
     }
 
-    /// Starts the full analysis of `file` in the background.
-    pub fn start_analysis(&self, file: PathBuf) -> String {
+    /// Runs `work` on a worker thread with its own connection to the episode. `work` gets a
+    /// progress callback (0..1, message). Panics are caught and reported as failures.
+    pub fn spawn<F>(&self, kind: &str, file: PathBuf, work: F) -> String
+    where
+        F: FnOnce(&mut crate::service::Service, &dyn Fn(f64, &str)) -> crate::Result<Value>
+            + Send
+            + 'static,
+    {
         let id = apc_core::ids::new_id("job");
         if let Ok(mut m) = self.0.lock() {
             m.insert(
                 id.clone(),
                 JobInfo {
                     id: id.clone(),
-                    kind: "analysis".into(),
+                    kind: kind.into(),
                     state: "running".into(),
                     progress: 0.0,
                     stage: "start".into(),
@@ -63,16 +69,13 @@ impl Jobs {
                     let mut svc = crate::service::Service::open(&file, "pipeline")?;
                     let j2 = jobs.clone();
                     let jid2 = jid.clone();
-                    let r = svc.analyze(&move |p| {
+                    let progress = move |f: f64, msg: &str| {
                         j2.update(&jid2, |j| {
-                            j.progress = p.fraction;
-                            j.stage = p.stage.clone();
-                            j.message = p.message.clone();
+                            j.progress = f;
+                            j.message = msg.to_string();
                         })
-                    })?;
-                    Ok(
-                        serde_json::json!({ "takes_found": r.takes_found, "lines_matched": r.lines_matched, "picks_found": r.picks_found, "flagged": r.flagged }),
-                    )
+                    };
+                    work(&mut svc, &progress)
                 },
             ));
             jobs.update(&jid, |j| match run {
@@ -87,10 +90,33 @@ impl Jobs {
                 }
                 Err(_) => {
                     j.state = "failed".into();
-                    j.message = "the analysis crashed".into();
+                    j.message = "the job crashed".into();
                 }
             });
         });
         id
+    }
+
+    /// Starts the full analysis of `file` in the background.
+    pub fn start_analysis(&self, file: PathBuf) -> String {
+        let jobs = self.clone();
+        let id_cell = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let id_for_work = id_cell.clone();
+        let id = self.spawn("analysis", file, move |svc, progress| {
+            let jid = id_for_work.lock().map(|g| g.clone()).unwrap_or_default();
+            let r = svc.analyze(&|p| {
+                progress(p.fraction, &p.message);
+                jobs.update(&jid, |j| j.stage = p.stage.clone());
+            })?;
+            Ok(serde_json::json!({ "takes_found": r.takes_found, "lines_matched": r.lines_matched, "picks_found": r.picks_found, "flagged": r.flagged }))
+        });
+        if let Ok(mut g) = id_cell.lock() {
+            *g = id.clone();
+        }
+        id
+    }
+
+    pub fn get(&self, id: &str) -> Option<JobInfo> {
+        self.0.lock().ok().and_then(|m| m.get(id).cloned())
     }
 }

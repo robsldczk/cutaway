@@ -2,8 +2,10 @@
 //! server and the HTTP dev bridge all go through `Session::call` / `Service::call`.
 
 pub mod bridge;
+pub mod buckets;
 pub mod demo;
 pub mod error;
+pub mod import;
 pub mod jobs;
 pub mod methods;
 pub mod player;

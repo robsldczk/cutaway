@@ -1,0 +1,390 @@
+//! Round 2: sound buckets (spot, search with filters and paging, keep, dismiss, place with
+//! download on drop) against a mock Partner API, and Import › Files matching (cast view,
+//! room links kept on Redo match, what needs fixing).
+
+use std::time::{Duration, Instant};
+
+use serde_json::{json, Value};
+
+fn env() {
+    std::env::set_var("CUTAWAY_AI_PROVIDER", "mock");
+    std::env::set_var("CUTAWAY_NO_AUDIO", "1");
+    std::env::set_var("CUTAWAY_SECRETS", "memory");
+    std::env::remove_var("EPIDEMIC_SOUND_API_KEY");
+}
+
+fn query(url: &str, key: &str) -> Option<String> {
+    url.split_once('?')?
+        .1
+        .split('&')
+        .find_map(|kv| kv.strip_prefix(&format!("{key}=")).map(String::from))
+}
+
+/// 40 foil sounds; #105 is a music bed, #107 is very short.
+fn mock_epidemic() -> String {
+    let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+    let base = format!("http://{}", server.server_addr().to_ip().unwrap());
+    let base2 = base.clone();
+    std::thread::spawn(move || {
+        let dir = tempfile::tempdir().unwrap();
+        // a different file per sound id (the library deduplicates identical files)
+        let wav_for = |id: u32| {
+            let sr = 48000u32;
+            let s: Vec<f32> = (0..sr / 2)
+                .map(|i| {
+                    0.2 * (i as f32 * (200.0 + id as f32) * std::f32::consts::TAU / sr as f32).sin()
+                })
+                .collect();
+            let wav = dir.path().join(format!("{id}.wav"));
+            apc_media::wav::write_wav(&wav, sr, 1, &s).unwrap();
+            std::fs::read(&wav).unwrap()
+        };
+        for req in server.incoming_requests() {
+            let url = req.url().to_string();
+            let resp = if let Some(f) = url.strip_prefix("/files/") {
+                tiny_http::Response::from_data(wav_for(
+                    f.trim_end_matches(".wav").parse().unwrap_or(0),
+                ))
+            } else if url.starts_with("/v0/sound-effects/search") {
+                let limit: usize = query(&url, "limit")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(10);
+                let offset: usize = query(&url, "offset")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or(0);
+                let items: Vec<Value> = (100..140)
+                    .skip(offset)
+                    .take(limit)
+                    .map(|i| {
+                        let title = if i == 105 { format!("Foil music bed {i}") } else { format!("Foil rustle {i}") };
+                        json!({ "id": i.to_string(), "title": title, "length": if i == 107 { 0.1 } else { 2.0 } })
+                    })
+                    .collect();
+                tiny_http::Response::from_data(
+                    json!({ "soundEffects": items }).to_string().into_bytes(),
+                )
+            } else if url.contains("/download") || url.contains("/preview") {
+                let id = url
+                    .trim_start_matches("/v0/sound-effects/")
+                    .split('/')
+                    .next()
+                    .unwrap_or("0")
+                    .to_string();
+                tiny_http::Response::from_data(
+                    format!("{{\"url\":\"{base2}/files/{id}.wav\",\"expires\":\"x\"}}")
+                        .into_bytes(),
+                )
+            } else {
+                tiny_http::Response::from_data(b"{}".to_vec()).with_status_code(404)
+            };
+            let _ = req.respond(resp);
+        }
+    });
+    base
+}
+
+fn wait_job(svc: &mut apc_app::Service, id: &str) -> Value {
+    let t0 = Instant::now();
+    loop {
+        let jobs = svc.call("job_status", &json!({})).unwrap();
+        let j = jobs
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|j| j["id"] == id)
+            .unwrap()
+            .clone();
+        if j["state"] != "running" {
+            return j;
+        }
+        assert!(t0.elapsed() < Duration::from_secs(30), "job timed out");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[test]
+fn buckets_search_keep_dismiss_and_download_on_drop() {
+    env();
+    std::env::set_var("CUTAWAY_EPIDEMIC_URL", mock_epidemic());
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = apc_app::demo::create(dir.path(), "test", true).unwrap();
+    svc.call(
+        "connect_service",
+        &json!({ "service": "epidemic", "api_key": "any-key-1234" }),
+    )
+    .unwrap();
+
+    // Spot script groups the AI cues into buckets with keywords
+    let r = svc.call("spot_buckets", &json!({})).unwrap();
+    assert!(r["buckets"].as_u64().unwrap() >= 1);
+    let all = svc.call("buckets", &json!({})).unwrap();
+    let spotted = &all["buckets"].as_array().unwrap()[0];
+    assert!(spotted["ai_suggested"].as_bool().unwrap());
+    assert!(!spotted["keywords"].as_array().unwrap().is_empty());
+    assert!(!spotted["scenes"].as_array().unwrap().is_empty());
+    assert_eq!(all["connected"]["epidemic"], true);
+
+    // a bucket by hand, with "leave out music" and a minimum length
+    let b = svc
+        .call(
+            "create_bucket",
+            &json!({ "name": "Foil", "keywords": ["foil rustle"], "scenes": ["1"], "exclude": ["music"], "length_min_s": 0.5, "search": true }),
+        )
+        .unwrap();
+    let bid = b["bucket_id"].as_str().unwrap().to_string();
+    let previews = b["search"]["previews"].as_array().unwrap().clone();
+    assert_eq!(previews.len(), 12, "one page");
+    assert!(
+        previews
+            .iter()
+            .all(|p| !p["title"].as_str().unwrap().contains("music")),
+        "left out"
+    );
+    assert!(
+        previews.iter().all(|p| p["remote_id"] != "107"),
+        "too short"
+    );
+
+    // Load 12 more: no repeats
+    let more = svc
+        .call("bucket_search", &json!({ "bucket_id": bid, "more": true }))
+        .unwrap();
+    let ids: Vec<String> = more["previews"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["remote_id"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(ids.len(), 24);
+    let mut uniq = ids.clone();
+    uniq.sort();
+    uniq.dedup();
+    assert_eq!(uniq.len(), 24, "no duplicates across pages");
+
+    // dismiss one; download another (kept, gold)
+    svc.call(
+        "bucket_dismiss",
+        &json!({ "bucket_id": bid, "remote_id": ids[0] }),
+    )
+    .unwrap();
+    let dl = svc
+        .call(
+            "bucket_download",
+            &json!({ "bucket_id": bid, "remote_id": ids[1] }),
+        )
+        .unwrap();
+    assert_eq!(dl["asset"]["source"], "licensed");
+    assert_eq!(dl["asset"]["remote_id"], ids[1].as_str());
+    let v = svc
+        .call("buckets", &json!({ "scene": "1", "sort": "tag" }))
+        .unwrap();
+    let foil = v["buckets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] == bid.as_str())
+        .unwrap()
+        .clone();
+    assert_eq!(foil["kept"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        foil["previews"].as_array().unwrap().len(),
+        22,
+        "dismissed and kept are no longer previews"
+    );
+
+    // audition a preview (virtual clock without audio)
+    svc.call("play_sound", &json!({ "remote_id": ids[2] }))
+        .unwrap();
+    assert_eq!(
+        svc.call("playhead", &json!({})).unwrap()["sound"],
+        ids[2].as_str()
+    );
+    svc.call("stop", &json!({})).unwrap();
+
+    // place the kept sound at once, and a preview after its download (background job)
+    let kept = foil["kept"][0]["id"].as_str().unwrap().to_string();
+    svc.call(
+        "place_from_bucket",
+        &json!({ "scene": "1", "asset_id": kept, "at_s": 1.0 }),
+    )
+    .unwrap();
+    let job = svc
+        .call(
+            "place_from_bucket",
+            &json!({ "scene": "1", "bucket_id": bid, "remote_id": ids[3], "at_s": 2.0 }),
+        )
+        .unwrap();
+    let j = wait_job(&mut svc, job["job_id"].as_str().unwrap());
+    assert_eq!(j["state"], "done", "{j}");
+    let ev = svc.call("edit_view", &json!({ "scene": "1" })).unwrap();
+    assert_eq!(ev["placements"].as_array().unwrap().len(), 2);
+    // Split tool: one sound becomes two that play the same audio
+    let first = ev["placements"][0].clone();
+    let at = first["start_s"].as_f64().unwrap() + 0.2;
+    svc.call(
+        "command",
+        &json!({ "cmd": "split_placement", "placement_id": first["id"], "at_s": at }),
+    )
+    .unwrap();
+    let ev = svc.call("edit_view", &json!({ "scene": "1" })).unwrap();
+    let pl = ev["placements"].as_array().unwrap();
+    assert_eq!(pl.len(), 3);
+    let tail = pl
+        .iter()
+        .find(|p| (p["start_s"].as_f64().unwrap() - at).abs() < 1e-6)
+        .unwrap();
+    assert!(
+        (tail["len_s"].as_f64().unwrap() - (first["len_s"].as_f64().unwrap() - 0.2)).abs() < 1e-6
+    );
+    svc.call("undo", &json!({})).unwrap();
+    // lane mix is part of the edit view
+    svc.call(
+        "command",
+        &json!({ "cmd": "set_lane_mix", "mix": { "id": "sfx1", "volume_db": -4.0, "mute": true } }),
+    )
+    .unwrap();
+    let ev = svc.call("edit_view", &json!({ "scene": "1" })).unwrap();
+    assert_eq!(ev["lane_mix"][0]["mute"], true);
+    let v = svc.call("buckets", &json!({ "scene": "1" })).unwrap();
+    let foil = v["buckets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["id"] == bid.as_str())
+        .unwrap()
+        .clone();
+    assert_eq!(
+        foil["kept"].as_array().unwrap().len(),
+        2,
+        "a dropped preview is kept"
+    );
+
+    // a dismissed sound is skipped by a fresh search; undo brings the preview back
+    let fresh = svc
+        .call("bucket_search", &json!({ "bucket_id": bid }))
+        .unwrap();
+    assert!(fresh["previews"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|p| p["remote_id"] != ids[0].as_str()));
+
+    svc.call(
+        "delete_bucket",
+        &json!({ "bucket_id": bid, "confirm": true }),
+    )
+    .unwrap();
+    let v = svc.call("buckets", &json!({})).unwrap();
+    assert!(v["buckets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|x| x["id"] != bid.as_str()));
+    // the key never appears in a bucket view
+    assert!(!v.to_string().contains("any-key-1234"));
+}
+
+#[test]
+fn import_matching_keeps_hand_links_and_lists_fixes() {
+    env();
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = apc_app::demo::create(dir.path(), "test", true).unwrap();
+    svc.call("match_files", &json!({})).unwrap();
+    let v = svc.call("import_view", &json!({})).unwrap();
+    assert!(v["matched_at"].is_string());
+    assert_eq!(v["files"]["recordings"], 2);
+    assert_eq!(v["files"]["rooms"], 1);
+    let cast = v["cast"].as_array().unwrap();
+    let paul = cast.iter().find(|c| c["id"] == "PAUL").unwrap();
+    let rec = &paul["recordings"][0];
+    assert_eq!(
+        rec["rooms"].as_array().unwrap().len(),
+        1,
+        "the room serves Paul"
+    );
+    assert_eq!(rec["shared_with"][0], "Sara", "ensemble");
+    assert!(v["fixes"].as_array().unwrap().is_empty(), "{}", v["fixes"]);
+
+    // a file nobody can place becomes a fix
+    let sources = svc.call("roles", &json!({})).unwrap();
+    let sara_src = sources
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["character"] == "SARA")
+        .unwrap()["source_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let room_src = sources
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["role"] == "room")
+        .unwrap()["source_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let paul_src = rec["source_id"].as_str().unwrap().to_string();
+    svc.call("confirm_roles", &json!({ "assignments": [{ "source_id": sara_src, "role": "unknown" }], "remember": false })).unwrap();
+    let v = svc.call("import_view", &json!({})).unwrap();
+    let fixes = v["fixes"].as_array().unwrap();
+    assert!(fixes
+        .iter()
+        .any(|f| f["kind"] == "role" && f["source_id"] == sara_src.as_str()));
+    assert!(fixes
+        .iter()
+        .any(|f| f["kind"] == "no_recording" && f["character"] == "SARA"));
+    let s = svc
+        .call("suggest_character", &json!({ "source_id": sara_src }))
+        .unwrap();
+    assert_eq!(s["character"], "SARA", "from the file name");
+    svc.call("confirm_roles", &json!({ "assignments": [{ "source_id": sara_src, "role": "character", "character": "SARA" }] })).unwrap();
+
+    // link the room to Paul only; Redo match keeps that
+    svc.call(
+        "link_room",
+        &json!({ "room_id": room_src, "recording_ids": [paul_src] }),
+    )
+    .unwrap();
+    let check = |svc: &mut apc_app::Service| {
+        let v = svc.call("import_view", &json!({})).unwrap();
+        let cast = v["cast"].as_array().unwrap().clone();
+        let paul = cast.iter().find(|c| c["id"] == "PAUL").unwrap().clone();
+        let sara = cast.iter().find(|c| c["id"] == "SARA").unwrap().clone();
+        assert_eq!(paul["recordings"][0]["rooms"][0]["locked"], true);
+        assert!(
+            sara["recordings"][0]["rooms"]
+                .as_array()
+                .unwrap()
+                .is_empty(),
+            "Sara's session has no room now"
+        );
+    };
+    check(&mut svc);
+    svc.call("match_files", &json!({})).unwrap();
+    check(&mut svc);
+
+    // the analysis uses the matched sessions
+    svc.call("run_alignment", &json!({})).unwrap();
+    let sessions: Vec<Value> = svc
+        .doc()
+        .sessions
+        .values()
+        .map(|s| json!(s.source_ids))
+        .collect();
+    assert_eq!(sessions.len(), 2, "{sessions:?}");
+    // undo the analysis and the link: back to one ensemble session
+    svc.call("undo", &json!({})).unwrap();
+    svc.call("undo", &json!({})).unwrap();
+    svc.call("undo", &json!({})).unwrap();
+    let v = svc.call("import_view", &json!({})).unwrap();
+    let paul = v["cast"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == "PAUL")
+        .unwrap()
+        .clone();
+    assert_eq!(paul["recordings"][0]["rooms"][0]["locked"], false);
+}

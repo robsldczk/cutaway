@@ -241,6 +241,7 @@ mod tests {
             offset_confidence: 0.0,
             transcript: f.sidecar.clone(),
             missing: false,
+            link_locked: false,
         };
         bus.execute(&Command::AddSources { sources: vec![src] })
             .unwrap();

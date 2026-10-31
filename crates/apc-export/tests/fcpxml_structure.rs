@@ -89,6 +89,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
                 offset_confidence: 1.0,
                 transcript: None,
                 missing: false,
+                link_locked: false,
             },
         );
     }
@@ -226,6 +227,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             prompt: None,
             provider: None,
             lufs: None,
+            remote_id: None,
         },
     );
     d.placements.insert(
@@ -248,6 +250,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             len_s: 0.8,
             fade_in_s: 0.0,
             fade_out_s: 0.1,
+            fade_curve: Default::default(),
             gain_db: -3.0,
         },
     );

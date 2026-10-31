@@ -427,6 +427,7 @@ pub struct PlacementView {
     pub cue_id: Option<String>,
     pub fade_in_s: f64,
     pub fade_out_s: f64,
+    pub fade_curve: FadeCurve,
     pub gain_db: f64,
     pub peaks: Vec<f32>,
 }
@@ -441,8 +442,22 @@ pub struct CueView {
 #[derive(Serialize)]
 pub struct EditView {
     pub scene_id: String,
+    pub duration_s: f64,
     pub placements: Vec<PlacementView>,
     pub cues: Vec<CueView>,
+    /// Volume, pan, mute and solo per lane (dialogue lanes by character id; `sfx1`,
+    /// `ambience`, `music`, `roomtone`).
+    pub lane_mix: Vec<LaneMix>,
+    pub room_tone: Option<RoomToneBed>,
+}
+
+/// The scene's room tone loop: where it comes from and where the loop seams fall.
+#[derive(Serialize)]
+pub struct RoomToneBed {
+    pub source: String,
+    pub loop_s: f64,
+    pub gain_db: f64,
+    pub seams: Vec<f64>,
 }
 
 pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
@@ -486,15 +501,45 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
             cue_id: p.cue_id.clone(),
             fade_in_s: p.fade_in_s,
             fade_out_s: p.fade_out_s,
+            fade_curve: p.fade_curve,
             gain_db: p.gain_db,
             peaks,
         });
     }
     placements.sort_by(|a, b| a.start_s.total_cmp(&b.start_s));
+    let room_tone = doc
+        .locations
+        .get(&apc_core::script::location_id(&scene.location))
+        .map(|l| &l.room_tone)
+        .filter(|t| t.enabled && t.t1 > t.t0 + 0.05)
+        .map(|t| {
+            let period = t.t1 - t.t0;
+            let n = (layout.duration_s / period).floor() as usize;
+            RoomToneBed {
+                source: t
+                    .source_id
+                    .as_ref()
+                    .and_then(|s| doc.sources.get(s))
+                    .map(|s| s.original_name.clone())
+                    .or_else(|| {
+                        t.asset_id
+                            .as_ref()
+                            .and_then(|a| doc.assets.get(a))
+                            .map(|a| a.file.clone())
+                    })
+                    .unwrap_or_default(),
+                loop_s: period,
+                gain_db: t.gain_db,
+                seams: (1..=n.min(500)).map(|k| k as f64 * period).collect(),
+            }
+        });
     Ok(EditView {
         scene_id: scene.id.clone(),
+        duration_s: layout.duration_s,
         placements,
         cues: bucket(&doc, Some(&scene.id)),
+        lane_mix: doc.lane_mix.values().cloned().collect(),
+        room_tone,
     })
 }
 

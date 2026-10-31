@@ -156,3 +156,19 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 
 ### D39 Single-take audition (Rob, 2026-10-31)
 - **Choice:** `play_take` plays one take alone at matched loudness; in the box editor clicking a take lane plays it from the click, ▶ marks the source, and Space plays the last source (comp or take), as in the prototype.
+
+### D40 Sound buckets (Round 2 Import › Sounds and the docked bucket)
+- **Context:** the Round 2 screens group sounds into named buckets whose keywords are the search; previews stream, downloads happen only when a sound is kept or dropped.
+- **Choice:** a `SoundBucket` entity (name, keywords, scenes, cues, kept asset ids, previews, dismissed remote ids, length and leave-out filters, AI flag). "Spot script" runs the existing AI spotting per scene and groups its cues into buckets by a deterministic word table (Food and foil, Doors and hatches, Phones, Machines, Sci-fi, Footsteps, Walla and crowd, `<place> ambience`, Music, else Props); keywords are the last two content words of each cue. New spotted buckets leave out "music" and "voices" by default; ambience buckets ask for ≥ 10 s.
+- **Search:** Epidemic results become previews, 12 per page, skipping dismissed, kept, excluded and out-of-length results; "Load 12 more" asks the API for the next offset. Previews are cached in `Cache/previews/` for audition only. Library search covers each keyword.
+- **Drop:** dropping a kept sound places it at once; dropping a preview starts a `download` job (progress for the UI) that downloads, keeps and places it. The worker shares the main session's credential store.
+
+### D41 Import matching and room links
+- **Choice:** "Redo match" (`match_files`) groups files into sessions by overlapping timecode, else by the folder they were dropped in (the pipeline's rule), and records when it ran. `link_room` makes a room file and exactly the chosen recordings one session and marks them `link_locked`; a redo keeps locked files together as they were. The analysis uses the matched sessions when they cover every file, so a hand link changes sync and note linking.
+- **Sync offsets** are measured by the analysis, not by the match; the cast card shows a room's offset once it is known.
+- **Suggest** uses the file name, then AI name matching. Content matching (the transcript against each character's lines) needs a transcript first and is left to the analysis's own role check.
+- **"Remember my fixes for the whole show"** maps to `confirm_roles(remember)`: when on, name corrections become show aliases (as before); when off, they apply to this episode only.
+
+### D42 Lane mix
+- **Choice:** per-lane volume (−60…+12 dB), constant-power pan (centre unity), mute and solo stored as `LaneMix` entities keyed by lane (character id, `sfx1…`, `ambience`, `music`, `roomtone`) and applied by the schedule, so playback and the mix bounce agree. Fades gain a curve (equal power by default, linear). The Split tool is the `split_placement` command.
+- **Mixer view (X):** the rationale leaves it undesigned; the button opens the lane strip (volume, pan, meter) of the edit inspector for every lane at once.

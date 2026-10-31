@@ -41,10 +41,12 @@ pub enum Kind {
     Cue,
     Placement,
     Asset,
+    Bucket,
+    LaneMix,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 16] = [
+    pub const ALL: [Kind; 18] = [
         Kind::Setting,
         Kind::ScriptVersion,
         Kind::Scene,
@@ -61,6 +63,8 @@ impl Kind {
         Kind::Cue,
         Kind::Placement,
         Kind::Asset,
+        Kind::Bucket,
+        Kind::LaneMix,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -81,6 +85,8 @@ impl Kind {
             Kind::Cue => "cue",
             Kind::Placement => "placement",
             Kind::Asset => "asset",
+            Kind::Bucket => "bucket",
+            Kind::LaneMix => "lane_mix",
         }
     }
 
@@ -347,6 +353,9 @@ pub struct SourceFile {
     pub transcript: Option<String>,
     #[serde(default)]
     pub missing: bool,
+    /// The user set this file's room link by hand; "Redo match" keeps it.
+    #[serde(default)]
+    pub link_locked: bool,
 }
 entity!(SourceFile, Source);
 
@@ -676,9 +685,21 @@ pub struct Placement {
     #[serde(default)]
     pub fade_out_s: f64,
     #[serde(default)]
+    pub fade_curve: FadeCurve,
+    #[serde(default)]
     pub gain_db: f64,
 }
 entity!(Placement, Placement, parent = scene_id);
+
+#[derive(
+    Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum FadeCurve {
+    #[default]
+    EqualPower,
+    Linear,
+}
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -709,8 +730,79 @@ pub struct Asset {
     pub provider: Option<String>,
     #[serde(default)]
     pub lufs: Option<f64>,
+    /// Id at the provider (Epidemic Sound), so search results that are already kept are known.
+    #[serde(default)]
+    pub remote_id: Option<String>,
 }
 entity!(Asset, Asset);
+
+/// A search result that hasn't been downloaded yet.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, schemars::JsonSchema)]
+pub struct Preview {
+    pub provider: String,
+    pub remote_id: String,
+    pub title: String,
+    #[serde(default)]
+    pub duration_s: f64,
+}
+
+/// A named group of sounds for one or more scenes: its keywords are the search query.
+/// Kept sounds are downloaded library assets; previews are search results not downloaded yet.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, schemars::JsonSchema)]
+pub struct SoundBucket {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    #[serde(default)]
+    pub scene_ids: Vec<String>,
+    /// Spotted cues this bucket serves (their anchors are where its sounds snap).
+    #[serde(default)]
+    pub cue_ids: Vec<String>,
+    #[serde(default)]
+    pub kept: Vec<String>,
+    #[serde(default)]
+    pub previews: Vec<Preview>,
+    #[serde(default)]
+    pub dismissed: Vec<String>,
+    #[serde(default)]
+    pub length_min_s: Option<f64>,
+    #[serde(default)]
+    pub length_max_s: Option<f64>,
+    /// Words that rule a result out ("music", "voices").
+    #[serde(default)]
+    pub exclude: Vec<String>,
+    #[serde(default)]
+    pub ai_suggested: bool,
+    #[serde(default)]
+    pub order: u32,
+}
+
+impl Entity for SoundBucket {
+    const KIND: Kind = Kind::Bucket;
+    fn id(&self) -> &str {
+        &self.id
+    }
+    fn ord(&self) -> f64 {
+        self.order as f64
+    }
+}
+
+/// Mix settings of one Edit-page lane (`PAUL`, `sfx1`, `ambience`, `roomtone`, `music`).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, schemars::JsonSchema)]
+pub struct LaneMix {
+    pub id: String,
+    #[serde(default)]
+    pub volume_db: f64,
+    /// −1 left … +1 right.
+    #[serde(default)]
+    pub pan: f64,
+    #[serde(default)]
+    pub mute: bool,
+    #[serde(default)]
+    pub solo: bool,
+}
+entity!(LaneMix, LaneMix);
 
 /// The whole episode document, loaded from the `entity` table.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -731,6 +823,8 @@ pub struct Document {
     pub cues: BTreeMap<String, SoundCue>,
     pub placements: BTreeMap<String, Placement>,
     pub assets: BTreeMap<String, Asset>,
+    pub buckets: BTreeMap<String, SoundBucket>,
+    pub lane_mix: BTreeMap<String, LaneMix>,
 }
 
 macro_rules! dispatch {
@@ -789,6 +883,8 @@ dispatch!(
     Cue => cues,
     Placement => placements,
     Asset => assets,
+    Bucket => buckets,
+    LaneMix => lane_mix,
 );
 
 impl Document {

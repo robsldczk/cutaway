@@ -2,7 +2,7 @@
 //! shared mixer; the device callback only copies samples. Playhead events at ~60 Hz.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -17,6 +17,8 @@ use crate::schedule::PlaySchedule;
 pub struct PlayheadEvent {
     pub position_s: f64,
     pub playing: bool,
+    /// Output peak since the last event (0..1).
+    pub level: f32,
 }
 
 struct Shared {
@@ -28,6 +30,8 @@ struct Shared {
     /// Bumped on every play/seek/stop so stale feeder blocks are dropped.
     generation: AtomicU64,
     stop_at: Mutex<Option<f64>>,
+    /// Output peak (f32 bits), reset when read.
+    peak: AtomicU32,
     content: Mutex<Option<(Arc<PlaySchedule>, Arc<SourceSet>)>>,
 }
 
@@ -57,6 +61,7 @@ impl Engine {
             start_frame: AtomicU64::new(0),
             generation: AtomicU64::new(0),
             stop_at: Mutex::new(None),
+            peak: AtomicU32::new(0),
             content: Mutex::new(None),
         });
         let (tx, rx) = unbounded::<Cmd>();
@@ -85,12 +90,14 @@ impl Engine {
                     config,
                     move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
                         let mut got = 0;
+                        let mut peak = 0.0f32;
                         if cb_shared.playing.load(Ordering::Relaxed) {
                             if let Ok(mut ring) = cb_shared.ring.try_lock() {
                                 for d in data.iter_mut() {
                                     match ring.pop_front() {
                                         Some(v) => {
                                             *d = v;
+                                            peak = peak.max(v.abs());
                                             got += 1;
                                         }
                                         None => *d = 0.0,
@@ -105,6 +112,12 @@ impl Engine {
                         cb_shared
                             .played
                             .fetch_add((got / 2) as u64, Ordering::Relaxed);
+                        // keep the loudest block since the meter last read it
+                        let _ = cb_shared.peak.fetch_update(
+                            Ordering::Relaxed,
+                            Ordering::Relaxed,
+                            |old| (peak > f32::from_bits(old)).then_some(peak.to_bits()),
+                        );
                     },
                     |e| eprintln!("audio stream error: {e}"),
                     None,
@@ -206,6 +219,7 @@ impl Engine {
                     s.send(PlayheadEvent {
                         position_s: pos,
                         playing,
+                        level: f32::from_bits(sh.peak.load(Ordering::Relaxed)),
                     })
                     .is_ok()
                 });
@@ -262,6 +276,11 @@ impl Engine {
                 .store((to_s.max(0.0) * self.rate as f64) as u64, Ordering::Relaxed);
             self.shared.played.store(0, Ordering::Relaxed);
         }
+    }
+
+    /// Output peak since the last call (0..1).
+    pub fn take_level(&self) -> f32 {
+        f32::from_bits(self.shared.peak.swap(0, Ordering::Relaxed))
     }
 
     pub fn is_playing(&self) -> bool {
@@ -326,6 +345,8 @@ mod tests {
             fade_out_s: 0.01,
             lane: "x".into(),
             loop_len_s: None,
+            pan: 0.0,
+            linear_fade: false,
             owner: "o".into(),
         };
         engine.load(

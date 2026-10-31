@@ -72,7 +72,8 @@ pub struct AnalysisOutput {
     pub report: MatchReport,
 }
 
-fn stable_id(prefix: &str, parts: &[&str]) -> String {
+/// Deterministic id from parts (sessions are named by their members).
+pub fn stable_id(prefix: &str, parts: &[&str]) -> String {
     let h = blake3::hash(parts.join("|").as_bytes()).to_hex();
     format!("{prefix}_{}", &h[..12])
 }
@@ -213,7 +214,21 @@ pub fn analyze(
                 .unwrap_or_default(),
         })
         .collect();
-    let groups = group_sessions(&spans);
+    // The Import page's match (with the user's room links) wins when it covers every file.
+    let matched: Vec<Vec<String>> = doc
+        .sessions
+        .values()
+        .map(|s| s.source_ids.clone())
+        .filter(|g| !g.is_empty())
+        .collect();
+    let covered = sources
+        .iter()
+        .all(|d| matched.iter().any(|g| g.contains(&d.src.id)));
+    let groups = if covered && !matched.is_empty() {
+        matched
+    } else {
+        group_sessions(&spans)
+    };
     let mut sessions: Vec<Session> = Vec::new();
     let mut report = MatchReport::default();
     for (gi, g) in groups.iter().enumerate() {

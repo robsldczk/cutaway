@@ -792,6 +792,7 @@ pub(crate) mod tests {
             len_s: 1.0,
             fade_in_s: 0.0,
             fade_out_s: 0.0,
+            fade_curve: Default::default(),
             gain_db: 0.0,
         };
         let before = placement_start(&layout_scene(&d, &sc, &p), &pl);

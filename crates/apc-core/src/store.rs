@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS asset (
   id TEXT PRIMARY KEY, file TEXT NOT NULL, hash TEXT NOT NULL UNIQUE, category TEXT NOT NULL DEFAULT '',
   duration_s REAL NOT NULL DEFAULT 0,
   source TEXT NOT NULL CHECK (source IN ('imported','licensed','generated')),
-  license TEXT, prompt TEXT, provider TEXT, created_at TEXT NOT NULL, lufs REAL
+  license TEXT, prompt TEXT, provider TEXT, created_at TEXT NOT NULL, lufs REAL, remote_id TEXT
 );
 CREATE TABLE IF NOT EXISTS asset_tag (
   asset_id TEXT NOT NULL REFERENCES asset(id) ON DELETE CASCADE, tag TEXT NOT NULL,
@@ -421,6 +421,17 @@ fn write_row(
     Ok(())
 }
 
+/// Adds columns introduced after the first show schema.
+fn migrate_show(conn: &Connection) -> Result<()> {
+    let has_remote: bool = conn
+        .prepare("SELECT 1 FROM pragma_table_info('asset') WHERE name='remote_id'")?
+        .exists([])?;
+    if !has_remote {
+        conn.execute("ALTER TABLE asset ADD COLUMN remote_id TEXT", [])?;
+    }
+    Ok(())
+}
+
 /// An open show file (library database).
 pub struct ShowStore {
     conn: Connection,
@@ -462,6 +473,7 @@ impl ShowStore {
         let conn = Connection::open(path)?;
         configure(&conn)?;
         conn.execute_batch(SHOW_SCHEMA)?;
+        migrate_show(&conn)?;
         Ok(ShowStore {
             conn,
             path: path.to_path_buf(),

@@ -53,7 +53,7 @@ impl Library {
             let row = show
                 .conn()
                 .query_row(
-                    "SELECT id, file, category, duration_s, source, license, prompt, provider, lufs FROM asset WHERE hash=?1",
+                    "SELECT id, file, category, duration_s, source, license, prompt, provider, lufs, remote_id FROM asset WHERE hash=?1",
                     [hash],
                     |r| {
                         Ok((
@@ -66,12 +66,23 @@ impl Library {
                             r.get::<_, Option<String>>(6)?,
                             r.get::<_, Option<String>>(7)?,
                             r.get::<_, Option<f64>>(8)?,
+                            r.get::<_, Option<String>>(9)?,
                         ))
                     },
                 )
                 .optional()?;
-            if let Some((id, file, category, duration_s, source, license, prompt, provider, lufs)) =
-                row
+            if let Some((
+                id,
+                file,
+                category,
+                duration_s,
+                source,
+                license,
+                prompt,
+                provider,
+                lufs,
+                remote_id,
+            )) = row
             {
                 let tags = self.tags(&id)?;
                 return Ok(Some(Asset {
@@ -86,6 +97,7 @@ impl Library {
                     prompt,
                     provider,
                     lufs,
+                    remote_id,
                 }));
             }
             return Ok(None);
@@ -116,6 +128,7 @@ impl Library {
         duration_s: f64,
         prompt: Option<String>,
         provider: Option<String>,
+        remote_id: Option<String>,
         local: &[Asset],
     ) -> Result<LibraryAsset> {
         let hash = hash_file(src)?;
@@ -156,13 +169,14 @@ impl Library {
             prompt,
             provider,
             lufs: None,
+            remote_id,
         };
         if let Some(show) = &self.show {
             show.conn().execute(
-                "INSERT INTO asset(id,file,hash,category,duration_s,source,license,prompt,provider,created_at,lufs) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+                "INSERT INTO asset(id,file,hash,category,duration_s,source,license,prompt,provider,created_at,lufs,remote_id) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
                 params![
                     asset.id, asset.file, asset.hash, asset.category, asset.duration_s, source_str(asset.source),
-                    asset.license, asset.prompt, asset.provider, chrono::Utc::now().to_rfc3339(), asset.lufs
+                    asset.license, asset.prompt, asset.provider, chrono::Utc::now().to_rfc3339(), asset.lufs, asset.remote_id
                 ],
             )?;
             for t in tags {
@@ -293,6 +307,7 @@ mod tests {
                 1.0,
                 None,
                 None,
+                None,
                 &[],
             )
             .unwrap();
@@ -307,6 +322,7 @@ mod tests {
                 &[],
                 AssetSource::Imported,
                 1.0,
+                None,
                 None,
                 None,
                 &[],

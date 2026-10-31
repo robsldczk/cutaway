@@ -101,6 +101,9 @@ pub struct RoleItem {
 #[derive(Deserialize, JsonSchema)]
 pub struct ConfirmRolesP {
     pub assignments: Vec<RoleItem>,
+    /// Remember name corrections as show aliases ("Remember my fixes for the whole show").
+    #[serde(default = "yes")]
+    pub remember: bool,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -352,6 +355,142 @@ pub struct PlayTakeP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct LinkRoomP {
+    /// The director room file.
+    pub room_id: String,
+    /// Recordings it serves (one, or several for an ensemble).
+    pub recording_ids: Vec<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct SourceP {
+    pub source_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct BucketsP {
+    #[serde(default)]
+    pub scene: Option<String>,
+    /// "scene" (default), "tag" or "show".
+    #[serde(default)]
+    pub sort: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct SpotBucketsP {
+    /// One scene, or every scene when absent.
+    #[serde(default)]
+    pub scene: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct CreateBucketP {
+    pub name: String,
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    #[serde(default)]
+    pub scenes: Vec<String>,
+    #[serde(default)]
+    pub length_min_s: Option<f64>,
+    #[serde(default)]
+    pub length_max_s: Option<f64>,
+    /// Words to leave out of results ("music", "voices").
+    #[serde(default)]
+    pub exclude: Vec<String>,
+    /// Search Epidemic Sound right away.
+    #[serde(default)]
+    pub search: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct UpdateBucketP {
+    pub bucket_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub keywords: Option<Vec<String>>,
+    #[serde(default)]
+    pub scenes: Option<Vec<String>>,
+    #[serde(default)]
+    pub length_min_s: Option<Option<f64>>,
+    #[serde(default)]
+    pub length_max_s: Option<Option<f64>>,
+    #[serde(default)]
+    pub exclude: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct BucketP {
+    pub bucket_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct BucketSearchP {
+    pub bucket_id: String,
+    /// "epidemic" (default) or "library".
+    #[serde(default)]
+    pub provider: Option<String>,
+    /// Next page ("Load 12 more").
+    #[serde(default)]
+    pub more: bool,
+    /// New keywords (replace the bucket's).
+    #[serde(default)]
+    pub keywords: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct BucketRemoteP {
+    pub bucket_id: String,
+    pub remote_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct BucketAssetP {
+    pub bucket_id: String,
+    pub asset_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct BucketGenerateP {
+    pub bucket_id: String,
+    #[serde(default)]
+    pub prompt: Option<String>,
+    #[serde(default)]
+    pub variations: Option<u32>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct PlaceFromBucketP {
+    pub scene: String,
+    /// A kept sound …
+    #[serde(default)]
+    pub asset_id: Option<String>,
+    /// … or a preview (downloads first, in the background).
+    #[serde(default)]
+    pub remote_id: Option<String>,
+    #[serde(default)]
+    pub bucket_id: Option<String>,
+    #[serde(default)]
+    pub lane: Option<Lane>,
+    #[serde(default)]
+    pub at_s: Option<f64>,
+    #[serde(default)]
+    pub anchor_line_id: Option<String>,
+    #[serde(default)]
+    pub anchor_word: Option<usize>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct PlaySoundP {
+    #[serde(default)]
+    pub asset_id: Option<String>,
+    #[serde(default)]
+    pub remote_id: Option<String>,
+    #[serde(default)]
+    pub from_s: f64,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct PeaksP {
     pub source_id: String,
     pub t0: f64,
@@ -431,6 +570,23 @@ registry! {
     "stop", NoParams, Read, false, "Stop playback.";
     "playhead", NoParams, Read, false, "Playhead position and state.";
     "peaks", PeaksP, Read, false, "Waveform peaks of a source range.";
+    "import_view", NoParams, Read, false, "Everything the Import › Files page shows: script, cast, room links and what needs fixing.";
+    "match_files", NoParams, Write, true, "Redo match: group files into sessions (timecode, else folder) and link director rooms. Hand-set links are kept.";
+    "link_room", LinkRoomP, Write, true, "Link a director room file to the recordings it serves (kept on Redo match).";
+    "suggest_character", SourceP, Read, true, "Suggest the character of a recording (its name, then AI name matching).";
+    "buckets", BucketsP, Read, true, "Sound buckets (all, or a scene's) with keywords, kept sounds and previews.";
+    "spot_buckets", SpotBucketsP, Write, true, "Spot script: AI sound spotting grouped into buckets with keywords (a scene, or all).";
+    "create_bucket", CreateBucketP, Write, true, "Create a sound bucket (name, keywords, scenes, length and leave-out filters).";
+    "update_bucket", UpdateBucketP, Write, true, "Change a bucket's name, keywords, scenes or filters.";
+    "delete_bucket", BucketP, Destructive, true, "Delete a bucket (its kept sounds stay in the library).";
+    "bucket_search", BucketSearchP, Write, true, "Search for a bucket's keywords. Epidemic Sound results become previews (not downloaded).";
+    "bucket_download", BucketRemoteP, Write, true, "Download a preview (licensed) and keep it in the bucket. Counts against the plan.";
+    "bucket_keep", BucketAssetP, Write, true, "Keep a library sound in a bucket.";
+    "bucket_remove", BucketAssetP, Write, true, "Take a kept sound out of a bucket (it stays in the library).";
+    "bucket_dismiss", BucketRemoteP, Write, true, "Dismiss a preview so searches skip it.";
+    "bucket_generate", BucketGenerateP, Write, true, "Generate sounds for a bucket (ElevenLabs) and keep them.";
+    "place_from_bucket", PlaceFromBucketP, Write, true, "Place a bucket sound on the timeline. A preview downloads first (returns a job_id).";
+    "play_sound", PlaySoundP, Read, false, "Audition a bucket sound (kept or preview).";
 }
 
 pub fn method(name: &str) -> Option<MethodInfo> {
@@ -538,7 +694,7 @@ impl Service {
                 let p: ConfirmRolesP = parse(params)?;
                 let items: Vec<(String, Role, Option<String>)> =
                     p.assignments.into_iter().map(|a| (a.source_id, a.role, a.character)).collect();
-                self.confirm_roles(&items)
+                self.confirm_roles(&items, p.remember)
             }
             "relink_media" => {
                 let p: RelinkP = parse(params)?;
@@ -862,6 +1018,71 @@ impl Service {
                 let a = self.analysis_of(&p.source_id).ok_or_else(|| AppError::Params("unknown source".into()))?;
                 let pk: Vec<f32> = a.peaks_range(p.t0, p.t1, p.buckets.unwrap_or(200)).into_iter().map(|(lo, hi)| lo.abs().max(hi.abs())).collect();
                 Ok(json!(pk))
+            }
+            "import_view" => crate::import::view(self),
+            "match_files" => crate::import::match_files(self),
+            "link_room" => {
+                let p: LinkRoomP = parse(params)?;
+                crate::import::link_room(self, &p.room_id, &p.recording_ids)
+            }
+            "suggest_character" => {
+                let p: SourceP = parse(params)?;
+                crate::import::suggest(self, &p.source_id)
+            }
+            "buckets" => {
+                let p: BucketsP = parse(params)?;
+                crate::buckets::view(self, p.scene.as_deref(), p.sort.as_deref().unwrap_or("scene"))
+            }
+            "spot_buckets" => {
+                let p: SpotBucketsP = parse(params)?;
+                crate::buckets::spot(self, p.scene.as_deref())
+            }
+            "create_bucket" => {
+                let p: CreateBucketP = parse(params)?;
+                let id = crate::buckets::create(self, &p.name, p.keywords, p.scenes, p.length_min_s, p.length_max_s, p.exclude)?;
+                let found = if p.search { crate::buckets::search(self, &id, "epidemic", false, None).ok() } else { None };
+                Ok(json!({ "bucket_id": id, "search": found }))
+            }
+            "update_bucket" => {
+                let p: UpdateBucketP = parse(params)?;
+                crate::buckets::update(self, p)
+            }
+            "delete_bucket" => {
+                let p: BucketP = parse(params)?;
+                Ok(self.exec(&Command::DeleteBucket { bucket_id: p.bucket_id })?.result)
+            }
+            "bucket_search" => {
+                let p: BucketSearchP = parse(params)?;
+                crate::buckets::search(self, &p.bucket_id, p.provider.as_deref().unwrap_or("epidemic"), p.more, p.keywords)
+            }
+            "bucket_download" => {
+                let p: BucketRemoteP = parse(params)?;
+                Ok(json!({ "asset": crate::buckets::download(self, &p.bucket_id, &p.remote_id, &|_| {})? }))
+            }
+            "bucket_keep" => {
+                let p: BucketAssetP = parse(params)?;
+                crate::sound::ensure_asset_in_doc(self, &p.asset_id)?;
+                Ok(self.exec(&Command::BucketKeep { bucket_id: p.bucket_id, asset_id: p.asset_id })?.result)
+            }
+            "bucket_remove" => {
+                let p: BucketAssetP = parse(params)?;
+                Ok(self.exec(&Command::BucketRemove { bucket_id: p.bucket_id, asset_id: p.asset_id })?.result)
+            }
+            "bucket_dismiss" => {
+                let p: BucketRemoteP = parse(params)?;
+                Ok(self.exec(&Command::BucketDismiss { bucket_id: p.bucket_id, remote_id: p.remote_id })?.result)
+            }
+            "bucket_generate" => {
+                let p: BucketGenerateP = parse(params)?;
+                crate::buckets::generate(self, &p.bucket_id, p.prompt, p.variations)
+            }
+            "place_from_bucket" => {
+                let p: PlaceFromBucketP = parse(params)?;
+                crate::buckets::place(self, p.bucket_id, p.asset_id, p.remote_id, p.scene, p.lane, p.at_s, p.anchor_line_id, p.anchor_word)
+            }
+            "play_sound" => {
+                let p: PlaySoundP = parse(params)?;
+                crate::buckets::play(self, p.asset_id, p.remote_id, p.from_s)
             }
             "create_show" | "create_episode" | "open_project" | "create_demo" => {
                 Err(AppError::Other(format!("{name} is handled by the session")))

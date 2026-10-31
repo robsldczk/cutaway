@@ -215,6 +215,44 @@ pub enum Command {
     DeletePlacement {
         placement_id: String,
     },
+    /// Splits a placed sound at scene time `at_s` into two placements.
+    SplitPlacement {
+        placement_id: String,
+        at_s: f64,
+    },
+    /// Creates or replaces a sound bucket.
+    PutBucket {
+        bucket: SoundBucket,
+    },
+    DeleteBucket {
+        bucket_id: String,
+    },
+    /// Keeps a downloaded/library sound in a bucket (and drops its preview).
+    BucketKeep {
+        bucket_id: String,
+        asset_id: String,
+    },
+    BucketRemove {
+        bucket_id: String,
+        asset_id: String,
+    },
+    /// Hides a search result from a bucket for good.
+    BucketDismiss {
+        bucket_id: String,
+        remote_id: String,
+    },
+    /// Lane volume, pan, mute and solo on the Edit page.
+    SetLaneMix {
+        mix: LaneMix,
+    },
+    /// Stores the import match: links between director room files and recordings.
+    ApplyMatch {
+        sessions: Vec<Session>,
+        sources: Vec<SourceFile>,
+        /// When the match ran (shown as "Matched 2 min ago").
+        #[serde(default)]
+        at: Option<String>,
+    },
 }
 
 fn yes() -> bool {
@@ -265,6 +303,14 @@ impl Command {
             Command::UpdatePlacement { .. } => "update_placement",
             Command::UnanchorPlacement { .. } => "unanchor_placement",
             Command::DeletePlacement { .. } => "delete_placement",
+            Command::SplitPlacement { .. } => "split_placement",
+            Command::PutBucket { .. } => "put_bucket",
+            Command::DeleteBucket { .. } => "delete_bucket",
+            Command::BucketKeep { .. } => "bucket_keep",
+            Command::BucketRemove { .. } => "bucket_remove",
+            Command::BucketDismiss { .. } => "bucket_dismiss",
+            Command::SetLaneMix { .. } => "set_lane_mix",
+            Command::ApplyMatch { .. } => "apply_match",
         }
     }
 
@@ -278,6 +324,11 @@ impl Command {
             Command::ApplyAnalysis { payload } => json!({
                 "takes": payload.takes.len(), "notes": payload.notes.len(),
                 "unmatched": payload.unmatched.len(), "sessions": payload.sessions.len(),
+            }),
+            Command::ApplyMatch {
+                sessions, sources, ..
+            } => json!({
+                "sessions": sessions.len(), "sources": sources.len(),
             }),
             Command::AddSources { sources } => json!({
                 "files": sources.iter().map(|s| s.original_name.clone()).collect::<Vec<_>>()
@@ -779,6 +830,119 @@ impl Command {
                 tx.put(&p)?;
                 Ok(json!({ "at_s": at }))
             }
+            Command::SplitPlacement { placement_id, at_s } => {
+                let p = placement(tx, placement_id)?;
+                let scene = tx
+                    .doc()
+                    .scenes
+                    .get(&p.scene_id)
+                    .cloned()
+                    .ok_or_else(|| CoreError::not_found("scene", &p.scene_id))?;
+                let start = placement_start(&layout_scene(tx.doc(), &scene, &pacing), &p);
+                let cut = at_s - start;
+                if cut <= 0.01 || cut >= p.len_s - 0.01 {
+                    return Err(CoreError::invalid("the split point is outside the sound"));
+                }
+                let mut a = p.clone();
+                a.len_s = cut;
+                a.fade_out_s = a.fade_out_s.min(0.01);
+                let mut b = p.clone();
+                b.id = new_id("pl");
+                b.in_s = p.in_s + cut;
+                b.len_s = p.len_s - cut;
+                b.offset_s = p.offset_s + cut;
+                b.fade_in_s = 0.01;
+                tx.put(&a)?;
+                tx.put(&b)?;
+                Ok(json!({ "ids": [a.id, b.id] }))
+            }
+            Command::PutBucket { bucket } => {
+                let mut b = bucket.clone();
+                b.keywords.retain(|k| !k.trim().is_empty());
+                tx.put(&b)?;
+                Ok(json!({ "id": b.id }))
+            }
+            Command::DeleteBucket { bucket_id } => {
+                tx.delete::<SoundBucket>(bucket_id)?;
+                Ok(Value::Null)
+            }
+            Command::BucketKeep {
+                bucket_id,
+                asset_id,
+            } => {
+                let mut b = bucket(tx, bucket_id)?;
+                let remote = tx
+                    .doc()
+                    .assets
+                    .get(asset_id)
+                    .and_then(|a| a.remote_id.clone());
+                if !b.kept.contains(asset_id) {
+                    b.kept.push(asset_id.clone());
+                }
+                if let Some(r) = remote {
+                    b.previews.retain(|p| p.remote_id != r);
+                }
+                tx.put(&b)?;
+                Ok(Value::Null)
+            }
+            Command::BucketRemove {
+                bucket_id,
+                asset_id,
+            } => {
+                let mut b = bucket(tx, bucket_id)?;
+                b.kept.retain(|a| a != asset_id);
+                tx.put(&b)?;
+                Ok(Value::Null)
+            }
+            Command::BucketDismiss {
+                bucket_id,
+                remote_id,
+            } => {
+                let mut b = bucket(tx, bucket_id)?;
+                b.previews.retain(|p| &p.remote_id != remote_id);
+                if !b.dismissed.contains(remote_id) {
+                    b.dismissed.push(remote_id.clone());
+                }
+                tx.put(&b)?;
+                Ok(Value::Null)
+            }
+            Command::SetLaneMix { mix } => {
+                let mut m = mix.clone();
+                m.volume_db = m.volume_db.clamp(-60.0, 12.0);
+                m.pan = m.pan.clamp(-1.0, 1.0);
+                tx.put(&m)?;
+                Ok(Value::Null)
+            }
+            Command::ApplyMatch {
+                sessions,
+                sources,
+                at,
+            } => {
+                let keep: HashSet<&str> = sessions.iter().map(|s| s.id.as_str()).collect();
+                let stale: Vec<String> = tx
+                    .doc()
+                    .sessions
+                    .keys()
+                    .filter(|k| !keep.contains(k.as_str()))
+                    .cloned()
+                    .collect();
+                for id in stale {
+                    tx.delete::<Session>(&id)?;
+                }
+                for s in sessions {
+                    tx.put(s)?;
+                }
+                for s in sources {
+                    tx.put(s)?;
+                }
+                if let Some(at) = at {
+                    tx.put(&Setting {
+                        id: "match".into(),
+                        value: json!({ "at": at }),
+                    })?;
+                }
+                Ok(json!({ "sessions": sessions.len() }))
+            }
             Command::DeletePlacement { placement_id } => {
                 let p = placement(tx, placement_id)?;
                 tx.delete::<Placement>(placement_id)?;
@@ -808,6 +972,14 @@ fn cue(tx: &Tx, id: &str) -> Result<SoundCue> {
         .get(id)
         .cloned()
         .ok_or_else(|| CoreError::not_found("cue", id))
+}
+
+fn bucket(tx: &Tx, id: &str) -> Result<SoundBucket> {
+    tx.doc()
+        .buckets
+        .get(id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("bucket", id))
 }
 
 fn placement(tx: &Tx, id: &str) -> Result<Placement> {

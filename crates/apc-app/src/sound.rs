@@ -207,6 +207,7 @@ fn import_one(
     prompt: Option<String>,
     provider: Option<String>,
     cue_desc: Option<String>,
+    remote_id: Option<String>,
 ) -> Result<Asset> {
     let name = path
         .file_name()
@@ -241,7 +242,7 @@ fn import_one(
     };
     let local: Vec<Asset> = svc.doc().assets.values().cloned().collect();
     let la = svc.library().import(
-        path, &cat, &tags, source, duration, prompt, provider, &local,
+        path, &cat, &tags, source, duration, prompt, provider, remote_id, &local,
     )?;
     if !svc.doc().assets.contains_key(&la.asset.id) {
         svc.exec(&Command::AddAsset {
@@ -299,6 +300,7 @@ pub fn generate(
             Some(g.prompt.clone()),
             Some(g.provider.clone()),
             Some(prompt.clone()),
+            None,
         )?;
         if let Some(c) = &cue {
             svc.exec(&Command::AttachCandidate {
@@ -339,7 +341,15 @@ pub fn import(
         .map(|c| c.description.clone());
     let mut assets = Vec::new();
     for f in &files {
-        let a = import_one(svc, f, AssetSource::Imported, None, None, cue_desc.clone())?;
+        let a = import_one(
+            svc,
+            f,
+            AssetSource::Imported,
+            None,
+            None,
+            cue_desc.clone(),
+            None,
+        )?;
         if let Some(c) = &cue_id {
             svc.exec(&Command::AttachCandidate {
                 cue_id: c.clone(),
@@ -434,6 +444,7 @@ pub fn place(svc: &mut Service, p: PlaceSoundP) -> Result<Value> {
         },
         fade_in_s: 0.01,
         fade_out_s: 0.05,
+        fade_curve: Default::default(),
         gain_db: 0.0,
     };
     Ok(svc.exec(&Command::PlaceSound { placement })?.result)
@@ -488,18 +499,7 @@ pub fn fetch(
         .as_ref()
         .and_then(|c| svc.doc().cues.get(c))
         .map(|c| c.description.clone());
-    let mut a = import_one(
-        svc,
-        &file,
-        AssetSource::Licensed,
-        None,
-        Some("epidemic".into()),
-        cue_desc,
-    )?;
-    if a.license.is_none() {
-        a.license = Some(format!("Epidemic Sound, sound effect {remote_id}"));
-        svc.exec(&Command::AddAsset { asset: a.clone() })?;
-    }
+    let a = import_licensed(svc, &file, remote_id, cue_desc)?;
     if let Some(c) = &cue_id {
         svc.exec(&Command::AttachCandidate {
             cue_id: c.clone(),
@@ -507,4 +507,27 @@ pub fn fetch(
         })?;
     }
     Ok(json!({ "asset": a }))
+}
+
+/// Imports a downloaded Epidemic Sound file into the library as licensed.
+pub fn import_licensed(
+    svc: &mut Service,
+    file: &Path,
+    remote_id: &str,
+    describe: Option<String>,
+) -> Result<Asset> {
+    let mut a = import_one(
+        svc,
+        file,
+        AssetSource::Licensed,
+        None,
+        Some("epidemic".into()),
+        describe,
+        Some(remote_id.to_string()),
+    )?;
+    if a.license.is_none() {
+        a.license = Some(format!("Epidemic Sound, sound effect {remote_id}"));
+        svc.exec(&Command::AddAsset { asset: a.clone() })?;
+    }
+    Ok(a)
 }

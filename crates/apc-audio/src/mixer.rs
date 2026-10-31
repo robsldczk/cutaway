@@ -109,17 +109,31 @@ impl SourceSet {
     }
 }
 
-/// Equal-power fade envelope at `local` seconds into a clip of length `len`.
-pub fn fade_gain(local: f64, len: f64, fade_in: f64, fade_out: f64) -> f32 {
+/// Fade envelope at `local` seconds into a clip of length `len` (equal power or linear).
+pub fn fade_gain(local: f64, len: f64, fade_in: f64, fade_out: f64, linear: bool) -> f32 {
+    let shape = |x: f64| {
+        if linear {
+            x
+        } else {
+            (x * std::f64::consts::FRAC_PI_2).sin()
+        }
+    };
     let mut g = 1.0f64;
     if fade_in > 0.0 && local < fade_in {
-        g *= (local / fade_in * std::f64::consts::FRAC_PI_2).sin();
+        g *= shape(local / fade_in);
     }
     let from_end = len - local;
     if fade_out > 0.0 && from_end < fade_out {
-        g *= (from_end.max(0.0) / fade_out * std::f64::consts::FRAC_PI_2).sin();
+        g *= shape(from_end.max(0.0) / fade_out);
     }
     g.max(0.0) as f32
+}
+
+/// Constant-power pan gains (centre = unity on both sides).
+pub fn pan_gains(pan: f64) -> (f32, f32) {
+    let a = (pan.clamp(-1.0, 1.0) + 1.0) * std::f64::consts::FRAC_PI_4;
+    let k = std::f64::consts::SQRT_2;
+    ((a.cos() * k) as f32, (a.sin() * k) as f32)
 }
 
 pub struct Mixer;
@@ -138,6 +152,7 @@ impl Mixer {
                 continue;
             }
             let gain = 10f64.powf(c.gain_db / 20.0) as f32;
+            let (gl, gr) = pan_gains(c.pan);
             let len = c.len();
             let first = ((c.start_s - t0) * rate).ceil().max(0.0) as usize;
             for n in first..frames {
@@ -151,10 +166,37 @@ impl Mixer {
                 } else if idx >= buf.len() {
                     break;
                 }
-                let v = buf[idx] * gain * fade_gain(local, len, c.fade_in_s, c.fade_out_s);
-                out[2 * n] += v;
-                out[2 * n + 1] += v;
+                let v = buf[idx]
+                    * gain
+                    * fade_gain(local, len, c.fade_in_s, c.fade_out_s, c.linear_fade);
+                out[2 * n] += v * gl;
+                out[2 * n + 1] += v * gr;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pan_is_constant_power_with_unity_centre() {
+        let (l, r) = pan_gains(0.0);
+        assert!((l - 1.0).abs() < 1e-6 && (r - 1.0).abs() < 1e-6);
+        let (l, r) = pan_gains(-1.0);
+        assert!((l - std::f32::consts::SQRT_2).abs() < 1e-5 && r.abs() < 1e-6);
+        let (l, r) = pan_gains(0.3);
+        assert!(((l * l + r * r) - 2.0).abs() < 1e-5, "power stays constant");
+    }
+
+    #[test]
+    fn fades_are_equal_power_or_linear() {
+        let eq = fade_gain(0.5, 10.0, 1.0, 0.0, false);
+        let lin = fade_gain(0.5, 10.0, 1.0, 0.0, true);
+        assert!((lin - 0.5).abs() < 1e-6);
+        assert!((eq - std::f32::consts::FRAC_1_SQRT_2).abs() < 1e-6);
+        assert!((fade_gain(9.75, 10.0, 0.0, 0.5, true) - 0.5).abs() < 1e-6);
+        assert_eq!(fade_gain(5.0, 10.0, 1.0, 1.0, false), 1.0);
     }
 }

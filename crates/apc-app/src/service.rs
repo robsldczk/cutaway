@@ -336,6 +336,7 @@ impl Service {
                 offset_confidence: 0.0,
                 transcript: imp.sidecar,
                 missing: false,
+                link_locked: false,
             });
         }
         if !sources.is_empty() {
@@ -344,7 +345,7 @@ impl Service {
         Ok(report)
     }
 
-    fn ai_name_guess(
+    pub(crate) fn ai_name_guess(
         &self,
         file: &str,
         characters: &[String],
@@ -375,7 +376,11 @@ impl Service {
     }
 
     /// Applies role corrections and remembers aliases at show level.
-    pub fn confirm_roles(&mut self, items: &[(String, Role, Option<String>)]) -> Result<Value> {
+    pub fn confirm_roles(
+        &mut self,
+        items: &[(String, Role, Option<String>)],
+        remember: bool,
+    ) -> Result<Value> {
         for (sid, role, ch) in items {
             let before = self
                 .doc()
@@ -388,7 +393,7 @@ impl Service {
                 role: *role,
                 character: ch.clone(),
             })?;
-            if let (Role::Character, Some(ch)) = (role, ch) {
+            if let (Role::Character, Some(ch), true) = (role, ch, remember) {
                 if before.character.as_deref() != Some(ch.as_str()) {
                     if let Some(tok) = before
                         .original_name

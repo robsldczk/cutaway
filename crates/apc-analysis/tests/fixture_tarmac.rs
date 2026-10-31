@@ -92,6 +92,7 @@ fn check_tarmac(fx: &std::path::Path, asr: &dyn AsrProvider) {
             offset_confidence: 0.0,
             transcript: f.sidecar,
             missing: false,
+            link_locked: false,
         });
     }
     assert_eq!(sources[0].character.as_deref(), Some("PAUL"));

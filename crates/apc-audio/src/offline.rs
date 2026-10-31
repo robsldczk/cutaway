@@ -47,6 +47,8 @@ mod tests {
             fade_out_s: fade,
             lane: "PAUL".into(),
             loop_len_s: None,
+            pan: 0.0,
+            linear_fade: false,
             owner: "l".into(),
         }
     }

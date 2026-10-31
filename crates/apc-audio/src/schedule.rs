@@ -21,6 +21,12 @@ pub struct ScheduledClip {
     pub lane: String,
     /// Loops `[src_in, src_out)` until `start_s + loop_len_s` (room tone bed).
     pub loop_len_s: Option<f64>,
+    /// −1 left … +1 right (constant-power pan).
+    #[serde(default)]
+    pub pan: f64,
+    /// Linear instead of equal-power fades.
+    #[serde(default)]
+    pub linear_fade: bool,
     /// Line or placement this clip belongs to.
     pub owner: String,
 }
@@ -65,6 +71,27 @@ pub struct PlaySchedule {
     pub duration_s: f64,
 }
 
+/// Lane key of a clip as the Edit page names lanes (`PAUL`, `sfx1`, `ambience`, …).
+pub fn lane_key(c: &ScheduledClip) -> &str {
+    &c.lane
+}
+
+/// Applies lane volume and pan, drops muted lanes, and keeps only soloed ones when any is soloed.
+pub fn apply_lane_mix(doc: &Document, clips: &mut Vec<ScheduledClip>) {
+    let any_solo = doc.lane_mix.values().any(|m| m.solo);
+    clips.retain(|c| match doc.lane_mix.get(lane_key(c)) {
+        Some(m) if m.mute => false,
+        Some(m) if any_solo => m.solo,
+        _ => !any_solo,
+    });
+    for c in clips.iter_mut() {
+        if let Some(m) = doc.lane_mix.get(lane_key(c)) {
+            c.gain_db += m.volume_db;
+            c.pan = m.pan;
+        }
+    }
+}
+
 impl PlaySchedule {
     pub fn from_scene(
         doc: &Document,
@@ -100,6 +127,8 @@ impl PlaySchedule {
                     fade_out_s: p.fade_out_s,
                     lane: item.character.clone().unwrap_or_else(|| "dialogue".into()),
                     loop_len_s: None,
+                    pan: 0.0,
+                    linear_fade: false,
                     owner: item.item_id.clone(),
                 });
             }
@@ -122,8 +151,13 @@ impl PlaySchedule {
                         Lane::Music => "music".into(),
                     },
                     loop_len_s: None,
+                    pan: 0.0,
+                    linear_fade: false,
                     owner: p.id.clone(),
                 });
+                if let Some(last) = clips.last_mut() {
+                    last.linear_fade = p.fade_curve == apc_core::FadeCurve::Linear;
+                }
                 duration = duration.max(start + p.len_s);
             }
         }
@@ -147,12 +181,15 @@ impl PlaySchedule {
                             fade_out_s: 0.2,
                             lane: "roomtone".into(),
                             loop_len_s: Some(duration),
+                            pan: 0.0,
+                            linear_fade: false,
                             owner: loc,
                         });
                     }
                 }
             }
         }
+        apply_lane_mix(doc, &mut clips);
         clips.sort_by(|a, b| a.start_s.total_cmp(&b.start_s));
         PlaySchedule {
             clips,
@@ -278,6 +315,38 @@ mod tests {
     }
 
     #[test]
+    fn lane_mix_mutes_solos_and_sets_volume_and_pan() {
+        use apc_core::LaneMix;
+        let (mut doc, scene) = sample_doc();
+        let p = Pacing::default();
+        let mix = |id: &str, volume_db: f64, pan: f64, mute: bool, solo: bool| LaneMix {
+            id: id.into(),
+            volume_db,
+            pan,
+            mute,
+            solo,
+        };
+        doc.lane_mix
+            .insert("PAUL".into(), mix("PAUL", -6.0, 0.5, false, false));
+        let s = PlaySchedule::from_scene(&doc, &scene, &p, &MixSettings::default());
+        assert!(
+            (s.clips[0].gain_db - -9.0).abs() < 1e-9,
+            "-3 loudness, -6 lane"
+        );
+        assert_eq!(s.clips[0].pan, 0.5);
+        doc.lane_mix
+            .insert("PAUL".into(), mix("PAUL", 0.0, 0.0, true, false));
+        let s = PlaySchedule::from_scene(&doc, &scene, &p, &MixSettings::default());
+        assert!(s.clips.is_empty(), "muted");
+        doc.lane_mix
+            .insert("PAUL".into(), mix("PAUL", 0.0, 0.0, false, false));
+        doc.lane_mix
+            .insert("music".into(), mix("music", 0.0, 0.0, false, true));
+        let s = PlaySchedule::from_scene(&doc, &scene, &p, &MixSettings::default());
+        assert!(s.clips.is_empty(), "another lane is soloed");
+    }
+
+    #[test]
     fn anchored_sound_follows_and_room_tone_beds_the_scene() {
         use apc_core::*;
         let (mut doc, scene) = sample_doc();
@@ -295,6 +364,7 @@ mod tests {
                 prompt: None,
                 provider: None,
                 lufs: None,
+                remote_id: None,
             },
         );
         doc.placements.insert(
@@ -317,6 +387,7 @@ mod tests {
                 len_s: 1.0,
                 fade_in_s: 0.0,
                 fade_out_s: 0.0,
+                fade_curve: Default::default(),
                 gain_db: 0.0,
             },
         );
