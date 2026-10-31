@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Audioplay Cutter prototype</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&amp;family=Figtree:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D12}
+a{color:#C3B7E6}a:hover{color:#DCD6E6}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.ui{font-family:Figtree,system-ui,sans-serif}
+.script{font-family:'Courier Prime','Courier New',monospace}
+.nm{font-family:Figtree,system-ui,sans-serif;font-weight:600;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.glass{backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.09),inset 0 0 0 1px rgba(255,255,255,0.04),0 18px 50px rgba(0,0,0,0.35)}
+.optmask{-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 15%,#000 80%,transparent 94%);mask-image:linear-gradient(to bottom,transparent 0,#000 15%,#000 80%,transparent 94%)}
+.ellip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.act{padding:8px 16px;border-radius:14px;background:rgba(255,255,255,0.03);color:rgba(240,238,232,0.5);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.boxs{cursor:pointer;backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);transition:opacity .3s}
+.boxs:hover{filter:brightness(1.12)}
+.abox{display:flex;flex-direction:column;justify-content:center;gap:12px;box-sizing:border-box;overflow:hidden;transition:box-shadow .35s}
+.wd{display:inline-block;transform-origin:50% 72%;transition:transform .14s ease,color .15s ease,text-shadow .15s ease}
+.flash{opacity:0;pointer-events:none}
+.fl0{animation:fl0 .8s ease-out}
+.fl1{animation:fl1 .8s ease-out}
+@keyframes fl0{from{opacity:1}to{opacity:0}}
+@keyframes fl1{from{opacity:1}to{opacity:0}}
+.inR0{animation:inR0 .45s cubic-bezier(.2,.8,.2,1)}
+.inR1{animation:inR1 .45s cubic-bezier(.2,.8,.2,1)}
+.inL0{animation:inL0 .45s cubic-bezier(.2,.8,.2,1)}
+.inL1{animation:inL1 .45s cubic-bezier(.2,.8,.2,1)}
+@keyframes inR0{0%{transform:translateX(26px)}100%{transform:none}}
+@keyframes inR1{0%{transform:translateX(26px)}100%{transform:none}}
+@keyframes inL0{0%{transform:translateX(-26px)}100%{transform:none}}
+@keyframes inL1{0%{transform:translateX(-26px)}100%{transform:none}}
+.deck{transition:background .35s,transform .35s}
+.tk{height:30px;min-width:36px;padding:0 10px;box-sizing:border-box;border-radius:999px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;transition:background .2s,color .2s}
+.icb{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:rgba(240,238,232,0.72)}
+.icb:hover{background:rgba(255,255,255,0.07)}
+.snip{box-sizing:border-box;border-radius:18px;padding:10px 14px;display:flex;flex-direction:column;justify-content:space-between;gap:6px;cursor:pointer}
+.grip{flex:none;display:flex;align-items:center;justify-content:center;width:24px;height:28px;border-radius:7px;cursor:grab;color:rgba(240,238,232,0.5)}
+.grip:hover{background:rgba(255,255,255,0.1);color:#F3F1EC}
+.strip{position:relative;border-radius:8px;overflow:hidden;background:rgba(0,0,0,0.25);cursor:text}
+.hdl{position:absolute;top:0;bottom:0;width:10px;border-radius:3px;cursor:ew-resize;box-shadow:0 0 0 1px rgba(0,0,0,0.45);z-index:3}
+.gaprow{position:relative;z-index:6;cursor:ns-resize}
+.gapline{position:absolute;left:24px;right:24px;top:50%;height:1px;background:rgba(255,255,255,0.09)}
+.gappill{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:10px;max-width:92%;padding:3px 10px;border-radius:999px;background:rgba(24,26,33,0.94);font-size:11px;color:rgba(240,238,232,0.72);white-space:nowrap;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.09)}
+.gaprow:hover .gappill{color:#F3F1EC;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.35)}
+.badge{flex:none;font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:999px}
+.dur{flex:none;font-size:11px;color:rgba(240,238,232,0.58);font-variant-numeric:tabular-nums}
+.lane{display:flex;gap:12px;align-items:stretch}
+.lbl{flex:none;width:150px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:2px;padding:6px 10px 6px 14px;border-radius:12px;text-align:left;background:rgba(255,255,255,0.03)}
+.lbl:hover{background:rgba(255,255,255,0.08)}
+.area{position:relative;flex:1;min-width:0;border-radius:12px;overflow:hidden;cursor:crosshair}
+.wv{position:absolute;left:0;top:0;width:100%;height:100%}
+.ew{position:absolute;top:50%;transform:translateY(-50%);text-align:center;font-family:'Courier Prime','Courier New',monospace;font-size:13px;color:rgba(248,246,240,0.86);text-shadow:0 1px 8px rgba(0,0,0,0.95),0 0 2px rgba(0,0,0,0.9);white-space:nowrap;pointer-events:none;transition:color .1s}
+.seg{position:absolute;top:0;bottom:0;overflow:hidden;cursor:grab}
+.segin{position:absolute;top:0;bottom:0}
+.chip{position:absolute;left:6px;top:5px;font-size:10px;font-weight:700;color:#15100C;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none}
+.seam{position:absolute;top:-5px;bottom:-5px;width:2px;margin-left:-1px;pointer-events:none;z-index:3}
+.kb{display:inline-block;min-width:16px;text-align:center;font-family:Figtree,system-ui,sans-serif;font-size:11px;padding:2px 6px;border-radius:6px;background:rgba(255,255,255,0.1);color:rgba(240,238,232,0.9)}
+.hk{display:flex;justify-content:space-between;align-items:center;gap:12px;color:rgba(240,238,232,0.78)}
+.mseg{display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;font-size:10px;font-weight:700;line-height:1;color:rgba(10,10,14,0.8);box-shadow:inset -1px 0 0 rgba(10,11,15,0.75);transition:flex-grow .12s ease}
+.vline{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;pointer-events:none}
+.flag{position:absolute;top:0;width:0;height:0;margin-left:-5px;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #9FD6FF;pointer-events:none}
+@media (max-width:1100px){.side{display:none}}
+@media (max-width:1000px){.rail{display:none}}
+</style>
+</helmet>
+<div class="ui" ref="{{setRoot}}" tabIndex="0" onKeyDown="{{onKey}}" onMouseDown="{{onRootDown}}" onMouseMove="{{onMove}}" onMouseUp="{{onUp}}" onMouseLeave="{{onUp}}" style="position: relative; width: 100%; height: 900px; overflow: hidden; outline: none; user-select: none; -webkit-user-select: none; color: #F0EEE8; background: radial-gradient(ellipse 55% 45% at 50% 50%, rgba(46,58,110,0.38), transparent 70%), radial-gradient(ellipse 35% 30% at 30% 78%, rgba(224,138,90,0.08), transparent 70%), radial-gradient(ellipse 30% 30% at 75% 22%, rgba(94,184,176,0.07), transparent 70%), #0B0D12">
+
+<div aria-hidden="true" style="position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%); width: min(720px, 94%); background: repeating-linear-gradient(0deg, rgba(255,255,255,0.022) 0 1px, transparent 1px 7px); -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent)"></div>
+
+<div aria-hidden="true" style="position: absolute; left: 84px; right: 24px; top: 50%; height: 1px; background: linear-gradient(90deg, transparent, rgba(240,238,232,0.26) 10%, rgba(240,238,232,0.26) 90%, transparent)"></div>
+
+<sc-if value="{{isOptions}}" hint-placeholder-val="{{ true }}">
+<div class="optmask" style="position: absolute; inset: 0; overflow: hidden">
+<div style="position: absolute; left: 50%; top: 50%; display: flex; flex-direction: column; gap: 12px; width: {{colW}}; transform: translate(-50%, -{{optOff}}px); transition: {{optTrans}}">
+<sc-for list="{{rows}}" as="it" hint-placeholder-count="6">
+<sc-if value="{{it.isLine}}" hint-placeholder-val="{{ true }}">
+<article class="boxs" onClick="{{it.pick}}" onDoubleClick="{{it.open}}" style="flex: none; {{it.style}}">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px"><span class="nm" style="color: {{it.nameColor}}; font-size: {{it.nmSize}}px">{{it.name}}</span><span style="font-size: 11px; color: rgba(240,238,232,0.58); font-variant-numeric: tabular-nums">{{it.info}}</span></div>
+<sc-if value="{{it.hasParen}}" hint-placeholder-val="{{ false }}"><p class="script" style="margin: 0 0 4px; font-style: italic; color: rgba(240,238,232,0.55); font-size: {{it.parenSize}}px">{{it.paren}}</p></sc-if>
+<p class="script" style="margin: 0; line-height: 1.45; color: rgba(240,238,232,0.84); font-size: {{it.fs}}px">{{it.text}}</p>
+</article>
+</sc-if>
+<sc-if value="{{it.isGap}}" hint-placeholder-val="{{ false }}">
+<div style="flex: none; {{it.style}}"><sc-if value="{{it.hasAct}}" hint-placeholder-val="{{ true }}"><div class="script ellip act" style="font-size: {{it.fs}}px">{{it.act}}</div></sc-if></div>
+</sc-if>
+<sc-if value="{{it.isActive}}" hint-placeholder-val="{{ false }}">
+<div ref="{{it.ref}}" style="flex: none; position: relative; isolation: isolate; margin: 6px 0 56px">
+<sc-for list="{{it.deck}}" as="dk" hint-placeholder-count="3"><div class="deck" aria-hidden="true" style="position: absolute; {{dk.style}}"><span style="position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.78)">{{dk.num}}</span></div></sc-for>
+<article class="glass abox {{it.boxAnim}}" onDoubleClick="{{it.open}}" aria-label="Current line" style="position: relative; z-index: 5; {{it.boxStyle}}">
+<div style="position: relative; display: flex; justify-content: space-between; align-items: center">
+<div style="display: flex; align-items: center; gap: 10px"><span class="nm" style="font-size: 12px; color: {{it.nameColor}}">{{it.name}}</span><sc-if value="{{it.fav}}" hint-placeholder-val="{{ true }}"><span style="font-size: 13px; color: {{it.nameColor}}">★</span></sc-if></div>
+<span style="font-size: 12px; color: rgba(240,238,232,0.62); font-variant-numeric: tabular-nums">{{it.takePos}}</span>
+</div>
+<sc-if value="{{it.hasParen}}" hint-placeholder-val="{{ false }}"><p class="script" style="position: relative; margin: 0; font-style: italic; color: rgba(240,238,232,0.58); font-size: {{it.parenSize}}px">{{it.paren}}</p></sc-if>
+<p class="script" style="position: relative; margin: 0; line-height: 1.5; color: #F3F1EC; font-size: {{it.actFs}}px"><sc-for list="{{it.words}}" as="w" hint-placeholder-count="8"><span><span class="wd" style="display: inline-block; {{w.style}}">{{w.w}}</span>{{w.sp}}</span></sc-for></p>
+</article>
+<div role="group" aria-label="Takes" style="position: absolute; left: 50%; top: calc(100% + 14px); transform: translateX(-50%); display: flex; gap: 6px; z-index: 6">
+<sc-for list="{{it.pills}}" as="p" hint-placeholder-count="5"><button class="tk" onClick="{{p.pick}}" aria-label="{{p.aria}}" style="display: block; {{p.style}}">{{p.label}}</button></sc-for>
+</div>
+<aside class="side" aria-label="Notes for this take" style="position: absolute; left: calc(100% + 48px); top: 50%; transform: translateY(-50%); width: 220px; display: flex; flex-direction: column; gap: 14px; z-index: 6">
+<div><div class="nm" style="font-size: 10px; color: rgba(240,238,232,0.55)">Direction</div><p style="margin: 4px 0 0; font-size: 14px; line-height: 1.4; color: rgba(240,238,232,0.88)">{{it.dir}}</p></div>
+<div><div class="nm" style="font-size: 10px; color: rgba(240,238,232,0.55)">Feedback</div><p style="margin: 4px 0 0; font-size: 14px; line-height: 1.4; color: rgba(240,238,232,0.88)">{{it.fb}}</p></div>
+<div style="font-size: 11px; line-height: 1.5; color: rgba(240,238,232,0.55); font-variant-numeric: tabular-nums">{{it.meta}}</div>
+</aside>
+<div class="side" style="position: absolute; right: calc(100% + 40px); top: 50%; transform: translateY(-50%); font-size: 11px; font-variant-numeric: tabular-nums; color: rgba(240,238,232,0.68); padding: 4px 8px; border-radius: 8px; background: rgba(20,22,29,0.9); z-index: 6">{{it.time}}</div>
+</div>
+</sc-if>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isArrange}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 50%; top: 50%; width: {{arrW}}; transform: translate(-50%, -{{arrOff}}px); transition: {{arrTrans}}">
+<sc-for list="{{arr}}" as="a" hint-placeholder-count="6">
+<sc-if value="{{a.isLine}}" hint-placeholder-val="{{ true }}">
+<div class="snip" onClick="{{a.pick}}" onDoubleClick="{{a.open}}" style="position: relative; {{a.style}}">
+<div style="display: flex; align-items: center; gap: 10px; min-width: 0">
+<span class="grip" onMouseDown="{{a.grab}}" title="Drag to reorder" aria-label="Drag to reorder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg></span>
+<span class="nm" style="flex: none; width: 76px; color: {{a.nameColor}}">{{a.name}}</span>
+<span class="script ellip" style="flex: 1; min-width: 0; color: rgba(240,238,232,0.86); font-size: {{a.fs}}px">{{a.text}}</span>
+<sc-if value="{{a.moved}}" hint-placeholder-val="{{ false }}"><span class="badge" style="color: #F3F1EC; box-shadow: inset 0 0 0 1px rgba(240,238,232,0.4)">Moved</span></sc-if>
+<sc-if value="{{a.clip}}" hint-placeholder-val="{{ false }}"><span class="badge" style="color: #1A1408; background: #E6B84C">Cuts a word</span></sc-if>
+<span class="dur">{{a.dur}}</span>
+</div>
+<div class="strip" onMouseDown="{{a.scrub}}" onClick="{{a.stop}}" title="Click to set the locator, I / O to set in and out" style="height: {{a.stripH}}px">
+<svg class="wv" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><path d="{{a.wave}}" fill="{{a.fill}}"></path></svg>
+<div style="position: absolute; top: 0; bottom: 0; left: 0; pointer-events: none; background: rgba(8,9,12,0.74); width: {{a.hPct}}%"></div>
+<div style="position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; background: rgba(8,9,12,0.74); width: {{a.tPctR}}%"></div>
+<sc-if value="{{a.hasLoc}}" hint-placeholder-val="{{ false }}"><span class="vline" style="background: #9FD6FF; left: {{a.locPct}}%"></span><span class="flag" style="left: {{a.locPct}}%"></span></sc-if>
+<sc-if value="{{a.hasHead}}" hint-placeholder-val="{{ false }}"><span class="vline" style="background: #F3F1EC; box-shadow: 0 0 8px rgba(240,238,232,0.9); left: {{a.headPct}}%"></span></sc-if>
+<span class="hdl" onMouseDown="{{a.grabH}}" title="Drag to trim the head" style="left: calc({{a.hPct}}% - 5px); background: {{a.hCol}}"></span>
+<span class="hdl" onMouseDown="{{a.grabT}}" title="Drag to trim the tail" style="left: calc({{a.tPct}}% - 5px); background: {{a.tCol}}"></span>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{a.isGap}}" hint-placeholder-val="{{ false }}">
+<div class="gaprow" onMouseDown="{{a.grab}}" title="Drag up or down to change the pause" style="height: {{a.h}}px">
+<div class="gapline"></div>
+<div class="gappill" style="color: {{a.pillColor}}"><span style="font-variant-numeric: tabular-nums; font-weight: 600">{{a.label}}</span><sc-if value="{{a.hasAct}}" hint-placeholder-val="{{ false }}"><span class="script ellip" style="max-width: 320px; color: rgba(240,238,232,0.55)">{{a.act}}</span></sc-if></div>
+</div>
+</sc-if>
+</sc-for>
+<sc-if value="{{dropOn}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; left: -10px; right: -10px; height: 2px; border-radius: 2px; background: #F3F1EC; box-shadow: 0 0 14px rgba(240,238,232,0.8); z-index: 40; top: {{dropY}}px"></div></sc-if>
+</div>
+<div class="side" style="position: absolute; left: calc(50% - {{arrHalf}}px - 24px); top: 50%; transform: translate(-100%, -50%); font-size: 11px; font-variant-numeric: tabular-nums; color: rgba(240,238,232,0.68); padding: 4px 8px; border-radius: 8px; background: rgba(20,22,29,0.9)">{{timeNow}}</div>
+</sc-if>
+
+<header style="position: absolute; top: 20px; left: 96px; right: 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; z-index: 10">
+<div style="display: flex; align-items: baseline; gap: 10px; font-size: 13px">
+<span style="font-weight: 600">TARMAC Ep. 2</span>
+<span style="color: rgba(240,238,232,0.6)">Sc. 2 · Canteen · Later</span>
+</div>
+<div class="glass" role="group" aria-label="View" style="display: flex; padding: 4px; border-radius: 999px; background: rgba(255,255,255,0.05)">
+<button onClick="{{goOptions}}" style="height: 36px; padding: 0 18px; border-radius: 999px; font-size: 13px; {{optBtn}}">Options <span class="kb" style="margin-left: 4px; background: rgba(127,127,127,0.18); color: inherit">1</span></button>
+<button onClick="{{goArrange}}" style="height: 36px; padding: 0 18px; border-radius: 999px; font-size: 13px; {{arrBtn}}">Arrange <span class="kb" style="margin-left: 4px; background: rgba(127,127,127,0.18); color: inherit">2</span></button>
+</div>
+<div style="display: flex; gap: 14px; align-items: center">
+<label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: rgba(240,238,232,0.66)">Size<input type="range" min="0.8" max="1.3" step="0.05" value="{{scale}}" onChange="{{onScale}}" aria-label="Box size" style="width: 110px; accent-color: #F3F1EC"></label>
+<button class="icb" onClick="{{toggleHelp}}" aria-label="Keyboard shortcuts" style="width: 40px; height: 40px; font-size: 15px; font-weight: 700; background: rgba(255,255,255,0.06)">?</button>
+<button style="height: 40px; padding: 0 18px; border-radius: 999px; font-size: 13px; font-weight: 600; background: rgba(255,255,255,0.07); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08)">Export</button>
+</div>
+</header>
+
+<nav class="glass rail" aria-label="Scenes" style="position: absolute; left: 20px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 22px; background: rgba(255,255,255,0.04); z-index: 10">
+<button aria-label="Scene 1" style="width: 40px; height: 40px; border-radius: 14px; font-size: 13px; color: rgba(240,238,232,0.55)">1</button>
+<button aria-label="Scene 2, current" style="width: 40px; height: 40px; border-radius: 14px; font-size: 13px; font-weight: 600; background: rgba(255,255,255,0.13)">2</button>
+<button aria-label="Scene 3" style="width: 40px; height: 40px; border-radius: 14px; font-size: 13px; color: rgba(240,238,232,0.55)">3</button>
+<button aria-label="Scene 4, 2 flagged" style="position: relative; width: 40px; height: 40px; border-radius: 14px; font-size: 13px; color: rgba(240,238,232,0.55)">4<span style="position: absolute; top: 8px; right: 8px; width: 6px; height: 6px; border-radius: 50%; background: #E6B84C"></span></button>
+<button aria-label="Scene 5" style="width: 40px; height: 40px; border-radius: 14px; font-size: 13px; color: rgba(240,238,232,0.55)">5</button>
+<button aria-label="Scene 6" style="width: 40px; height: 40px; border-radius: 14px; font-size: 13px; color: rgba(240,238,232,0.55)">6</button>
+<button aria-label="Scene 7" style="width: 40px; height: 40px; border-radius: 14px; font-size: 13px; color: rgba(240,238,232,0.55)">7</button>
+</nav>
+
+<section class="glass" aria-label="Transport" style="position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); width: min(820px, 94%); box-sizing: border-box; display: flex; align-items: center; gap: 16px; padding: 10px; border-radius: 30px; background: rgba(20,22,29,0.8); z-index: 10">
+<button onClick="{{onPlay}}" aria-label="Play or stop (Space)" style="flex: none; width: 52px; height: 52px; border-radius: 50%; background: #F3F1EC; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 6px {{playRing}}">
+<sc-if value="{{playing}}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3" fill="#14161C"></rect></svg></sc-if>
+<sc-if value="{{notPlaying}}" hint-placeholder-val="{{ true }}"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="#14161C"></path></svg></sc-if>
+</button>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: rgba(240,238,232,0.64); font-variant-numeric: tabular-nums"><span>{{timeNow}}</span><span class="ellip">{{barMid}}</span><span>{{timeTotal}}</span></div>
+<div ref="{{setMapEl}}" role="slider" aria-label="Scene position. Command scroll zooms, Shift scroll moves" aria-valuenow="{{mapPos}}" onMouseDown="{{mapDown}}" title="Click or drag to move the playhead. ⌘ scroll zooms, ⇧ scroll moves" style="position: relative; height: 24px; cursor: pointer; overflow: hidden; border-radius: 6px">
+<div style="position: absolute; top: 6px; bottom: 6px; display: flex; left: {{mapLeft}}%; width: {{mapWidth}}%">
+<sc-for list="{{map}}" as="m" hint-placeholder-count="12"><span class="mseg" style="display: flex; {{m.style}}">{{m.lbl}}</span></sc-for>
+<sc-if value="{{locOnMap}}" hint-placeholder-val="{{ true }}"><span class="vline" style="background: #9FD6FF; top: -6px; bottom: -6px; left: {{mapLocPos}}%"></span><span class="flag" style="top: -6px; left: {{mapLocPos}}%"></span></sc-if>
+<span class="vline" style="top: -6px; bottom: -6px; width: 3px; border-radius: 2px; background: #F3F1EC; box-shadow: 0 0 8px rgba(0,0,0,0.6); left: {{mapPos}}%"></span>
+</div>
+</div>
+</div>
+<div style="display: flex; gap: 2px; flex: none">
+<button class="icb" onClick="{{onFav}}" aria-label="Favorite take (F)" title="Favorite (F)" style="color: {{favColor}}; background: {{favBg}}"><svg width="20" height="20" viewBox="0 0 24 24" fill="{{favFill}}" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><polygon points="12 3 14.8 8.7 21 9.6 16.5 14 17.6 20.2 12 17.3 6.4 20.2 7.5 14 3 9.6 9.2 8.7"></polygon></svg></button>
+<button class="icb" onClick="{{openEditor}}" aria-label="Open box editor (E)" title="Box editor (E)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"></path></svg></button>
+<button class="icb" onClick="{{onFromLoc}}" aria-label="Play from locator (Shift Space)" title="Play from locator (Shift Space)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 6 4 18"></polyline><path d="M9 6v12l9-6z"></path></svg></button>
+</div>
+</section>
+<div style="position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); font-size: 11px; color: rgba(240,238,232,0.55); white-space: nowrap; z-index: 10">{{hint}}</div>
+
+<sc-if value="{{editor}}" hint-placeholder-val="{{ false }}">
+<div aria-hidden="true" style="position: absolute; inset: 0; z-index: 20; background: rgba(8,9,12,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px)"></div>
+<section class="glass" role="dialog" aria-label="Box editor" style="position: absolute; z-index: 21; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(1220px, 96%); box-sizing: border-box; padding: 24px 28px 20px; border-radius: 32px; display: flex; flex-direction: column; gap: 14px; {{edBg}}">
+<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap">
+<div style="min-width: 0; flex: 1 1 520px">
+<div style="display: flex; align-items: center; gap: 12px"><span class="nm" style="font-size: 12px; color: {{nameColor}}">{{name}}</span><span style="font-size: 12px; color: rgba(240,238,232,0.6)">{{edInfo}}</span></div>
+<p class="script" style="margin: 8px 0 0; font-size: 21px; line-height: 1.4; color: #F3F1EC">{{edText}}</p>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; flex: none">
+<button onClick="{{toggleWords}}" style="height: 36px; padding: 0 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600; {{wordsBtn}}">Words <span class="kb">W</span></button>
+<button onClick="{{resetComp}}" style="height: 36px; padding: 0 14px; border-radius: 999px; font-size: 12.5px; color: rgba(240,238,232,0.8); background: rgba(255,255,255,0.06)">Reset <span class="kb">R</span></button>
+<button onClick="{{closeEditor}}" style="height: 40px; padding: 0 20px; border-radius: 999px; font-size: 13px; font-weight: 600; background: #F3F1EC; color: #14161C">Done <span class="kb" style="background: rgba(0,0,0,0.1); color: #14161C">Esc</span></button>
+</div>
+</div>
+
+<div style="position: relative; display: flex; flex-direction: column; gap: 8px">
+<div class="lane">
+<div class="lbl" style="background: transparent"><span style="font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums">{{edTime}}</span><span style="font-size: 10.5px; color: rgba(240,238,232,0.55)">click or drag to place</span></div>
+<div class="area" onMouseDown="{{rulerDown}}" style="height: 26px; cursor: ew-resize; background: rgba(255,255,255,0.045)">
+<sc-for list="{{ticks}}" as="tk" hint-placeholder-count="8"><span style="position: absolute; bottom: 0; width: 1px; height: 8px; background: rgba(240,238,232,0.35); {{tk.style}}"></span><span style="position: absolute; top: 4px; margin-left: 4px; font-size: 9.5px; color: rgba(240,238,232,0.55); font-variant-numeric: tabular-nums; {{tk.style}}">{{tk.label}}</span></sc-for>
+<span class="flag" style="left: {{edLocPct}}%"></span>
+</div>
+</div>
+<div class="lane">
+<button class="lbl" onClick="{{auditionComp}}" style="display: flex; background: rgba(255,255,255,0.06); {{compLblStyle}}"><span style="font-size: 13px; font-weight: 700">{{compLabel}}</span><span style="font-size: 11px; color: rgba(240,238,232,0.6)">{{compInfo}}</span></button>
+<div class="area" style="height: 84px; cursor: default; background: rgba(255,255,255,0.03); {{compAreaStyle}}">
+<sc-for list="{{segs}}" as="g" hint-placeholder-count="2">
+<div class="seg" onMouseDown="{{g.down}}" title="Click to listen from here, drag sideways to nudge" style="left: 0; {{g.outer}}">
+<div class="segin" style="left: 0; {{g.inner}}">
+<svg class="wv" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><path d="{{g.wave}}" fill="{{g.fill}}"></path></svg>
+<sc-if value="{{showWords}}" hint-placeholder-val="{{ true }}"><sc-for list="{{g.words}}" as="w" hint-placeholder-count="6"><span class="ew" style="font-size: 14px; {{w.style}}">{{w.t}}</span></sc-for></sc-if>
+</div>
+<span class="chip" style="display: block; {{g.chipStyle}}">{{g.chip}}</span>
+</div>
+</sc-for>
+<sc-for list="{{seams}}" as="sm" hint-placeholder-count="1"><span class="seam" style="display: block; {{sm.style}}"></span></sc-for>
+</div>
+</div>
+<div style="display: flex; gap: 12px; align-items: center; padding: 2px 0 0"><span style="width: 150px; flex: none" class="nm"><span style="font-size: 10px; color: rgba(240,238,232,0.55)">Takes</span></span><span style="font-size: 11.5px; color: rgba(240,238,232,0.6)">Click a take to listen from there. Drag across it to paint that stretch into the comp.</span></div>
+<sc-for list="{{lanes}}" as="ln" hint-placeholder-count="4">
+<div class="lane">
+<button class="lbl" onClick="{{ln.useAll}}" aria-label="{{ln.aria}}" title="Use the whole take" style="display: flex; {{ln.labelStyle}}"><span style="font-size: 13px; font-weight: 600">{{ln.label}}</span><span class="ellip" style="max-width: 126px; font-size: 11px; color: rgba(240,238,232,0.6)">{{ln.note}}</span></button>
+<div class="area" onMouseDown="{{ln.down}}" style="height: 58px; {{ln.areaStyle}}">
+<svg class="wv" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><path d="{{ln.wave}}" fill="{{ln.fill}}"></path></svg>
+<sc-for list="{{ln.used}}" as="u" hint-placeholder-count="1"><div style="position: absolute; bottom: 0; height: 3px; border-radius: 2px; {{u.style}}"></div></sc-for>
+<sc-if value="{{showWords}}" hint-placeholder-val="{{ true }}"><sc-for list="{{ln.words}}" as="w" hint-placeholder-count="6"><span class="ew" style="display: block; {{w.style}}">{{w.t}}</span></sc-for></sc-if>
+<sc-if value="{{ln.painting}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; top: 0; bottom: 0; border-radius: 6px; pointer-events: none; {{ln.paintStyle}}"></div></sc-if>
+</div>
+</div>
+</sc-for>
+<div style="position: absolute; top: 34px; bottom: -6px; border-left: 2px dashed rgba(159,214,255,0.55); margin-left: -1px; pointer-events: none; z-index: 7; {{edLocStyle}}"></div>
+<div style="position: absolute; top: 0; bottom: -6px; width: 2px; margin-left: -1px; background: #F3F1EC; box-shadow: 0 0 10px rgba(240,238,232,0.8); pointer-events: none; z-index: 8; {{edHeadStyle}}"><span style="position: absolute; top: 0; left: -5px; width: 12px; height: 12px; border-radius: 3px; background: #F3F1EC"></span></div>
+</div>
+
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap">
+<div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: rgba(240,238,232,0.62)">
+<span><span class="kb">⇧</span> <span class="kb">Space</span> from locator</span>
+<span>Click a segment, <span class="kb">←</span> <span class="kb">→</span> nudge (<span class="kb">⇧</span> coarse)</span>
+<span><span class="kb">Tab</span> next segment</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 3px; height: 12px; border-radius: 2px; background: #E6B84C"></span>seam cuts a word</span>
+</div>
+<button onClick="{{edPlayToggle}}" style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 18px 0 8px; border-radius: 999px; font-size: 13px; font-weight: 600; {{edPlayBtn}}"><span style="width: 30px; height: 30px; border-radius: 50%; background: #F3F1EC; display: flex; align-items: center; justify-content: center"><sc-if value="{{edPlaying}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2" fill="#14161C"></rect></svg></sc-if><sc-if value="{{edStopped}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="#14161C"></path></svg></sc-if></span>{{edPlayLabel}} <span class="kb">Space</span></button>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{help}}" hint-placeholder-val="{{ false }}">
+<div onClick="{{toggleHelp}}" style="position: absolute; inset: 0; z-index: 40; background: rgba(8,9,12,0.55); display: flex; align-items: center; justify-content: center">
+<div class="glass" style="width: min(640px, 92%); box-sizing: border-box; padding: 24px 28px; border-radius: 26px; background: rgba(22,24,31,0.94); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 32px; font-size: 13px">
+<div style="grid-column: 1 / -1; font-weight: 700; font-size: 15px">Keyboard</div>
+<div class="hk"><span>Play / stop</span><span class="kb">Space</span></div>
+<div class="hk"><span>Play from locator</span><span><span class="kb">⇧</span> <span class="kb">Space</span></span></div>
+<div class="hk"><span>Previous / next line</span><span><span class="kb">↑</span> <span class="kb">↓</span></span></div>
+<div class="hk"><span>Previous / next take</span><span><span class="kb">←</span> <span class="kb">→</span></span></div>
+<div class="hk"><span>Favorite take</span><span class="kb">F</span></div>
+<div class="hk"><span>Box editor</span><span class="kb">E</span></div>
+<div class="hk"><span>Options / Arrange</span><span><span class="kb">1</span> <span class="kb">2</span></span></div>
+<div class="hk"><span>Box size</span><span><span class="kb">−</span> <span class="kb">+</span></span></div>
+<div class="hk"><span>Shorter / longer pause</span><span><span class="kb">,</span> <span class="kb">.</span></span></div>
+<div class="hk"><span>Move line (Arrange)</span><span><span class="kb">⌥↑</span> <span class="kb">⌥↓</span></span></div>
+<div class="hk"><span>In / out at locator (Arrange)</span><span><span class="kb">I</span> <span class="kb">O</span></span></div>
+<div class="hk"><span>Locator</span><span>click a waveform or the scene bar</span></div>
+<div class="hk"><span>Previous / next line</span><span>scroll</span></div>
+<div class="hk"><span>Zoom / move scene bar</span><span><span class="kb">⌘</span> scroll <span class="kb">⇧</span> scroll</span></div>
+<div style="grid-column: 1 / -1; font-weight: 700; font-size: 13px; margin-top: 8px; color: rgba(240,238,232,0.7)">In the box editor</div>
+<div class="hk"><span>Play / play from locator</span><span><span class="kb">Space</span> <span class="kb">⇧ Space</span></span></div>
+<div class="hk"><span>Nudge segment</span><span><span class="kb">←</span> <span class="kb">→</span></span></div>
+<div class="hk"><span>Move playhead (no segment)</span><span><span class="kb">←</span> <span class="kb">→</span></span></div>
+<div class="hk"><span>Next segment</span><span class="kb">Tab</span></div>
+<div class="hk"><span>Words overlay</span><span class="kb">W</span></div>
+<div class="hk"><span>Use whole take</span><span><span class="kb">1</span> … <span class="kb">5</span></span></div>
+<div class="hk"><span>Reset comp</span><span class="kb">R</span></div>
+<div class="hk"><span>Close</span><span class="kb">Esc</span></div>
+</div>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+var CH = {
+  PAUL: { rgb: [224, 138, 90], name: '#EDAA82', label: 'Paul' },
+  SARA: { rgb: [94, 184, 176], name: '#8FD3CC', label: 'Sara' },
+  NORBERT: { rgb: [157, 180, 106], name: '#BFD192', label: 'Norbert' },
+  COLONEL: { rgb: [160, 143, 208], name: '#C3B7E6', label: 'Colonel' }
+};
+var LINES = [
+  { id: 'L1', ch: 'PAUL', pick: 2, gap: 1.0, act: 'SARA and NORBERT are already in the booth, THE COLONEL is in the back of the canteen making a coffee.', takes: [
+    ['I put this in the time spring two weeks ago.', 'proud, a little out of breath', 'good energy, a bit fast'],
+    ['I put this… in the time spring two weeks ago.', 'slower, savour it', 'too slow'],
+    ['I put this in the time spring. Two weeks ago.', 'deadpan', 'liked it']] },
+  { id: 'L2', ch: 'NORBERT', pick: 0, gap: 0.4, takes: [
+    ['…you sure you wanna eat that?', 'suspicious, quiet', 'perfect'],
+    ['You sure you wanna eat that?', 'louder, disgusted', 'too big'],
+    ['…you sure you want to eat that?', 'concerned', 'fine, a bit flat']] },
+  { id: 'L3', ch: 'PAUL', pick: 2, gap: 0.3, partial: 4, pstart: 0.4, takes: [
+    ['Two weeks elapsed for us, but for the burrito, the transfer was instant.', 'first pass', 'rushed'],
+    ['Two weeks elapsed for US, but for the burrito, it was instant.', 'faster, deadpan', 'good on “burrito”'],
+    ['Two weeks elapsed for US, uh, but for this burrito, the transfer was instant.', 'casual, mouth half full', 'liked it, keep the pause before “instant”'],
+    ['Two weeks passed for US. But for this burrito, the transfer was… instant.', 'more oomph on “instant”', 'great ending'],
+    ['…for this burrito, the transfer was instant.', 'pickup from “burrito”', 'clean']] },
+  { id: 'L4', ch: 'PAUL', paren: '(wipes off some goopy slime)', pick: 0, gap: 1.4, act: 'Paul takes a bite. The others stare expectantly.', takes: [
+    ['That’s just time slop. Non-toxic.', 'matter of fact', 'liked it'],
+    ['That’s just… time slop. Non-toxic.', 'a little grossed out', 'funny, maybe too much']] },
+  { id: 'L5', ch: 'NORBERT', pick: 1, gap: 0.9, act: 'Paul nods, thinking.', takes: [
+    ['…and?', 'flat', 'ok'],
+    ['…aaand?', 'impatient', 'better']] },
+  { id: 'L6', ch: 'PAUL', paren: '(swallows)', pick: 0, gap: 0.2, takes: [
+    ['Mh-hm… mh-hm. The first time burrito is EDIBLE!', 'build to the reveal', 'liked it'],
+    ['Mh-hm. The first time burrito is EDIBLE!', 'quicker', 'loses the build'],
+    ['Mh-hm… mh-hm. The first time burrito… is EDIBLE!', 'big pause before “edible”', 'pause too long']] },
+  { id: 'L7', ch: 'COLONEL', pick: 0, gap: 1.2, act: 'The Colonel looks over at Norbert, who passes him five bucks.', takes: [
+    ['Ha!', 'from the back, triumphant', 'good'],
+    ['HA!', 'bigger', 'too loud']] },
+  { id: 'L8', ch: 'SARA', pick: 0, gap: 0.3, takes: [
+    ['Paul, this is huge. We can send things besides nuclear waste through time.', 'excited, realising', 'liked it'],
+    ['Paul, this is huge. We can send things BESIDES nuclear waste through time.', 'punch “besides”', 'too pointed'],
+    ['Paul… this is huge. We can send things besides nuclear waste through time.', 'awe', 'nice but slow']] },
+  { id: 'L9', ch: 'PAUL', paren: '(mouth full)', pick: 0, gap: 0.3, takes: [
+    ['Like burritos!', 'muffled, happy', 'good'],
+    ['Like burritos!!', 'spray it', 'funnier']] },
+  { id: 'L10', ch: 'COLONEL', pick: 0, gap: 0.4, takes: [
+    ['The mission is to send nuclear waste. Why care about anything else?', 'gruff', 'liked it'],
+    ['The mission is to send nuclear waste. Why would we care about anything else?', 'suspicious', 'too long'],
+    ['The mission is nuclear waste. Why care about anything else?', 'clipped', 'ok']] },
+  { id: 'L11', ch: 'SARA', paren: '(caught, scrambling)', pick: 0, gap: 0.5, takes: [
+    ['Oh. No reason. Interesting thought experiment.', 'caught out', 'liked it'],
+    ['Oh! No reason. Interesting… thought experiment.', 'more flustered', 'good alt']] },
+  { id: 'L12', ch: 'NORBERT', pick: 0, gap: 0.6, takes: [
+    ['Imagine it, sir. I can meal prep without wasting an entire Sunday.', 'dreamy', 'liked it'],
+    ['Imagine it, sir. Meal prep without wasting an entire Sunday.', 'faster', 'ok']] }
+];
+var LMAP = {};
+var LIDX = {};
+LINES.forEach(function (l, i) { LMAP[l.id] = l; LIDX[l.id] = i; });
+var SHADES = [0, 0.34, -0.32, 0.58, -0.52];
+function shade(rgb, k) { var t = SHADES[k % 5]; return rgb.map(function (v) { return Math.round(t >= 0 ? v + (255 - v) * t : v + (18 - v) * (-t)); }); }
+function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+function hash(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function mkRng(seed) { var a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function fmt(sec) { var m = Math.floor(sec / 60); var s = sec - m * 60; return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s.toFixed(1); }
+function pct(v) { return (v * 100).toFixed(3); }
+var BASE = [25, 27, 35];
+function mix(c, b, a) { return [0, 1, 2].map(function (i) { return Math.round(b[i] + (c[i] - b[i]) * a); }); }
+function solid(c) { return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }
+function inWord(words, x) { for (var i = 0; i < words.length; i++) { var w = words[i]; if (x > w.s + 0.003 && x < w.e - 0.003) return true; } return false; }
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    var sel = {}, gaps = {};
+    LINES.forEach(function (l) { sel[l.id] = l.pick || 0; gaps[l.id] = l.gap; });
+    this.state = { view: 'options', editor: false, help: false, cur: 2, playing: false, prog: 0, sel: sel,
+      favs: { 'L1:2': true, 'L2:0': true, 'L3:2': true, 'L6:0': true, 'L8:0': true }, gaps: gaps, trims: {}, comps: {},
+      order: LINES.map(function (l) { return l.id; }), scale: 1, animN: 0, animDir: 'R', animId: null, showWords: true,
+      selSeg: null, edPos: 0, edLoc: 0, edSrc: 'comp', edPlaying: false, paint: null, dragId: null, dragDY: 0,
+      loc: { id: 'L3', prog: 0 }, optOff: 0, optReady: false, mapNear: false, mapHover: null, mapZoom: 1, mapStart: 0 };
+    this.memo = {};
+    this.drag = null;
+    this.last = 0;
+    this.dropT = null;
+    this.mapLayout = [];
+    this.mapTotal = 1;
+    this.activeEl = null;
+
+    this.setRoot = (el) => { if (this.root === el) return; if (this.root) this.root.removeEventListener('wheel', this.onRootWheel); this.root = el; if (el) el.addEventListener('wheel', this.onRootWheel, { passive: false }); };
+    this.setMapEl = (el) => { if (this.mapEl === el) return; if (this.mapEl) this.mapEl.removeEventListener('wheel', this.onMapWheel); this.mapEl = el; if (el) el.addEventListener('wheel', this.onMapWheel, { passive: false }); };
+    this.onMapWheel = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      var s = this.state, z = s.mapZoom, vs = this.viewStart != null ? this.viewStart : s.mapStart;
+      var r = this.mapEl.getBoundingClientRect(); var fx = clamp((e.clientX - r.left) / r.width, 0, 1);
+      if (e.metaKey || e.ctrlKey) {
+        var nz = clamp(z * Math.exp(-e.deltaY * 0.01), 1, 16);
+        var tf = vs + fx / z;
+        this.setState({ mapZoom: nz, mapStart: clamp(tf - fx / nz, 0, 1 - 1 / nz) });
+      } else {
+        var dl = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        this.setState({ mapStart: clamp(vs + dl / r.width / z, 0, 1 - 1 / z) });
+      }
+    };
+    this.onRootWheel = (e) => {
+      var s = this.state; if (s.editor || s.help) return;
+      if (this.mapEl && this.mapEl.contains(e.target)) return;
+      if (e.target && e.target.tagName === 'INPUT') return;
+      e.preventDefault();
+      var now = performance.now();
+      if (!this.wAcc || (this.wAcc > 0) !== (e.deltaY > 0)) this.wAcc = 0;
+      this.wAcc += e.deltaY;
+      if (Math.abs(this.wAcc) >= 40 && now - (this.wLast || 0) > 120) { this.go(this.wAcc > 0 ? 1 : -1); this.wAcc = 0; this.wLast = now; }
+    };
+    this.setActive = (el) => { if (el) this.activeEl = el; };
+    this.focusRoot = () => { if (this.root) { try { this.root.focus({ preventScroll: true }); } catch (e) {} } };
+    this.tick = () => {
+      var now = performance.now(); var dt = Math.min(0.2, (now - this.last) / 1000); this.last = now;
+      var s = this.state;
+      if (s.editor) {
+        if (s.edPlaying) {
+          var p0 = s.edPos + dt / this.edDur();
+          if (p0 >= 1) this.setState({ edPos: s.edLoc, edPlaying: false }); else this.setState({ edPos: p0 });
+        }
+        return;
+      }
+      if (!s.playing) return;
+      var id = s.order[s.cur]; var d = this.effDur(id); var g = Math.max(s.gaps[id], 0.12); var p = s.prog + dt;
+      if (p > d + g) {
+        if (s.cur < s.order.length - 1) this.setState({ cur: s.cur + 1, prog: 0, animId: null });
+        else this.setState({ playing: false, prog: 0 });
+      } else this.setState({ prog: p });
+    };
+    this.onRootDown = (e) => {
+      var tag = e.target && e.target.tagName;
+      if (tag !== 'INPUT') { e.preventDefault(); this.focusRoot(); }
+    };
+    this.onMove = (e) => {
+      var d = this.drag; if (!d) return;
+      var s = this.state;
+      if (d.type === 'press') {
+        if (Math.abs(e.clientX - d.x0) > 4) { this.drag = { type: 'paint', left: d.left, width: d.width }; this.setState({ paint: { k: d.i, a: d.f0, b: clamp((e.clientX - d.left) / d.width, 0, 1) }, selSeg: null }); }
+      } else if (d.type === 'paint') {
+        this.setState({ paint: { k: s.paint.k, a: s.paint.a, b: clamp((e.clientX - d.left) / d.width, 0, 1) } });
+      } else if (d.type === 'segpress') {
+        if (Math.abs(e.clientX - d.x0) > 4) this.drag = { type: 'nudge', id: d.id, i: d.i, x0: d.x0, n0: d.n0, width: d.width };
+      } else if (d.type === 'nudge') {
+        this.setNudge(d.id, d.i, clamp(d.n0 + (e.clientX - d.x0) / d.width, -0.08, 0.08));
+      } else if (d.type === 'edScrub') {
+        var fe = clamp((e.clientX - d.left) / d.width, 0, 1); this.setState({ edPos: fe, edLoc: fe });
+      } else if (d.type === 'map') {
+        this.seekVisual(clamp((e.clientX - d.left) / d.width, 0, 0.9999));
+      } else if (d.type === 'strip') {
+        this.stripSet(d.id, d.j, clamp((e.clientX - d.left) / d.width, 0, 1));
+      } else if (d.type === 'trim') {
+        var f2 = clamp((e.clientX - d.left) / d.width, 0, 1);
+        var tr = Object.assign({ h: 0, t: 1 }, s.trims[d.id]);
+        if (d.edge === 'h') tr.h = Math.min(f2, tr.t - 0.08); else tr.t = Math.max(f2, tr.h + 0.08);
+        var trims = Object.assign({}, s.trims); trims[d.id] = tr; this.setState({ trims: trims });
+      } else if (d.type === 'gap') {
+        var dy = (e.clientY - d.y0) / this.zoom();
+        var g = clamp(Math.round((d.g0 + dy / (26 * s.scale)) * 20) / 20, -1, 4);
+        var gaps = Object.assign({}, s.gaps); gaps[d.id] = g; this.setState({ gaps: gaps });
+      } else if (d.type === 'reorder') {
+        this.setState({ dragDY: (e.clientY - d.y0) / this.zoom() });
+      }
+    };
+    this.onUp = () => {
+      var d = this.drag; if (!d) return; this.drag = null;
+      var s = this.state;
+      if (d.type === 'press') {
+        this.setState({ edLoc: d.f0, edPos: d.f0, edSrc: d.i, selSeg: null });
+      } else if (d.type === 'segpress') {
+        this.setState({ edLoc: d.f0, edPos: d.f0, edSrc: 'comp' });
+      } else if (d.type === 'paint') {
+        var p = s.paint;
+        if (p && Math.abs(p.b - p.a) > 0.006) this.applyPaint(s.order[s.cur], p.k, Math.min(p.a, p.b), Math.max(p.a, p.b));
+        this.setState({ paint: null });
+      } else if (d.type === 'reorder') {
+        var t = this.dropT;
+        if (t != null) {
+          var curId = s.order[s.cur];
+          var others = s.order.filter(function (x) { return x !== d.id; });
+          others.splice(t, 0, d.id);
+          this.setState({ order: others, cur: others.indexOf(curId), dragId: null, dragDY: 0 });
+        } else this.setState({ dragId: null, dragDY: 0 });
+      }
+    };
+    this.onKey = (e) => {
+      var s = this.state, k = e.key, tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' && k !== 'Escape') return;
+      var h = true;
+      if (k === '?') this.setState({ help: !s.help });
+      else if (s.help && k === 'Escape') this.setState({ help: false });
+      else if (s.editor) {
+        var id = s.order[s.cur];
+        if (k === 'Escape') this.closeEditor();
+        else if (k === ' ' && e.shiftKey) { this.last = performance.now(); this.setState({ edPos: s.edLoc, edPlaying: true }); }
+        else if (k === ' ') this.edPlayToggle();
+        else if ((k === 'ArrowLeft' || k === 'ArrowRight') && s.selSeg != null) {
+          var seg = this.comp(id)[s.selSeg];
+          if (seg) this.setNudge(id, s.selSeg, clamp(seg.n + (k === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 0.02 : 0.005), -0.08, 0.08));
+        }
+        else if (k === 'ArrowLeft' || k === 'ArrowRight') { var np = clamp(s.edPos + (k === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 0.1 : 0.02), 0, 1); this.setState({ edPos: np, edLoc: np }); }
+        else if (k === 'Tab') { var nn = this.comp(id).length; this.setState({ selSeg: s.selSeg == null ? 0 : (s.selSeg + (e.shiftKey ? nn - 1 : 1)) % nn }); }
+        else if (k === 'w' || k === 'W') this.setState({ showWords: !s.showWords });
+        else if (k === 'r' || k === 'R' || k === 'Backspace') this.resetComp();
+        else if (/^[1-9]$/.test(k) && +k <= LMAP[id].takes.length) this.useWhole(id, +k - 1);
+        else h = false;
+      } else {
+        if (k === ' ' && e.shiftKey) this.playFromLoc();
+        else if (k === ' ') this.togglePlay();
+        else if (k === 'ArrowUp' && e.altKey) this.moveLine(-1);
+        else if (k === 'ArrowDown' && e.altKey) this.moveLine(1);
+        else if (k === 'ArrowUp') this.go(-1);
+        else if (k === 'ArrowDown') this.go(1);
+        else if (k === 'ArrowLeft') this.stepTake(-1);
+        else if (k === 'ArrowRight') this.stepTake(1);
+        else if (k === 'f' || k === 'F') this.toggleFav();
+        else if (k === 'e' || k === 'E') this.openEditor();
+        else if ((k === 'i' || k === 'I') && s.view === 'arrange') this.setInOut('i');
+        else if ((k === 'o' || k === 'O') && s.view === 'arrange') this.setInOut('o');
+        else if (k === '1') this.setState({ view: 'options' });
+        else if (k === '2') this.setState({ view: 'arrange' });
+        else if (k === '+' || k === '=') this.setState({ scale: Math.min(1.3, Math.round((s.scale + 0.05) * 100) / 100) });
+        else if (k === '-' || k === '_') this.setState({ scale: Math.max(0.8, Math.round((s.scale - 0.05) * 100) / 100) });
+        else if (k === ',') this.adjGap(-0.1);
+        else if (k === '.') this.adjGap(0.1);
+        else h = false;
+      }
+      if (h) { e.preventDefault(); e.stopPropagation(); }
+    };
+    this.onScale = (e) => { this.setState({ scale: +e.target.value }); };
+    this.togglePlay = () => {
+      var s = this.state; var id = s.order[s.cur];
+      this.last = performance.now();
+      if (s.playing) this.setState({ playing: false });
+      else this.setState({ playing: true, prog: s.prog >= this.effDur(id) ? 0 : s.prog });
+    };
+    this.playFromLoc = () => {
+      var s = this.state; var i = s.order.indexOf(s.loc.id); if (i < 0) i = s.cur;
+      this.last = performance.now();
+      this.setState({ cur: i, prog: s.loc.prog, playing: true, animId: null });
+    };
+    this.select = (j) => { var s = this.state; var id = s.order[j]; this.setState({ cur: j, prog: 0, loc: { id: id, prog: 0 }, animId: null }); };
+    this.go = (d) => { this.select(clamp(this.state.cur + d, 0, this.state.order.length - 1)); };
+    this.stepTake = (d) => { var s = this.state; var id = s.order[s.cur]; var n = LMAP[id].takes.length; this.pickTake(id, (s.sel[id] + d + n) % n, d > 0 ? 'R' : 'L'); };
+    this.toggleFav = () => { var s = this.state; var id = s.order[s.cur]; var key = id + ':' + s.sel[id]; var favs = Object.assign({}, s.favs); if (favs[key]) delete favs[key]; else favs[key] = true; this.setState({ favs: favs }); };
+    this.openEditor = () => { var s = this.state; var id = s.order[s.cur]; var t = this.td(id, s.sel[id]); var tr = s.trims[id] || { h: 0, t: 1 }; var f = clamp(tr.h + s.prog / t.dur, 0, 1); this.setState({ editor: true, playing: false, selSeg: null, edPos: f, edLoc: f, edSrc: 'comp', edPlaying: false, help: false }); this.focusRoot(); };
+    this.closeEditor = () => { this.setState({ editor: false, edPlaying: false, paint: null, selSeg: null, edSrc: 'comp' }); this.focusRoot(); };
+    this.moveLine = (d) => { var s = this.state; var i = s.cur, j = i + d; if (j < 0 || j >= s.order.length) return; var o = s.order.slice(); var t = o[i]; o[i] = o[j]; o[j] = t; this.setState({ order: o, cur: j }); };
+    this.adjGap = (d) => { var s = this.state; var id = s.order[s.cur]; var gaps = Object.assign({}, s.gaps); gaps[id] = clamp(Math.round((gaps[id] + d) * 20) / 20, -1, 4); this.setState({ gaps: gaps }); };
+    this.setInOut = (which) => {
+      var s = this.state; var id = s.order[s.cur]; var t = this.td(id, s.sel[id]);
+      var tr = Object.assign({ h: 0, t: 1 }, s.trims[id]);
+      var pr = s.loc.id === id ? s.loc.prog : s.prog;
+      var f = clamp(tr.h + pr / t.dur, 0, 1);
+      if (which === 'i') tr.h = Math.min(f, tr.t - 0.08); else tr.t = Math.max(f, tr.h + 0.08);
+      var trims = Object.assign({}, s.trims); trims[id] = tr;
+      this.setState(which === 'i' ? { trims: trims, prog: 0, loc: { id: id, prog: 0 } } : { trims: trims });
+    };
+    this.stripSet = (id, j, f) => {
+      var s = this.state; var t = this.td(id, s.sel[id]); var tr = s.trims[id] || { h: 0, t: 1 };
+      var pr = (clamp(f, tr.h, tr.t) - tr.h) * t.dur;
+      this.setState({ cur: j, prog: pr, loc: { id: id, prog: pr } });
+    };
+    this.edPlayToggle = () => { var s = this.state; this.last = performance.now(); this.setState({ edPlaying: !s.edPlaying, edPos: s.edPos >= 0.999 ? s.edLoc : s.edPos }); this.focusRoot(); };
+    this.toggleWords = () => { this.setState({ showWords: !this.state.showWords }); this.focusRoot(); };
+    this.resetComp = () => { var s = this.state; var id = s.order[s.cur]; var c = Object.assign({}, s.comps); delete c[id]; this.setState({ comps: c, selSeg: null }); this.focusRoot(); };
+    this.auditionComp = () => { this.setState({ edSrc: 'comp' }); this.focusRoot(); };
+    this.rulerDown = (e) => { e.preventDefault(); e.stopPropagation(); this.focusRoot(); var r = e.currentTarget.getBoundingClientRect(); this.drag = { type: 'edScrub', left: r.left, width: r.width }; var f = clamp((e.clientX - r.left) / r.width, 0, 1); this.setState({ edPos: f, edLoc: f }); };
+    this.toggleHelp = () => { this.setState({ help: !this.state.help }); this.focusRoot(); };
+    this.goOptions = () => { this.setState({ view: 'options' }); this.focusRoot(); };
+    this.goArrange = () => { this.setState({ view: 'arrange' }); this.focusRoot(); };
+    this.onPlay = () => { this.togglePlay(); this.focusRoot(); };
+    this.onFav = () => { this.toggleFav(); this.focusRoot(); };
+    this.onFromLoc = () => { this.playFromLoc(); this.focusRoot(); };
+    this.barEnter = () => { this.setState({ mapNear: true }); };
+    this.barLeave = () => { this.setState({ mapNear: false, mapHover: null }); };
+    this.mapDown = (e) => { e.preventDefault(); e.stopPropagation(); this.focusRoot(); var r = e.currentTarget.getBoundingClientRect(); this.drag = { type: 'map', left: r.left, width: r.width }; this.seekVisual(clamp((e.clientX - r.left) / r.width, 0, 0.9999)); };
+    this.mapHoverMove = (e) => { if (this.drag && this.drag.type !== 'map') return; var r = e.currentTarget.getBoundingClientRect(); this.setState({ mapHover: clamp((e.clientX - r.left) / r.width, 0, 1) }); };
+  }
+
+  componentDidMount() {
+    this.last = performance.now();
+    this.timer = setInterval(this.tick, 50);
+    if (this.root) { this.root.tabIndex = 0; this.focusRoot(); }
+    this.measure();
+  }
+  componentDidUpdate() { this.measure(); }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  measure() {
+    var s = this.state, el = this.activeEl;
+    if (s.view !== 'options' || !el || !el.isConnected) return;
+    var c = el.offsetTop + el.offsetHeight / 2;
+    if (Math.abs(c - s.optOff) > 0.5) this.setState({ optOff: c });
+    else if (!s.optReady) this.setState({ optReady: true });
+  }
+  zoom() { if (!this.root) return 1; var r = this.root.getBoundingClientRect(); return (r.width / (this.root.offsetWidth || r.width)) || 1; }
+
+  td(id, k) {
+    var key = id + ':' + k; if (this.memo[key]) return this.memo[key];
+    var l = LMAP[id]; var text = l.takes[k][0]; var r = mkRng(hash(key));
+    var ws = text.split(' '); var ps = l.partial === k ? l.pstart : 0;
+    var start = 0.05 + ps + r() * 0.03; var end = 0.95 - r() * 0.03;
+    var tot = 0; ws.forEach(function (w) { tot += w.length + 1.5; });
+    var gapsum = (ws.length - 1) * 0.02; var avail = end - start - gapsum;
+    var x = start;
+    var words = ws.map(function (w, i) { if (i) x += 0.006 + r() * 0.028; var s0 = x; x += (w.length + 1.5) / tot * avail; return { t: w, s: s0, e: Math.min(0.985, x) }; });
+    var base = LMAP[id].takes[0][0].split(' ').length * 0.3 + 0.6;
+    var dur = base * (0.92 + r() * 0.16);
+    var top = '', bot = []; var N = 200;
+    for (var i = 0; i <= N; i++) {
+      var xx = i / N; var env = 0.03 + r() * 0.05;
+      for (var j = 0; j < words.length; j++) { var w = words[j]; if (xx >= w.s && xx <= w.e) { var p = (xx - w.s) / (w.e - w.s); env = Math.pow(Math.sin(Math.PI * p), 0.45) * (0.45 + 0.55 * Math.abs(Math.sin(p * 7.3 + w.s * 31))) * (0.7 + r() * 0.3); break; } }
+      var hh = Math.max(0.4, env * 18);
+      top += (i ? 'L' : 'M') + i + ' ' + (20 - hh).toFixed(1);
+      bot.push('L' + i + ' ' + (20 + hh).toFixed(1));
+    }
+    var res = { words: words, dur: dur, wave: top + bot.reverse().join('') + 'Z' };
+    this.memo[key] = res; return res;
+  }
+  effDur(id) { var s = this.state; var t = this.td(id, s.sel[id]); var tr = s.trims[id] || { h: 0, t: 1 }; return t.dur * (tr.t - tr.h); }
+  srcOf() { var s = this.state; var id = s.order[s.cur]; var n = LMAP[id].takes.length; return (typeof s.edSrc === 'number' && s.edSrc >= 0 && s.edSrc < n) ? s.edSrc : 'comp'; }
+  edDur() { var s = this.state; var id = s.order[s.cur]; var src = this.srcOf(); return this.td(id, src === 'comp' ? s.sel[id] : src).dur; }
+  comp(id) { var s = this.state; return s.comps[id] || [{ k: s.sel[id], a: 0, b: 1, n: 0 }]; }
+  setComp(id, arr) { var c = Object.assign({}, this.state.comps); c[id] = arr; this.setState({ comps: c }); }
+  setNudge(id, i, n) { var arr = this.comp(id).map(function (g) { return Object.assign({}, g); }); if (!arr[i]) return; arr[i].n = n; this.setComp(id, arr); }
+  useWhole(id, i) { var c = Object.assign({}, this.state.comps); delete c[id]; this.setState({ comps: c, selSeg: null, edSrc: 'comp' }); this.pickTake(id, i); }
+  applyPaint(id, k, a, b) {
+    var out = [];
+    this.comp(id).forEach(function (g) {
+      if (g.b <= a || g.a >= b) { out.push(Object.assign({}, g)); return; }
+      if (g.a < a) out.push(Object.assign({}, g, { b: a }));
+      if (g.b > b) out.push(Object.assign({}, g, { a: b }));
+    });
+    out.push({ k: k, a: a, b: b, n: 0 });
+    out.sort(function (x, y) { return x.a - y.a; });
+    var merged = [];
+    out.forEach(function (g) {
+      if (g.b - g.a < 0.004) return;
+      var p = merged[merged.length - 1];
+      if (p && p.k === g.k && Math.abs(p.n - g.n) < 1e-6 && Math.abs(p.b - g.a) < 1e-6) p.b = g.b; else merged.push(g);
+    });
+    var sel = merged.findIndex(function (g) { return g.k === k && Math.abs(g.a - a) < 1e-6; });
+    var c = Object.assign({}, this.state.comps); c[id] = merged;
+    this.setState({ comps: c, selSeg: sel >= 0 ? sel : null, edSrc: 'comp' });
+  }
+  pickTake(id, i, dir) {
+    var s = this.state; var old = s.sel[id]; if (old === i) return;
+    var sel = Object.assign({}, s.sel); sel[id] = i;
+    this.last = performance.now();
+    this.setState({ sel: sel, animN: s.animN + 1, animId: id, animDir: dir || (i > old ? 'R' : 'L'), prog: s.order[s.cur] === id ? 0 : s.prog });
+  }
+  timeline() {
+    var s = this.state, self = this, acc = 0, out = [], n = s.order.length;
+    s.order.forEach(function (lid, jj) {
+      var d = self.effDur(lid), gt = jj < n - 1 ? Math.max(s.gaps[lid], 0) : 0;
+      out.push({ kind: 'line', jj: jj, lid: lid, t0: acc, t1: acc + d, d: d, gt: gt });
+      acc += d;
+      if (jj < n - 1) { out.push({ kind: 'gap', jj: jj, lid: lid, t0: acc, t1: acc + gt }); acc += gt; }
+    });
+    return { segs: out, total: acc };
+  }
+  seekTime(t) {
+    var s = this.state, tl = this.timeline(), segs = tl.segs;
+    for (var i = 0; i < segs.length; i++) {
+      var g = segs[i]; if (g.kind !== 'line') continue;
+      if (t <= g.t1 + g.gt || i >= segs.length - 1) {
+        var pr = clamp(t - g.t0, 0, g.d + g.gt);
+        this.setState({ cur: g.jj, prog: pr, loc: { id: g.lid, prog: Math.min(pr, g.d) }, animId: null });
+        return;
+      }
+    }
+  }
+  seekVisual(fx) {
+    var z = this.state.mapZoom; var vs = this.viewStart != null ? this.viewStart : this.state.mapStart;
+    this.seekTime(clamp(vs + fx / z, 0, 0.9999) * this.mapTotal);
+  }
+  visOf(t) {
+    var L = this.mapLayout;
+    for (var i = 0; i < L.length; i++) { var q = L[i]; if (t >= q.t0 && t <= q.t1) return q.v0 + (q.t1 > q.t0 ? (t - q.t0) / (q.t1 - q.t0) : 0) * (q.v1 - q.v0); }
+    return 1;
+  }
+  timeOfVis(fx) {
+    var L = this.mapLayout;
+    for (var i = 0; i < L.length; i++) { var q = L[i]; if (fx >= q.v0 && fx <= q.v1) return q.t0 + (fx - q.v0) / ((q.v1 - q.v0) || 1) * (q.t1 - q.t0); }
+    return fx * this.mapTotal;
+  }
+
+  renderVals() {
+    var self = this;
+    var s = this.state, sc = s.scale, order = s.order, cur = s.cur, id = order[cur], L = LMAP[id], ch = CH[L.ch];
+    var k = s.sel[id], tk = this.td(id, k), sh = shade(ch.rgb, k), n = L.takes.length;
+    var colW = 'min(' + Math.round(640 * sc) + 'px, 88%)';
+    var tr = s.trims[id] || { h: 0, t: 1 };
+    var ed = this.effDur(id);
+
+    // timeline + scene map
+    var tl = this.timeline(), total = tl.total || 1;
+    var curSeg = tl.segs.find(function (g) { return g.kind === 'line' && g.jj === cur; });
+    var elapsed = curSeg.t0 + Math.min(s.prog, curSeg.d + curSeg.gt);
+    var locIdx = order.indexOf(s.loc.id);
+    var locSeg = tl.segs.find(function (g) { return g.kind === 'line' && g.jj === locIdx; });
+    var locT = locSeg ? locSeg.t0 + Math.min(s.loc.prog, locSeg.d) : 0;
+    var z = s.mapZoom, vs = clamp(s.mapStart, 0, 1 - 1 / z), ef = elapsed / total;
+    if (s.playing && (ef < vs || ef > vs + 1 / z)) vs = clamp(ef - 0.1 / z, 0, 1 - 1 / z);
+    this.viewStart = vs; this.mapTotal = total;
+    var map = tl.segs.map(function (g) {
+      var w = Math.max(g.t1 - g.t0, 0.0001).toFixed(4);
+      if (g.kind !== 'line') return { style: 'flex: ' + w + ' 1 0; background: rgba(255,255,255,0.07)', lbl: '' };
+      var c = CH[LMAP[g.lid].ch];
+      return { style: 'flex: ' + w + ' 1 0; background: ' + rgba(shade(c.rgb, s.sel[g.lid]), g.jj === cur ? 1 : (g.jj < cur ? 0.78 : 0.4)), lbl: z >= 2.5 ? c.label.charAt(0) : '' };
+    });
+
+    // Options rows
+    var lineRec = function (j) {
+      var lid = order[j], l = LMAP[lid], c = CH[l.ch], kk = s.sel[lid], shd = shade(c.rgb, kk), d = Math.abs(j - cur), nt = l.takes.length, fav = !!s.favs[lid + ':' + kk];
+      var edges = nt > 2 ? ', 7px 0 0 -3px ' + rgba(shd, 0.18) + ', 14px 0 0 -6px ' + rgba(shd, 0.1) : (nt > 1 ? ', 7px 0 0 -3px ' + rgba(shd, 0.18) : '');
+      return { isLine: true, isGap: false, isActive: false, name: c.label, nameColor: c.name, nmSize: Math.max(10, Math.round(11 * sc)), info: (fav ? '★ ' : '') + (kk + 1) + '/' + nt,
+        hasParen: !!l.paren, paren: l.paren || '', parenSize: Math.round(13 * sc), fs: Math.round(18 * sc), text: l.takes[kk][0],
+        style: 'border-radius: ' + Math.round(24 * sc) + 'px; padding: ' + Math.round(16 * sc) + 'px ' + Math.round(22 * sc) + 'px ' + Math.round(18 * sc) + 'px; opacity: ' + Math.max(0.35, 1 - d * 0.12).toFixed(2) + '; background: linear-gradient(115deg, ' + rgba(shd, 0.2) + ' 0%, ' + rgba(shd, 0.06) + ' 40%, rgba(255,255,255,0.025) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.09)' + edges + ', 0 18px 50px rgba(0,0,0,0.35)',
+        pick: function () { self.select(j); }, open: function () { self.select(j); self.openEditor(); } };
+    };
+    var gapRec = function (j) {
+      var lid = order[j], l = LMAP[lid], g = s.gaps[lid], d = Math.abs(j - cur) + 0.5;
+      return { isLine: false, isGap: true, isActive: false, hasAct: !!l.act, act: l.act || '', fs: Math.round(13 * sc),
+        style: l.act ? 'opacity: ' + Math.max(0.35, 1 - d * 0.12).toFixed(2) + '; margin: ' + Math.round(Math.max(g, 0) * 6 * sc) + 'px 0' : 'height: ' + Math.round(Math.max(g, 0) * 10 * sc) + 'px; margin: ' + (g < 0 ? Math.round(g * 14) : 0) + 'px 0 0' };
+    };
+    var live = s.playing || s.prog > 0;
+    var f = tr.h + Math.min(1, s.prog / ed) * (tr.t - tr.h);
+    var words = tk.words.map(function (w) {
+      var st;
+      if (w.e <= tr.h + 0.002 || w.s >= tr.t - 0.002) st = 'transform: none; color: rgba(243,241,236,0.28); text-decoration: line-through';
+      else if (!live || w.e < f) st = 'transform: none; color: #F3F1EC';
+      else if (w.s <= f) st = 'transform: scale(1.22); color: #FFF4EC; text-shadow: 0 0 22px ' + rgba(sh, 0.95);
+      else st = 'transform: none; color: rgba(243,241,236,0.42)';
+      return { w: w.t, sp: ' ', style: st };
+    });
+    var R = Math.round(32 * sc);
+    var deck = [];
+    for (var di = 1; di <= Math.min(3, n - 1); di++) {
+      var o = (k + di) % n, osh = shade(ch.rgb, o);
+      deck.push({ num: String(o + 1), style: 'left: 0; top: 0; right: 0; bottom: 0; border-radius: ' + R + 'px; transform: translateX(' + (di * 16) + 'px) scaleY(' + (1 - di * 0.07).toFixed(2) + '); z-index: ' + (4 - di) + '; background: linear-gradient(' + (110 + o * 14) + 'deg, ' + solid(mix(osh, BASE, 0.5 - di * 0.08)) + ', ' + solid(mix(osh, BASE, 0.22)) + '); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08), 6px 0 18px rgba(0,0,0,0.35)' });
+    }
+    var animOn = s.animN && s.animId === id;
+    var curFav = !!s.favs[id + ':' + k];
+    var activeRec = { isLine: false, isGap: false, isActive: true, ref: this.setActive, deck: deck,
+      boxAnim: animOn ? 'in' + s.animDir + (s.animN % 2) : '', flashCls: animOn ? 'fl' + (s.animN % 2) : '',
+      flashStyle: 'left: 0; top: 0; right: 0; bottom: 0; border-radius: inherit; background: radial-gradient(circle at ' + (s.animDir === 'R' ? '85%' : '15%') + ' 50%, ' + rgba(sh, 0.7) + ', transparent 65%)',
+      boxStyle: 'min-height: ' + Math.round(190 * sc) + 'px; border-radius: ' + R + 'px; padding: ' + Math.round(24 * sc) + 'px ' + Math.round(34 * sc) + 'px; background: linear-gradient(' + (110 + k * 14) + 'deg, ' + solid(mix(sh, BASE, 0.48)) + ' 0%, ' + solid(mix(sh, BASE, 0.2)) + ' 50%, ' + solid(BASE) + ' 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.13), inset 0 0 0 1px ' + rgba(sh, 0.34) + ', 0 24px 90px ' + rgba(sh, s.playing ? 0.34 : 0.18) + ', 0 18px 50px rgba(0,0,0,0.4)',
+      name: ch.label, nameColor: ch.name, fav: curFav, takePos: (k + 1) + ' / ' + n,
+      hasParen: !!L.paren, paren: L.paren || '', parenSize: Math.round(14 * sc), actFs: Math.round(24 * sc), words: words,
+      pills: L.takes.map(function (t, i) {
+        var psh = shade(ch.rgb, i), fav = !!s.favs[id + ':' + i];
+        var st = i === k ? 'background: ' + rgba(psh, 0.92) + '; color: #15100C' : 'background: rgba(255,255,255,0.06); color: rgba(240,238,232,0.74); box-shadow: inset 0 -2px 0 ' + rgba(psh, 0.85);
+        if (L.partial === i) st += '; outline: 1px dashed rgba(240,238,232,0.45); outline-offset: -1px';
+        return { label: (i + 1) + (fav ? ' ★' : ''), style: st, aria: 'Take ' + (i + 1) + (fav ? ', favorite' : '') + (L.partial === i ? ', partial' : ''), pick: function () { self.pickTake(id, i); self.focusRoot(); } };
+      }),
+      dir: L.takes[k][1], fb: L.takes[k][2], meta: ed.toFixed(1) + ' s · match ' + (86 + hash(id + k) % 12) + '%' + (L.partial === k ? ' · partial' : ''),
+      time: fmt(elapsed), open: function () { self.openEditor(); } };
+    var rows = [];
+    order.forEach(function (lid, j) { rows.push(j === cur ? activeRec : lineRec(j)); if (j < order.length - 1) rows.push(gapRec(j)); });
+
+    // Arrange
+    var S = Math.round(92 * sc), arr = [], lay = [], y = 0, prevOv = 0;
+    order.forEach(function (lid, jj) {
+      var l = LMAP[lid], c = CH[l.ch], kk = s.sel[lid], t = self.td(lid, kk), shd = shade(c.rgb, kk), trm = s.trims[lid] || { h: 0, t: 1 };
+      var ov = prevOv, top = y - ov; lay.push({ id: lid, top: top, h: S });
+      var dragging = s.dragId === lid, isCur = jj === cur;
+      var headClip = inWord(t.words, trm.h), tailClip = inWord(t.words, trm.t);
+      var moved = jj === 0 ? LIDX[lid] !== 0 : LIDX[order[jj - 1]] !== LIDX[lid] - 1;
+      var hasLoc = s.loc.id === lid, hasHead = isCur && (s.playing || s.prog > 0);
+      arr.push({ isLine: true, isGap: false, name: c.label, nameColor: c.name, text: l.takes[kk][0], fs: Math.round(15 * sc), moved: moved, clip: headClip || tailClip,
+        dur: (t.dur * (trm.t - trm.h)).toFixed(1) + ' s', stripH: Math.round(30 * sc), wave: t.wave, fill: rgba(shd, 0.85),
+        hPct: pct(trm.h), tPct: pct(trm.t), tPctR: pct(1 - trm.t), hCol: headClip ? '#E6B84C' : 'rgba(243,241,236,0.9)', tCol: tailClip ? '#E6B84C' : 'rgba(243,241,236,0.9)',
+        hasLoc: hasLoc, locPct: pct(clamp(trm.h + (hasLoc ? s.loc.prog : 0) / t.dur, 0, 1)),
+        hasHead: hasHead, headPct: pct(clamp(trm.h + s.prog / t.dur, 0, 1)),
+        style: 'height: ' + S + 'px; margin-top: ' + (-ov) + 'px; z-index: ' + (dragging ? 30 : 2) + '; transform: translateY(' + (dragging ? s.dragDY.toFixed(1) : 0) + 'px)' + (dragging ? ' rotate(-1deg)' : '') + '; transition: ' + (dragging ? 'none' : 'transform .2s') + '; mix-blend-mode: ' + (ov > 0 ? 'screen' : 'normal') + '; background: linear-gradient(90deg, ' + rgba(shd, isCur ? 0.44 : 0.28) + ', ' + rgba(shd, 0.1) + ' 60%, rgba(255,255,255,0.03)); box-shadow: inset 0 0 0 ' + (isCur ? 1.5 : 1) + 'px ' + rgba(shd, isCur ? 0.75 : 0.2) + (dragging ? ', 0 30px 60px rgba(0,0,0,0.55)' : (isCur ? ', 0 16px 60px ' + rgba(shd, 0.22) : '')),
+        pick: function () { self.select(jj); }, open: function () { self.select(jj); self.openEditor(); },
+        stop: function (e) { e.stopPropagation(); },
+        scrub: function (e) { e.preventDefault(); e.stopPropagation(); self.focusRoot(); var r = e.currentTarget.getBoundingClientRect(); self.drag = { type: 'strip', id: lid, j: jj, left: r.left, width: r.width }; self.stripSet(lid, jj, clamp((e.clientX - r.left) / r.width, 0, 1)); },
+        grab: function (e) { e.preventDefault(); e.stopPropagation(); self.focusRoot(); self.drag = { type: 'reorder', id: lid, y0: e.clientY }; self.setState({ dragId: lid, dragDY: 0 }); },
+        grabH: function (e) { e.preventDefault(); e.stopPropagation(); self.focusRoot(); var r = e.currentTarget.parentElement.getBoundingClientRect(); self.drag = { type: 'trim', id: lid, edge: 'h', left: r.left, width: r.width }; },
+        grabT: function (e) { e.preventDefault(); e.stopPropagation(); self.focusRoot(); var r = e.currentTarget.parentElement.getBoundingClientRect(); self.drag = { type: 'trim', id: lid, edge: 't', left: r.left, width: r.width }; } });
+      y = top + S;
+      if (jj < order.length - 1) {
+        var g = s.gaps[lid], gh = Math.round((18 + Math.max(g, 0) * 14) * sc), nov = g < 0 ? Math.round(-g * 44 * sc) : 0;
+        arr.push({ isLine: false, isGap: true, h: gh, label: g < 0 ? 'overlap ' + (-g).toFixed(2) + ' s' : '‖ ' + g.toFixed(2) + ' s', pillColor: g < 0 ? '#E9DDFF' : 'rgba(240,238,232,0.78)', hasAct: !!l.act, act: l.act || '',
+          grab: function (e) { e.preventDefault(); e.stopPropagation(); self.focusRoot(); self.drag = { type: 'gap', id: lid, y0: e.clientY, g0: s.gaps[lid] }; } });
+        y += gh; prevOv = nov;
+      }
+    });
+    var arrOff = lay[cur] ? lay[cur].top + S / 2 : 0;
+    var dropOn = false, dropY = 0; this.dropT = null;
+    if (s.dragId) {
+      var dl = lay.find(function (q) { return q.id === s.dragId; });
+      var center = dl.top + s.dragDY + S / 2;
+      var others = lay.filter(function (q) { return q.id !== s.dragId; });
+      var tIdx = others.filter(function (q) { return q.top + q.h / 2 < center; }).length;
+      this.dropT = tIdx; dropOn = true;
+      dropY = tIdx < others.length ? others[tIdx].top - 6 : others[others.length - 1].top + S + 6;
+    }
+
+    // Editor
+    var cp = this.comp(id), dur = tk.dur, ep = s.edPos, src = this.srcOf();
+    var hl = function (shd) { return 'color: #FFFFFF; font-weight: 700; text-shadow: 0 0 12px ' + rgba(shd, 1) + ', 0 1px 6px rgba(0,0,0,0.9)'; };
+    var segs = cp.map(function (g, i) {
+      var t = self.td(id, g.k), gsh = shade(ch.rgb, g.k), w = g.b - g.a, ms = Math.round(g.n * dur * 1000);
+      var inSeg = src === 'comp' && ep >= g.a && ep <= g.b, sp = ep - g.n;
+      return { outer: 'left: ' + pct(g.a) + '%; width: ' + pct(w) + '%; background: ' + rgba(gsh, 0.16) + '; box-shadow: inset 0 0 0 ' + (s.selSeg === i ? 2 : 0) + 'px ' + rgba(gsh, 1) + ', inset 0 -3px 0 ' + rgba(gsh, 0.95),
+        inner: 'left: ' + (-(g.a - g.n) / w * 100).toFixed(3) + '%; width: ' + (100 / w).toFixed(3) + '%',
+        wave: t.wave, fill: rgba(gsh, 0.85),
+        words: t.words.map(function (ww) { var on = inSeg && sp >= ww.s && sp <= ww.e; return { t: ww.t, style: 'left: ' + pct(ww.s) + '%; width: ' + pct(ww.e - ww.s) + '%' + (on ? '; ' + hl(gsh) : '') }; }),
+        chip: 'T' + (g.k + 1) + (ms ? (ms > 0 ? ' +' : ' ') + ms + ' ms' : ''), chipStyle: 'background: ' + rgba(gsh, 0.92),
+        down: function (e) { e.preventDefault(); e.stopPropagation(); self.focusRoot(); var r = e.currentTarget.parentElement.getBoundingClientRect(); self.drag = { type: 'segpress', id: id, i: i, x0: e.clientX, n0: g.n, width: r.width, f0: clamp((e.clientX - r.left) / r.width, 0, 1) }; self.setState({ selSeg: i }); } };
+    });
+    var seams = [];
+    for (var si = 1; si < cp.length; si++) {
+      var A = cp[si - 1], B = cp[si], x = B.a;
+      var warn = Math.abs(A.b - B.a) < 1e-6 && (inWord(this.td(id, A.k).words, x - A.n) || inWord(this.td(id, B.k).words, x - B.n));
+      seams.push({ style: 'left: ' + pct(x) + '%; background: ' + (warn ? '#E6B84C' : 'rgba(240,238,232,0.75)') + (warn ? '; box-shadow: 0 0 10px rgba(230,184,76,0.8)' : '') });
+    }
+    var edWords = [];
+    cp.forEach(function (g) { self.td(id, g.k).words.forEach(function (ww) { var m = (ww.s + ww.e) / 2 + g.n; if (m >= g.a && m < g.b) edWords.push(ww.t); }); });
+    var usedTakes = [];
+    cp.forEach(function (g) { if (usedTakes.indexOf(g.k) < 0) usedTakes.push(g.k); });
+    var lanes = L.takes.map(function (t, i) {
+      var t2 = self.td(id, i), lsh = shade(ch.rgb, i), p = s.paint && s.paint.k === i ? s.paint : null, fav = !!s.favs[id + ':' + i], isSrc = src === i;
+      var used = cp.filter(function (g) { return g.k === i; }).map(function (g) { return { style: 'left: ' + pct(g.a - g.n) + '%; width: ' + pct(g.b - g.a) + '%; background: ' + rgba(lsh, 1) }; });
+      return { label: (isSrc ? '▶ ' : '') + 'T' + (i + 1) + (fav ? ' ★' : '') + (i === k ? ' · picked' : ''), note: t[1], aria: 'Use whole take ' + (i + 1),
+        wave: t2.wave, fill: rgba(lsh, isSrc ? 0.9 : (used.length ? 0.72 : 0.42)), used: used,
+        words: t2.words.map(function (ww) { var on = isSrc && ep >= ww.s && ep <= ww.e; return { t: ww.t, style: 'left: ' + pct(ww.s) + '%; width: ' + pct(ww.e - ww.s) + '%' + (on ? '; ' + hl(lsh) : '') }; }),
+        painting: !!p, paintStyle: p ? 'left: ' + pct(Math.min(p.a, p.b)) + '%; width: ' + pct(Math.abs(p.b - p.a)) + '%; background: ' + rgba(lsh, 0.25) + '; box-shadow: inset 0 0 0 1px ' + rgba(lsh, 0.95) : '',
+        areaStyle: 'background: ' + rgba(lsh, isSrc ? 0.1 : 0.05) + (isSrc ? '; box-shadow: inset 0 0 0 1.5px ' + rgba(lsh, 0.9) : '') + (L.partial === i ? '; outline: 1px dashed rgba(240,238,232,0.3); outline-offset: -1px' : ''),
+        labelStyle: 'box-shadow: inset 3px 0 0 ' + rgba(lsh, 0.95) + (isSrc ? '; background: ' + rgba(lsh, 0.18) : ''),
+        useAll: function () { self.useWhole(id, i); self.focusRoot(); },
+        down: function (e) { e.preventDefault(); e.stopPropagation(); self.focusRoot(); var r = e.currentTarget.getBoundingClientRect(); self.drag = { type: 'press', i: i, left: r.left, width: r.width, x0: e.clientX, f0: clamp((e.clientX - r.left) / r.width, 0, 1) }; } };
+    });
+    var edD = this.edDur(), ticks = [];
+    for (var ts = 0; ts <= edD + 0.001; ts += 0.5) ticks.push({ style: 'left: ' + pct(ts / edD) + '%', label: ts.toFixed(1) });
+    var compSrc = src === 'comp';
+
+    var isOpt = s.view === 'options';
+    var activeBtn = 'background: rgba(240,238,232,0.92); color: #14161C; font-weight: 600';
+    var idleBtn = 'color: rgba(240,238,232,0.68); font-weight: 500';
+    return {
+      setRoot: this.setRoot, onKey: this.onKey, onRootDown: this.onRootDown, onMove: this.onMove, onUp: this.onUp,
+      isOptions: isOpt, isArrange: !isOpt, colW: colW, rows: rows, optOff: s.optOff.toFixed(1), optTrans: s.optReady ? 'transform .34s cubic-bezier(.22,.9,.25,1)' : 'none',
+      name: ch.label, nameColor: ch.name,
+      timeNow: fmt(elapsed), timeTotal: fmt(total), map: map, mapPos: (ef * 100).toFixed(3), mapLocPos: (locT / total * 100).toFixed(3), locOnMap: locIdx >= 0,
+      mapLeft: (-vs * z * 100).toFixed(3), mapWidth: (z * 100).toFixed(2), setMapEl: this.setMapEl, mapDown: this.mapDown,
+      barMid: (z > 1.05 ? 'zoom ×' + z.toFixed(1) + ' · ' : '⌘ scroll to zoom · ') + (isOpt ? (ch.label + ' · take ' + (k + 1) + ' of ' + n + (curFav ? ' · ★' : '')) : 'drag ⠿ to reorder, drag a pause to stretch or overlap'),
+      playing: s.playing, notPlaying: !s.playing, playRing: s.playing ? rgba(sh, 0.3) : 'rgba(255,255,255,0.06)',
+      onPlay: this.onPlay, onFav: this.onFav, onFromLoc: this.onFromLoc, openEditor: this.openEditor, closeEditor: this.closeEditor,
+      favColor: curFav ? ch.name : 'rgba(240,238,232,0.72)', favBg: curFav ? rgba(sh, 0.16) : 'transparent', favFill: curFav ? ch.name : 'none',
+      hint: isOpt ? 'Space play · ⇧Space from locator · ← → takes · ↑ ↓ or scroll for lines · F favorite · E edit · ? all keys' : 'Space play · ⇧Space from locator · click waveform for locator · I O in/out · ⌥↑ ⌥↓ move · ? all keys',
+      goOptions: this.goOptions, goArrange: this.goArrange, optBtn: isOpt ? activeBtn : idleBtn, arrBtn: isOpt ? idleBtn : activeBtn,
+      scale: sc, onScale: this.onScale, toggleHelp: this.toggleHelp, help: s.help,
+      arr: arr, arrW: 'min(' + Math.round(600 * sc) + 'px, 86%)', arrHalf: Math.round(300 * sc), arrOff: arrOff.toFixed(1), arrTrans: s.dragId ? 'none' : 'transform .3s cubic-bezier(.2,.8,.2,1)',
+      dropOn: dropOn, dropY: dropY.toFixed(1),
+      editor: s.editor, edBg: 'background: linear-gradient(160deg, ' + rgba(sh, 0.18) + ' 0%, rgba(22,24,31,0.9) 32%, rgba(20,22,29,0.94) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), inset 0 0 0 1px rgba(255,255,255,0.05), 0 40px 120px rgba(0,0,0,0.6)',
+      edInfo: 'Line ' + (LIDX[id] + 1) + ' · ' + n + ' takes · ' + dur.toFixed(1) + ' s', edText: edWords.join(' '),
+      compLabel: (compSrc ? '▶ ' : '') + 'Comp', compInfo: cp.length === 1 ? 'whole T' + (cp[0].k + 1) : cp.length + ' parts from ' + usedTakes.map(function (q) { return 'T' + (q + 1); }).join(' '),
+      compLblStyle: compSrc ? 'box-shadow: inset 3px 0 0 #F3F1EC; background: rgba(255,255,255,0.12)' : '', compAreaStyle: 'box-shadow: inset 0 0 0 ' + (compSrc ? '1.5px rgba(240,238,232,0.7)' : '1px rgba(255,255,255,0.08)'),
+      auditionComp: this.auditionComp, rulerDown: this.rulerDown, ticks: ticks, edTime: (ep * edD).toFixed(2) + ' s', edLocPct: pct(s.edLoc),
+      segs: segs, seams: seams, lanes: lanes, showWords: s.showWords,
+      wordsBtn: s.showWords ? 'background: rgba(240,238,232,0.14); color: #F3F1EC' : 'background: rgba(255,255,255,0.04); color: rgba(240,238,232,0.6)',
+      toggleWords: this.toggleWords, resetComp: this.resetComp,
+      edHeadStyle: 'left: calc(162px + (100% - 162px) * ' + ep.toFixed(4) + ')', edLocStyle: 'left: calc(162px + (100% - 162px) * ' + s.edLoc.toFixed(4) + ')',
+      edPlaying: s.edPlaying, edStopped: !s.edPlaying, edPlayToggle: this.edPlayToggle, edPlayLabel: compSrc ? 'Play comp' : 'Play T' + (src + 1),
+      edPlayBtn: 'background: ' + rgba(sh, 0.22) + '; box-shadow: inset 0 0 0 1px ' + rgba(sh, 0.45)
+    };
+  }
+}
+</script>
+</body>
+</html>

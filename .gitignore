@@ -1,0 +1,22 @@
+# Unreleased production material: only the README is tracked
+fixtures/*
+!fixtures/README.md
+
+# Build output
+target/
+node_modules/
+app/dist/
+app/src-tauri/target/
+app/src-tauri/gen/
+app/test-results/
+app/playwright-report/
+
+# Local state
+.env
+.env.*
+Cache/
+.DS_Store
+*.apc-wal
+*.apc-shm
+*.apcshow-wal
+*.apcshow-shm
