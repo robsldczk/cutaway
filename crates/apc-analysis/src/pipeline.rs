@@ -28,6 +28,8 @@ pub const FEEDBACK_WINDOW_S: f64 = 8.0;
 pub const DIRECTION_WINDOW_S: f64 = 30.0;
 /// Takes quieter than this on their own mic are bleed.
 pub const BLEED_DB: f64 = -38.0;
+/// Takes this far below the mic's median take level are bleed too.
+pub const RELATIVE_BLEED_DB: f64 = 10.0;
 
 pub struct Providers<'a> {
     pub asr: &'a dyn AsrProvider,
@@ -336,6 +338,14 @@ pub fn analyze(
                 before: vec![],
                 after: vec![],
             });
+        }
+        // Bleed: quiet in absolute terms, or far below this mic's typical take level.
+        let mut levels: Vec<f64> = mine.iter().map(|t| t.db).collect();
+        levels.sort_by(f64::total_cmp);
+        if let Some(median) = levels.get(levels.len() / 2).copied() {
+            for t in mine.iter_mut() {
+                t.bleed = t.db < BLEED_DB || t.db < median - RELATIVE_BLEED_DB;
+            }
         }
         mine.sort_by(|a, b| a.t0.total_cmp(&b.t0));
         for i in 1..mine.len() {

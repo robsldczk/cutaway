@@ -308,14 +308,14 @@ pub trait SoundGenerateProvider: Send + Sync {
 - [x] Cut list CSV + Markdown
 - [x] Bounce per scene (offline render; MP3 via ffmpeg)
 - [x] Structural FCPXML validation test (DTD check runs when Final Cut Pro is installed)
-- [ ] Cut list golden test (needs the demo session; done in M4)
+- [x] Cut list golden test (demo session, `crates/apc-app/tests/golden/`)
 
 ### M4: CLI and MCP server
-- [ ] `apc-app` service + method registry (JSON schemas)
-- [ ] `cutaway` CLI with all spec commands
-- [ ] MCP server (rmcp, stdio): tools, resources, `confirm: true` for destructive tools
-- [ ] Integration test: pipeline via CLI and via MCP (in-process client) with identical results
-- [ ] README: add the server to Claude Desktop and Claude Code
+- [x] `apc-app` service + method registry (JSON schemas)
+- [x] `cutaway` CLI with all spec commands
+- [x] MCP server (rmcp, stdio): tools, resources, `confirm: true` for destructive tools
+- [x] Integration test: pipeline via CLI and via MCP (in-process client) with identical results
+- [x] README: add the server to Claude Desktop and Claude Code
 
 ### M5: Audio engine
 - [ ] Schedule from layout: per-clip gain (LUFS match), equal-power fades at splices, gaps, room tone bed, lanes/layers
@@ -377,3 +377,4 @@ pub trait SoundGenerateProvider: Send + Sync {
 - 2026-10-31 M1 done: entity store + command bus (persisted undo/redo, multi-client rev sync), Fountain parser (matches Stage 0 unit numbering on the fixture, 27 PAUL lines), script versions with ID-keeping diff, autosave/rotation/named versions/revert, copy/reference import with BLAKE3 + relink, shared timing model. 39 tests. Push after M1 was refused by the session's permission check; commits stay local until a push is allowed.
 - 2026-10-31 M2 done: media (symphonia decode, envelopes, peaks, EBU R128, sync, BWF), AI layer (tasks + schemas, Claude Code + mock providers, versioned prompts, cache, call log), aligner port (bit-parallel fuzzy ratio, two passes, short-line rule, bleed, edges, overlaps), takes/types/word maps, room classification, note linking, picks. Fixture acceptance passes: 36 PAUL takes on 9 lines, 5/4/4/10 takes, one 'time machine' partial, picks Science T4 / Lunch T4 / edible T3 as defaults, room offset +0.275 s. Analysis runs in 1.2 s. Parakeet via sherpa-onnx behind the `parakeet` feature (fixture run pending at commit time).
 - 2026-10-31 M3 done: FCPXML 1.9 (lanes per role, source TC, fades, scene + note markers), SRT, cut list CSV/Markdown, per-scene bounce through the shared offline mixer (MP3 via ffmpeg). Structural FCPXML test green; no FCP DTD on this Mac. Schedule/mixer/offline render of M5 built early (D27). Parakeet fixture run: works end to end, 26/35+ takes (test ignored with reason).
+- 2026-10-31 M4 done: apc-app service (method registry with schemas, views, jobs, player with virtual clock, sound glue, synthetic demo session, HTTP dev bridge), `cutaway` CLI with all spec commands, rmcp 3.8 MCP server (tools from the registry, 4 resource kinds, confirm for destructive tools). Parity test: CLI and MCP give identical results on the demo and the TARMAC fixture. apc-sound library/providers written early. Golden cut list on the demo session.

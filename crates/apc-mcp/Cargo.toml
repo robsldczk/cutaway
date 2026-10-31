@@ -9,9 +9,14 @@ publish.workspace = true
 [dependencies]
 apc-core.workspace = true
 apc-app.workspace = true
+apc-export = { path = "../apc-export" }
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+rmcp = { version = "3.8", features = ["server", "client", "transport-io", "transport-async-rw"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "sync"] }
 
 [dev-dependencies]
 tempfile.workspace = true
+apc-cli = { path = "../apc-cli" }
+clap.workspace = true

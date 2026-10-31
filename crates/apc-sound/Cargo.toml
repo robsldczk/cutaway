@@ -18,5 +18,7 @@ blake3.workspace = true
 ureq.workspace = true
 chrono.workspace = true
 
+schemars.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true

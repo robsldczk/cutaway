@@ -103,3 +103,22 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Context:** M3 allows an ffmpeg bounce until M5.
 - **Choice:** the schedule, mixer and offline render of the M5 engine were built during M3, so the bounce already uses the shared graph; ffmpeg is used only to encode MP3.
 - **Reason:** avoids a throwaway bounce path.
+
+### D28 Epidemic Sound and MCP-client sound providers are stubs
+- **Context:** M7 asks for Epidemic Sound search (API or MCP if available) and optionally an MCP-client generation provider (Magnific).
+- **Choice:** both sit behind the provider traits and report "unavailable" with a reason; ElevenLabs generation and local library search are real. `[sound.search]` / `[sound.generate]` in the project config pick the providers.
+- **Reason:** no Epidemic API credentials or documented endpoint were available offline, and an MCP client inside the app is a larger piece of work; the interfaces are in place.
+
+### D29 Analysis jobs run on a worker thread, not a separate process
+- **Context:** the architecture wants analysis in a separate process so a crash never blocks the editor.
+- **Choice:** `start_analysis` runs on a worker thread with its own database connection and `catch_unwind`; the editor picks up the result through the revision check. The CLI (`cutaway align`) is the process-separated path today.
+- **Reason:** same isolation for panics and long jobs with far less plumbing; a sidecar process can replace the thread later without changing the UI.
+
+### D30 One service, many clients
+- **Choice:** `apc-app::Session::call(method, params)` is the only entry point. The registry (`methods()`) carries a JSON schema per method; the MCP tool list is generated from it, the CLI maps subcommands onto it, the Tauri shell and the HTTP dev bridge forward `rpc(method, params)` to it. A `command` method accepts any document command (used by the UI).
+- **Reason:** identical behaviour across UI, CLI and MCP is guaranteed by construction (the parity test checks it).
+
+### D31 Relative bleed detection
+- **Context:** Stage 0 drops takes quieter than −38 dB. On the demo session a reader's cue picked up by an open mic passed that threshold.
+- **Choice:** a take is bleed if it is below −38 dB **or** more than 10 dB below the median level of that mic's takes.
+- **Reason:** absolute thresholds depend on gain staging; the fixture results are unchanged.

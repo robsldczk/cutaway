@@ -1,1 +1,16 @@
-//! Placeholder, filled in by its milestone.
+//! The service layer shared by every client: the Tauri UI, the `cutaway` CLI, the MCP
+//! server and the HTTP dev bridge all go through `Session::call` / `Service::call`.
+
+pub mod bridge;
+pub mod demo;
+pub mod error;
+pub mod jobs;
+pub mod methods;
+pub mod player;
+pub mod service;
+pub mod sound;
+pub mod views;
+
+pub use error::{AppError, Result};
+pub use methods::{methods, Access, MethodInfo, Session};
+pub use service::Service;
