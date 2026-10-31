@@ -18,6 +18,7 @@ export function onKey(e: KeyboardEvent) {
     else if (app.drawer) app.drawer = null;
     else app.passageTo = null;
   } else if (app.overlay) handled = false;
+  else if (app.page === 'import' && !(e.shiftKey && (k === 'b' || k === 'B')) && !['1', '2', '3'].includes(k)) handled = false;
   else if (k === ' ' && e.shiftKey) void app.playFromLocator();
   else if (k === ' ') void app.togglePlay();
   else if (k === 'Enter') void app.playLineInContext();
@@ -36,10 +37,13 @@ export function onKey(e: KeyboardEvent) {
   else if ((k === 'o' || k === 'O') && app.page !== 'edit') void setInOut('out');
   else if (k === 'p' || k === 'P') void app.applyPassage();
   else if (k === 'u' || k === 'U') app.drawer = app.drawer === 'unmatched' ? null : 'unmatched';
+  else if ((k === 'b' || k === 'B') && e.shiftKey) app.toggleFullBucket();
+  else if ((k === 'b' || k === 'B') && app.page === 'edit') app.editBucket = !app.editBucket;
+  else if (app.page === 'import') handled = false;
   else if (k === 'b' || k === 'B') app.drawer = app.drawer === 'bucket' ? null : 'bucket';
-  else if (k === '1') app.setPage('options');
-  else if (k === '2') app.setPage('arrange');
-  else if (k === '3') app.setPage('edit');
+  else if (k === '1' && app.view) app.setPage('options');
+  else if (k === '2' && app.view) app.setPage('arrange');
+  else if (k === '3' && app.view) app.setPage('edit');
   else if (k === '+' || k === '=') app.scale = Math.min(1.3, Math.round((app.scale + 0.05) * 100) / 100);
   else if (k === '-' || k === '_') app.scale = Math.max(0.8, Math.round((app.scale - 0.05) * 100) / 100);
   else if (k === ',') void app.nudgeGap(-0.1);

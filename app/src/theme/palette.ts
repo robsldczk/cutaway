@@ -22,6 +22,13 @@ export const CHARACTER_COLORS: CharacterColor[] = [
   { key: 'yamabuki', rgb: [222, 172, 72], name: '#EFCB8A', nameLight: '#8A5F06' },
 ];
 
+/** Editor lane colours: gold for sound effects, blue grey for room tone and ambience, indigo for music. */
+export const LANE_COLORS: Record<'sfx' | 'room' | 'music', Rgb> = {
+  sfx: [216, 182, 87],
+  room: [154, 166, 184],
+  music: [125, 147, 232],
+};
+
 /** Shade steps per take index: lighter, darker, lighter still, darker still. */
 export const TAKE_SHADES = [0, 0.34, -0.32, 0.58, -0.52];
 

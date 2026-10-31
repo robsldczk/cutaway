@@ -190,3 +190,116 @@ textarea {
     display: none !important;
   }
 }
+
+/* ---- Round 2 (Import, Edit control bar) ---- */
+.tn {
+  font-variant-numeric: tabular-nums;
+}
+.seg {
+  display: flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-fill-2);
+}
+.tab {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.tab.on {
+  background: var(--button-light-active);
+  color: var(--text-on-light);
+  font-weight: 600;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--glass-fill-4);
+  white-space: nowrap;
+}
+.chip.outline {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgb(var(--veil-rgb) / 0.15);
+}
+.ib {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+}
+.ib:hover {
+  background: var(--glass-hover);
+}
+.ib.on {
+  background: var(--button-light-active);
+  color: var(--text-on-light);
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+/* file type chips: a recording is solid, a director room file outlined */
+.rec,
+.dir {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.rec {
+  background: var(--button-light-active);
+  color: var(--text-on-light);
+}
+.dir {
+  box-shadow: inset 0 0 0 1.5px rgb(var(--ink-rgb) / 0.55);
+  color: var(--text-1);
+}
+.kwfield {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-height: 38px;
+  padding: 5px 10px;
+  border-radius: 14px;
+  background: var(--glass-fill-2);
+  box-sizing: border-box;
+}
+.kwfield input {
+  flex: 1;
+  min-width: 80px;
+  background: none;
+  border: 0;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+}
+.chip .rm {
+  margin-right: -3px;
+  opacity: 0.6;
+  font-size: 12px;
+  line-height: 1;
+}

@@ -345,6 +345,14 @@ pub trait SoundGenerateProvider: Send + Sync {
 - [x] Cross-platform paths (no Windows verbatim prefixes in stored paths or FCPXML URLs), dialogs (Tauri plugin), audio device (cpal default host); ONNX DirectML/CPU provider selection; LF line endings via .gitattributes
 - [ ] Windows CI job green (build + unit tests): not run, pushes are blocked in this session (see RUN_REPORT)
 
+### M9: Round 2 screens (tasks/, second run)
+- [x] Core: sound buckets (entity + commands), lane mix (volume, pan, mute, solo) applied by the schedule, fade curves, split, `ApplyMatch` with hand-set room links
+- [x] Service: `buckets`, `spot_buckets`, bucket CRUD, `bucket_search` (paging, length and leave-out filters), `bucket_download`, `bucket_generate`, `place_from_bucket` (download-on-drop job), `play_sound`; `import_view`, `match_files`, `link_room`, `suggest_character`; edit view with lane mix and room tone seams
+- [x] Epidemic previews, paged search, download progress; engine output level
+- [x] UI: header tabs with Import; Import › Files; Import › Sounds with the bucket panel; Edit with the control bar, tools, cycle, lane groups with M/S, script strip, anchors, inspector, mixer, docked bucket and the collapsed tab; keys B, ⇧B, I, X, C
+- [x] Tests: buckets and import matching (Rust, mock Partner API), lane mix and pan/fade unit tests, Playwright for the three Round 2 areas
+- [x] Docs: `docs/design/round2-screens.md` (the spec files are read-only here); D40–D43
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -385,3 +393,4 @@ pub trait SoundGenerateProvider: Send + Sync {
 - 2026-10-31 M8 partly done: portability fixes and a blocking Windows CI job; the job itself has not run because pushes from this session are refused.
 - 2026-10-31 End of run: RUN_REPORT written. Next run starts with: push + PR, first Windows CI result, Parakeet recall on the fixture (VAD chunking), Epidemic/MCP sound providers, single-take audition in the box editor.
 - 2026-10-31 dev pushed to origin (7d3ffc4..513913f) after the run, at Rob's request.
+- 2026-10-31 M9 done (second run): the four Round 2 screens implemented and wired (Import › Files, Import › Sounds, Edit docked and full screen) on a new bucket/match/lane-mix backend. Download-on-drop checked end to end against a local mock of the Epidemic API; light theme checked on all four screens. Playwright 5/5, check.sh green.

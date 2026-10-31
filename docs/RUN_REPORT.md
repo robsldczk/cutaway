@@ -4,6 +4,25 @@ Branch `dev`, 10 commits on top of the untouched package commit. `scripts/check.
 
 **Pushed:** pushes were refused by the session's permission check during the run; after the run Rob asked again and `dev` was pushed in full. `gh` isn't installed and `main` doesn't exist on the remote yet, so the pull request isn't open. See *What Rob needs to do* below.
 
+## Second run: Round 2 screens
+
+Rob's answers to the first run's questions were applied (commit 1225f7e: in/out keys, medium effort, Parakeet speech regions, Epidemic login through the OS keychain, single-take audition, light theme). Then the four screens in `tasks/` were built and wired:
+
+| Area | What works |
+|---|---|
+| Import › Files | Script and audio drops, cast cards with each recording and its director room file, sync offset, ensemble/solo, **Needs you** fixes (type, character with AI *Suggest*, room link, missing recording, missing file), Redo match that keeps hand-set links, remember-fixes switch, Start analysis with progress, a diff sheet for new script versions. The analysis now uses the matched sessions. |
+| Import › Sounds | Buckets (Spot script groups the AI cues; New bucket with keywords, length and leave-out filters, scenes), sort by scene/tag/show, the side panel with Epidemic Sound previews (audition from any point, download, dismiss, Load 12 more), ElevenLabs generation and library search. |
+| Edit | Control bar (inspector, mixer, five tools, cycle, time display, snap, ripple, zoom, bucket), lane groups with mute/solo applied to playback and bounces, script strip, anchors, room tone seams, inspector (gain, fades, curve, anchor, lane volume/pan, meters), mixer strips, docked scene bucket with drag-to-lane; a preview downloads on drop with progress and lands on its anchor. |
+
+Verified: Rust tests for buckets, previews paging, download-on-drop, splits, lane mix and room links against a mock Partner API; Playwright 5/5; screenshots of all four screens in dark and light; drop-to-download driven end to end in Chromium against a local stand-in of the Epidemic API. Not verified: the real Epidemic Partner API (needs Rob's key) and the screens inside the Tauri window (only in Chromium).
+
+Details: `docs/design/round2-screens.md` (the spec files are read-only in this checkout, so the notes went there), D40–D43.
+
+**Round 2 manual checks for Rob:**
+- Settings → Connections: connect Epidemic Sound with the real key, then Import › Sounds → Spot script → open a bucket → Search. Check that previews play and that a download counts as one use in your Epidemic dashboard (rationale "To check").
+- Import › Files on TARMAC: drop the fixture folder, check the cards, switch a file's type, link a room file by hand, Redo match, Start analysis.
+- Edit: drag a preview onto SFX 1 near an action line and watch it download and snap; try Split, Fade and Gain on a clip; mute and solo lanes while playing; set a cycle range by dragging in the ruler and press C.
+
 ## What was built
 
 | Milestone | State | Notes |

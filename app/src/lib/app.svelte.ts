@@ -1,10 +1,12 @@
 // UI state. Document state comes only from the core (view models); every change is a
 // command sent through the bridge. Local state here is selection, page, playhead, overlays.
 import { call, BridgeError } from './bridge';
-import type { EditView, ItemView, SceneView, Status } from './types';
+import type { EditView, ItemView, Job, SceneView, Status } from './types';
 
-export type Page = 'options' | 'arrange' | 'edit';
-export type Overlay = null | 'help' | 'editor' | 'settings' | 'history' | 'export' | 'import';
+export type Page = 'import' | 'options' | 'arrange' | 'edit';
+export type ImportTab = 'files' | 'sounds';
+export type Tool = 'pointer' | 'split' | 'fade' | 'gain' | 'marquee';
+export type Overlay = null | 'help' | 'editor' | 'settings' | 'history' | 'export';
 export type Drawer = null | 'inspector' | 'unmatched' | 'bucket';
 
 export type Theme = 'dark' | 'light';
@@ -33,12 +35,30 @@ class AppState {
   /** Take auditioned alone in the box editor (`pos` is then seconds into the take). */
   audition = $state<string | null>(null);
   locator = $state(0);
+  /** Output level while playing (0..1, decays). */
+  level = $state(0);
   scale = $state(1);
   overlay = $state<Overlay>(null);
   drawer = $state<Drawer>(null);
   anim = $state({ n: 0, dir: 'R', id: '' });
   toast = $state<string | null>(null);
   busy = $state(false);
+  /** Import page sub-tab. */
+  importTab = $state<ImportTab>('files');
+  // Edit page (Logic-style control bar)
+  editBucket = $state(true);
+  editInspector = $state(false);
+  mixer = $state(false);
+  tool = $state<Tool>('pointer');
+  snapWords = $state(true);
+  ripple = $state(true);
+  cycle = $state<{ on: boolean; from: number; to: number }>({ on: false, from: 0, to: 0 });
+  /** What the edit page has selected (shared with its inspector and the LCD). */
+  editSel = $state<{ kind: 'line' | 'sound' | 'roomtone'; id: string } | null>(null);
+  /** Bucket the full bucket highlights or opens in its side panel. */
+  openBucket = $state<string | null>(null);
+  /** Sound being auditioned from a bucket (asset id or remote id). */
+  sound = $state<string | null>(null);
   private lastRev = -1;
   private playTimer: ReturnType<typeof setInterval> | null = null;
   private revTimer: ReturnType<typeof setInterval> | null = null;
@@ -105,9 +125,10 @@ class AppState {
     }
     if (this.status && this.status.scenes > 0) {
       await this.loadScene(this.sceneId || '1');
+      if (this.status.takes === 0) this.page = 'import';
     } else {
       this.view = null;
-      this.overlay = 'import';
+      this.page = 'import';
     }
     this.watch();
   }
@@ -167,6 +188,28 @@ class AppState {
   setPage(p: Page) {
     this.page = p;
     if (p === 'edit') void this.loadEdit();
+  }
+
+  /** ⇧B: between the editor and the full bucket, keeping scene and playhead. */
+  toggleFullBucket() {
+    if (this.page === 'import') {
+      if (this.view) this.setPage('edit');
+    } else {
+      this.importTab = 'sounds';
+      this.setPage('import');
+    }
+  }
+
+  /** Waits for a background job, reporting progress; resolves with its final state. */
+  async waitJob(id: string, onProgress?: (j: Job) => void): Promise<Job | undefined> {
+    for (;;) {
+      const jobs = await this.run(() => call<Job[]>('job_status'));
+      const j = jobs?.find((x) => x.id === id);
+      if (!j) return undefined;
+      onProgress?.(j);
+      if (j.state !== 'running') return j;
+      await new Promise((r) => setTimeout(r, 250));
+    }
   }
 
   select(lineId: string, keepPassage = false) {
@@ -243,6 +286,7 @@ class AppState {
     const r = await this.run(() => call<{ playing: boolean }>('play', { scene: this.sceneId, from_s: from, until_s: until }));
     if (!r?.playing) return;
     this.audition = null;
+    this.sound = null;
     this.playing = true;
     this.pos = from;
     this.startPolling();
@@ -257,9 +301,21 @@ class AppState {
     this.startPolling();
   }
 
+  /** Auditions a bucket sound (kept asset or preview) from a point in it. */
+  async playSound(key: { asset_id?: string; remote_id?: string }, from = 0) {
+    const r = await this.run(() => call<{ playing: boolean }>('play_sound', { ...key, from_s: from }));
+    if (!r?.playing) return;
+    this.audition = null;
+    this.sound = key.asset_id ?? key.remote_id ?? null;
+    this.playing = true;
+    this.pos = from;
+    this.startPolling();
+  }
+
   async stop() {
     await this.run(() => call('stop'));
     this.playing = false;
+    this.sound = null;
     this.stopPolling();
     if (this.audition) {
       // back on the scene timeline at the line being edited
@@ -270,6 +326,10 @@ class AppState {
 
   async togglePlay() {
     if (this.playing) return this.stop();
+    if (this.page === 'edit' && this.cycle.on && this.cycle.to > this.cycle.from) {
+      const from = this.pos >= this.cycle.from && this.pos < this.cycle.to ? this.pos : this.cycle.from;
+      return this.play(from, this.cycle.to);
+    }
     const c = this.cur;
     let from = this.pos;
     if (!c || from < c.start_s - 0.001 || from >= c.end_s) from = c?.start_s ?? 0;
@@ -312,15 +372,20 @@ class AppState {
     this.stopPolling();
     this.playTimer = setInterval(async () => {
       try {
-        const p = await call<{ position_s: number; playing: boolean }>('playhead');
+        const p = await call<{ position_s: number; playing: boolean; level?: number }>('playhead');
         this.pos = p.position_s;
-        if (!this.audition) {
+        this.level = Math.max(p.level ?? 0, this.level * 0.85);
+        if (!this.audition && !this.sound) {
           const it = this.lineAt(p.position_s);
           if (it && it.line_id !== this.curId) this.curId = it.line_id;
         }
         if (!p.playing) {
           this.playing = false;
+          this.level = 0;
           this.stopPolling();
+          const c = this.cycle;
+          if (this.page === 'edit' && c.on && !this.sound && c.to > c.from && p.position_s >= c.to - 0.05) void this.play(c.from, c.to);
+          if (this.sound) this.sound = null;
         }
       } catch {
         this.playing = false;

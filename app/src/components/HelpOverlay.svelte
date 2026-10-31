@@ -13,6 +13,7 @@
     ['Inspector', ['⌘I']],
     ['Unmatched bin', ['U']],
     ['Sound bucket', ['B']],
+    ['Editor ⇄ full bucket (Import › Sounds)', ['⇧B']],
     ['Options / Arrange / Edit', ['1', '2', '3']],
     ['Box size', ['−', '+']],
     ['Shorter / longer pause', [',', '.']],
@@ -21,6 +22,15 @@
     ['Undo / redo', ['⌘Z', '⌘⇧Z']],
     ['Save version', ['⌘S']],
     ['Zoom / move scene bar', ['⌘ scroll', '⇧ scroll']],
+  ];
+  const edit: [string, string[]][] = [
+    ['Show / hide the scene bucket', ['B']],
+    ['Inspector / mixer / cycle', ['I', 'X', 'C']],
+    ['Nudge 10 ms / 100 ms', ['⌥←→', '⇧⌥←→']],
+    ['Move one clip alone', ['⌥ drag']],
+    ['Remove the selected sound', ['⌫']],
+    ['Back to the pointer tool', ['Esc']],
+    ['Zoom', ['⌘ scroll']],
   ];
   const ed: [string, string[]][] = [
     ['Play / play from locator', ['Space', '⇧ Space']],
@@ -40,6 +50,8 @@
   <div class="glass box" role="dialog" aria-label="Keyboard shortcuts" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
     <div class="h1">Keyboard</div>
     {#each rows as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
+    <div class="h2">On the Edit page</div>
+    {#each edit as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
     <div class="h2">In the box editor</div>
     {#each ed as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
   </div>

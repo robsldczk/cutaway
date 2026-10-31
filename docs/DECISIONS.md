@@ -172,3 +172,14 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 ### D42 Lane mix
 - **Choice:** per-lane volume (−60…+12 dB), constant-power pan (centre unity), mute and solo stored as `LaneMix` entities keyed by lane (character id, `sfx1…`, `ambience`, `music`, `roomtone`) and applied by the schedule, so playback and the mix bounce agree. Fades gain a curve (equal power by default, linear). The Split tool is the `split_placement` command.
 - **Mixer view (X):** the rationale leaves it undesigned; the button opens the lane strip (volume, pan, meter) of the edit inspector for every lane at once.
+
+### D43 Round 2 UI details not settled by the designs
+- **Import replaces the importer sheet.** Dropping recordings anywhere outside the Edit page imports them, runs the (rule-based) match and opens Import › Files. A new episode opens on Import. The other tabs are disabled until a script is in.
+- **B keeps two meanings:** on the Edit page it shows or hides the docked scene bucket; on Options and Arrange it still opens the cue drawer (cue-level search, generate, choose). ⇧B always switches between the editor and Import › Sounds.
+- **Snap: words** snaps drops and pinned-sound moves to the nearest word start or action line within 10 px; a snapped drop is anchored there (it follows the dialogue), an unsnapped one is pinned to its time.
+- **Marquee** sets the cycle range (the app has no range operations yet); dragging in the ruler does the same, a click seeks.
+- **Lane meter:** the engine reports the output peak only, so the inspector's lane meter shows the output level while a clip of that lane sounds at the playhead, scaled by the lane volume. A true per-lane meter needs per-lane peaks from the mixer.
+- **Preview waveforms:** previews have no audio until auditioned or downloaded, so their waveforms are a quiet stand-in shape derived from the id; downloaded sounds show their real peaks.
+- **Display names** drop the folder, the extension, the download id ("(Epidemic 1000)") and duplicate counters; the files keep them.
+- **Inspector values** are text fields that accept "−4,5", "-4.5" or "40", so they read the same in every locale.
+- **Spec notes:** `docs/specs/frontend-design.md` and `how-it-works.md` are read-only in this checkout, so the Round 2 behaviour is written up in `docs/design/round2-screens.md` instead of a "Changed in implementation" note in the spec.

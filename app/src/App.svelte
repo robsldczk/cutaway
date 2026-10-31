@@ -13,19 +13,19 @@
   import Settings from './components/Settings.svelte';
   import History from './components/History.svelte';
   import ExportPanel from './components/ExportPanel.svelte';
-  import Importer from './components/Importer.svelte';
   import Welcome from './components/Welcome.svelte';
   import Bucket from './components/Bucket.svelte';
   import Options from './pages/Options.svelte';
   import Arrange from './pages/Arrange.svelte';
   import Edit from './pages/Edit.svelte';
+  import Import from './pages/Import.svelte';
 
   let root: HTMLDivElement | undefined = $state();
   let wAcc = 0;
   let wLast = 0;
 
   function onWheel(e: WheelEvent) {
-    if (app.overlay || app.page === 'edit') return;
+    if (app.overlay || app.page === 'edit' || app.page === 'import') return;
     const t = e.target as HTMLElement;
     if (t.closest('[role="slider"]') || t.closest('aside') || t.tagName === 'INPUT') return;
     e.preventDefault();
@@ -51,12 +51,15 @@
       await app.method('import_sounds', { paths: audio, scene: app.sceneId, at_s: +app.pos.toFixed(3) });
       await app.loadEdit();
       app.say(`${audio.length} sound${audio.length > 1 ? 's' : ''} imported, placed at the playhead`);
-    } else if (app.drawer === 'bucket') {
+    } else if (app.drawer === 'bucket' || (app.page === 'import' && app.importTab === 'sounds')) {
       await app.method('import_sounds', { paths: audio });
       app.say(`${audio.length} sounds added to the library`);
     } else {
-      await app.method('import_audio', { paths: audio, copy: true });
-      app.overlay = 'import';
+      // recordings and director room files: match them, then check the cast on Import › Files
+      await app.method('import_audio', { paths: audio, copy: true }, false);
+      await app.method('match_files');
+      app.importTab = 'files';
+      app.setPage('import');
     }
   }
 
@@ -84,15 +87,20 @@
 
 <div class="ui stage" bind:this={root}>
   <div class="paper" aria-hidden="true"></div>
-  {#if app.page !== 'edit'}<div class="hairline" aria-hidden="true"></div>{/if}
+  {#if app.page === 'options' || app.page === 'arrange'}<div class="hairline" aria-hidden="true"></div>{/if}
 
   {#if app.noProject}
     <Welcome />
+  {:else if app.page === 'import' && app.status}
+    <Import />
+    <Header />
   {:else if app.view}
     {#if app.page === 'options'}<Options />{:else if app.page === 'arrange'}<Arrange />{:else}<Edit />{/if}
     <Header />
-    <SceneRail />
-    <Transport />
+    {#if app.page !== 'edit'}
+      <SceneRail />
+      <Transport />
+    {/if}
   {:else if app.status}
     <Header />
   {/if}
@@ -106,7 +114,6 @@
   {#if app.overlay === 'settings'}<Settings />{/if}
   {#if app.overlay === 'history'}<History />{/if}
   {#if app.overlay === 'export'}<ExportPanel />{/if}
-  {#if app.overlay === 'import'}<Importer />{/if}
 
   {#if app.toast}<div class="toast" role="status">{app.toast}</div>{/if}
 </div>

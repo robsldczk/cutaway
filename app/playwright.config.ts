@@ -4,6 +4,8 @@ import { defineConfig } from '@playwright/test';
 // Tauri shell uses), on a freshly generated demo session.
 export default defineConfig({
   testDir: 'tests',
+  // one demo session serves every test: run them one after another
+  workers: 1,
   timeout: 60_000,
   use: { baseURL: 'http://127.0.0.1:1421', viewport: { width: 1440, height: 900 } },
   webServer: [

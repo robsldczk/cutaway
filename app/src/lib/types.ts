@@ -203,11 +203,14 @@ export interface PlacementView {
   len_s: number;
   anchored: boolean;
   anchor: Anchor | null;
+  offset_s: number;
   cue_id: string | null;
   fade_in_s: number;
   fade_out_s: number;
+  fade_curve: 'equal_power' | 'linear';
   gain_db: number;
   peaks: number[];
+  origin: string;
 }
 
 export interface Asset {
@@ -240,8 +243,133 @@ export interface CueView {
   candidates: Asset[];
 }
 
+export interface LaneMix {
+  id: string;
+  volume_db: number;
+  pan: number;
+  mute: boolean;
+  solo: boolean;
+}
+
+export interface RoomToneBed {
+  source: string;
+  loop_s: number;
+  gain_db: number;
+  seams: number[];
+}
+
 export interface EditView {
   scene_id: string;
+  duration_s: number;
   placements: PlacementView[];
   cues: CueView[];
+  lane_mix: LaneMix[];
+  room_tone: RoomToneBed | null;
+}
+
+// ---- Import › Files ----
+
+export interface ImportFile {
+  source_id: string;
+  file: string;
+  duration_s: number;
+  role: 'character' | 'room' | 'unknown';
+  character: string | null;
+  confidence: number;
+  locked: boolean;
+  tc_start_s: number | null;
+  peaks: number[];
+}
+
+export interface RoomLink {
+  source_id: string;
+  file: string;
+  duration_s: number;
+  locked: boolean;
+  sync_s: number | null;
+  by: 'timecode' | 'folder';
+}
+
+export interface Recording extends ImportFile {
+  rooms: RoomLink[];
+  shared_with: string[];
+  session: string | null;
+}
+
+export interface CastCard {
+  id: string;
+  label: string;
+  color_index: number;
+  lines: number;
+  recordings: Recording[];
+}
+
+export interface Fix {
+  kind: 'role' | 'character' | 'link' | 'no_recording' | 'missing_file';
+  source_id?: string;
+  file?: string;
+  character?: string;
+  label?: string;
+  message: string;
+}
+
+export interface ImportView {
+  script: { number: number; name: string; file: string; summary: Record<string, unknown>; characters: number; lines: number } | null;
+  files: { total: number; recordings: number; rooms: number; unknown: number };
+  matched_at: string | null;
+  analyzed: boolean;
+  fixes: Fix[];
+  cast: CastCard[];
+  unassigned: ImportFile[];
+  room_files: ImportFile[];
+}
+
+// ---- Sound buckets ----
+
+export interface BucketSound {
+  id: string;
+  name: string;
+  file: string;
+  duration_s: number;
+  provider: string | null;
+  license: string | null;
+  source: string;
+  category: string;
+  peaks: number[];
+}
+
+export interface Preview {
+  provider: string;
+  remote_id: string;
+  title: string;
+  duration_s: number;
+}
+
+export interface Bucket {
+  id: string;
+  name: string;
+  keywords: string[];
+  scenes: string[];
+  scene_ids: string[];
+  kept: BucketSound[];
+  previews: Preview[];
+  length_min_s: number | null;
+  length_max_s: number | null;
+  exclude: string[];
+  ai_suggested: boolean;
+  anchors: Anchor[];
+}
+
+export interface BucketsView {
+  buckets: Bucket[];
+  connected: { epidemic: boolean; elevenlabs: boolean };
+}
+
+/** A bucket sound dragged onto the timeline (a kept asset, or a preview to download). */
+export interface DragSound {
+  bucket_id: string;
+  asset_id?: string;
+  remote_id?: string;
+  name: string;
+  duration_s: number;
 }

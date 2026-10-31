@@ -413,6 +413,29 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
     })
 }
 
+/// A sound's display name from its library file: no folder, extension, download id
+/// ("(Epidemic 1000)") or duplicate counter ("(2)").
+pub fn sound_name(file: &str) -> String {
+    let base = file.rsplit('/').next().unwrap_or(file);
+    let mut n = base
+        .rsplit_once('.')
+        .map(|(n, _)| n)
+        .unwrap_or(base)
+        .trim()
+        .to_string();
+    while let Some(open) = n.rfind(" (") {
+        let tail = &n[open + 2..];
+        let drop = tail.ends_with(')')
+            && (tail.starts_with("Epidemic ")
+                || tail[..tail.len() - 1].chars().all(|c| c.is_ascii_digit()));
+        if !drop {
+            break;
+        }
+        n.truncate(open);
+    }
+    n
+}
+
 #[derive(Serialize)]
 pub struct PlacementView {
     pub id: String,
@@ -424,12 +447,16 @@ pub struct PlacementView {
     pub len_s: f64,
     pub anchored: bool,
     pub anchor: Option<Anchor>,
+    /// Seconds after the anchor (or after `at_s` when pinned).
+    pub offset_s: f64,
     pub cue_id: Option<String>,
     pub fade_in_s: f64,
     pub fade_out_s: f64,
     pub fade_curve: FadeCurve,
     pub gain_db: f64,
     pub peaks: Vec<f32>,
+    /// Where the sound came from ("Epidemic Sound", "ElevenLabs", "Library").
+    pub origin: String,
 }
 
 #[derive(Serialize)]
@@ -490,7 +517,7 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
             name: doc
                 .assets
                 .get(&p.asset_id)
-                .map(|a| a.file.rsplit('/').next().unwrap_or(&a.file).to_string())
+                .map(|a| sound_name(&a.file))
                 .unwrap_or_default(),
             lane: p.lane,
             layer: p.layer,
@@ -498,12 +525,23 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
             len_s: p.len_s,
             anchored: p.anchor.is_some(),
             anchor: p.anchor.clone(),
+            offset_s: p.offset_s,
             cue_id: p.cue_id.clone(),
             fade_in_s: p.fade_in_s,
             fade_out_s: p.fade_out_s,
             fade_curve: p.fade_curve,
             gain_db: p.gain_db,
             peaks,
+            origin: doc
+                .assets
+                .get(&p.asset_id)
+                .map(|a| match (a.source, a.provider.as_deref()) {
+                    (_, Some("epidemic")) => "Epidemic Sound".to_string(),
+                    (_, Some("elevenlabs")) => "ElevenLabs".to_string(),
+                    (AssetSource::Generated, _) => "Generated".to_string(),
+                    _ => "Library".to_string(),
+                })
+                .unwrap_or_default(),
         });
     }
     placements.sort_by(|a, b| a.start_s.total_cmp(&b.start_s));
@@ -577,4 +615,20 @@ pub fn bucket(doc: &Document, scene_id: Option<&str>) -> Vec<CueView> {
                 .collect(),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn sound_names_drop_folders_ids_and_counters() {
+        assert_eq!(
+            super::sound_name("SFX/Misc/Foil Crinkle Close (Epidemic 1000).mp3"),
+            "Foil Crinkle Close"
+        );
+        assert_eq!(
+            super::sound_name("SFX/Doors/Door_close (2).wav"),
+            "Door_close"
+        );
+        assert_eq!(super::sound_name("Hum (live).wav"), "Hum (live)");
+    }
 }

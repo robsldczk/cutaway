@@ -188,7 +188,7 @@ fn asset_view(svc: &mut Service, a: &Asset) -> Value {
         })
         .unwrap_or_default();
     json!({
-        "id": a.id, "name": a.file.rsplit('/').next().unwrap_or(&a.file).rsplit_once('.').map(|(n, _)| n).unwrap_or(&a.file),
+        "id": a.id, "name": crate::views::sound_name(&a.file),
         "file": a.file, "duration_s": a.duration_s, "provider": a.provider, "license": a.license,
         "source": a.source, "category": a.category, "peaks": peaks,
     })

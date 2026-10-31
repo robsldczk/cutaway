@@ -77,6 +77,17 @@
   /* character gradients mix toward this (see palette.ts) */
   --mix-base: rgb(25, 27, 35);
 
+  /* editor lanes (palette.ts LANE_COLORS): sound effects, room tone and ambience, music */
+  --sfx-rgb: 216 182 87;
+  --room-rgb: 154 166 184;
+  --music-rgb: 125 147 232;
+  --sfx: rgb(var(--sfx-rgb));
+  --on-sfx: #1a1408;
+  /* the editor's control bar, inspector and bucket */
+  --bar: rgba(20, 22, 29, 0.8);
+  --bar-strong: rgba(20, 22, 29, 0.84);
+  --lcd: rgb(var(--shadow-rgb) / 0.35);
+
   /* shape */
   --radius-box: 32px;
   --radius-line: 24px;
@@ -178,4 +189,12 @@
   --danger: #a8323f;
 
   --mix-base: rgb(246, 243, 236);
+
+  --sfx-rgb: 176 136 30;
+  --room-rgb: 96 110 132;
+  --music-rgb: 76 100 200;
+  --on-sfx: #fffaf0;
+  --bar: rgba(252, 250, 246, 0.86);
+  --bar-strong: rgba(252, 250, 246, 0.92);
+  --lcd: rgb(28 30 38 / 0.07);
 }
