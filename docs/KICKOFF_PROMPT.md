@@ -4,7 +4,7 @@ Paste this into Claude Code, started in the repo root:
 
 ---
 
-You are building Audioplay Cutter from this repository.
+You are building Cutaway from this repository.
 
 1. Read `CLAUDE.md`, `docs/BUILD_BRIEF.md`, all files in `docs/specs/`, `docs/DECISIONS.md`, and `docs/reference/stage0/` (the prototype and its report). Look at the fixtures in `fixtures/tarmac-ep2/`.
 2. Check git: make sure you are on `dev` (create it from `main` and push it if missing) and that `origin` is reachable. If pushing isn't possible, continue locally and note it in `docs/PLAN.md`.

@@ -1,13 +1,13 @@
-# Audioplay Cutter
+# Cutaway
 
 Script-matched rough cuts from unslated audio play sessions: one WAV per role, a director room mic and the script go in; a cut you can flip through take by take comes out, with exports to Resolve and Logic.
 
 ## Starting the build run
 
-1. **Create a private GitHub repo** (e.g. `audioplay-cutter`) and push this folder as the initial commit on `main`:
+1. **Create a private GitHub repo** (e.g. `cutaway`) and push this folder as the initial commit on `main`:
    ```
    git init && git add . && git commit -m "chore: initial package"
-   git branch -M main && git remote add origin git@github.com:<you>/audioplay-cutter.git
+   git branch -M main && git remote add origin git@github.com:<you>/cutaway.git
    git push -u origin main
    ```
    The fixtures are gitignored and stay local.

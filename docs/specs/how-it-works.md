@@ -1,4 +1,4 @@
-# Audioplay Cutter: How It Works
+# Cutaway: How It Works
 
 ## Purpose
 
@@ -93,7 +93,7 @@ Rules:
 
 - **Fully non-destructive.** Everything references source files with in and out points. Original WAVs are never modified.
 - **Default handles:** 1 s.
-- **Storage:** project state as JSON, plus a cache for transcripts, alignments and waveform peaks.
+- **Storage:** project state in the episode SQLite file (see the architecture spec), plus a cache for transcripts, alignments and waveform peaks. *(Changed in implementation: was "project state as JSON"; the architecture spec and build brief settle on SQLite.)*
 - **Undo:** per box and per scene.
 
 ## Audio rules
@@ -118,7 +118,7 @@ Comped or edited boxes export as several clips on the same role track, with cros
 
 ## Tech stack
 
-See `audioplay-cutter-architecture.md` for the stack, the project folder, the importer and the AI provider. In short:
+See `architecture.md` for the stack, the project folder, the importer and the AI provider. In short:
 - **Core:** Rust.
 - **App:** Tauri with a web UI.
 - **Audio:** a native audio engine.
@@ -145,7 +145,7 @@ See `audioplay-cutter-architecture.md` for the stack, the project folder, the im
 **V2**
 - Waveform-precise editing in the box editor
 - Modifier-key cut modes
-- Overlap mode
+- Overlap mode beyond the Arrange page's negative pause *(changed for the Option C design: simple overlap by negative pause is in the MVP)*
 - Cue-reading rhythm as timing template
 - SFX and music lanes
 - Volume automation and effects

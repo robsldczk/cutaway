@@ -1,4 +1,4 @@
-# Audioplay Cutter: Architecture
+# Cutaway: Architecture
 
 ## Goals
 
@@ -9,13 +9,29 @@
 - **Controllable from outside.** Everything the UI can do, a CLI and an MCP client (like Claude) can do too.
 - **Show-level memory.** Sound effects, music, room tones and character aliases live at show level and are reused across episodes.
 
+## Naming (central)
+
+The product name is **Cutaway**. It lives in one file, `brand.json` at the repo root, so it can change later without touching code:
+
+| Key | Default | Used for |
+|---|---|---|
+| `displayName` | `Cutaway` | window title, menus, About, export metadata, MCP server name |
+| `slug` | `cutaway` | CLI binary, app-support folder, log prefixes |
+| `episodeExt` / `showExt` | `cutaway` / `cutawayshow` | episode and show file extensions |
+| `bundleId` | `com.cutaway.app` | macOS/Windows bundle identifier |
+
+- Rust reads it at compile time (`apc-core` build script → `apc_core::brand`).
+- The UI imports it (`app/src/lib/brand.ts`).
+- Files that cannot import JSON (`tauri.conf.json`, the CLI `[[bin]]` name) are synced by `scripts/rebrand.mjs`; `scripts/check.sh` fails if they drift.
+- Internal crate names keep the `apc-` prefix; they never reach the user.
+
 ## Stack
 
 | Layer | Technology | Why |
 |---|---|---|
 | App shell | Tauri | Native app on Mac and Windows, small footprint, web UI reusable online |
 | Core | Rust | Real-time audio, large files, one codebase for both platforms, compiles to WebAssembly later |
-| UI | TypeScript + Svelte or React, canvas for waveforms | Fast to iterate, same UI online later |
+| UI | TypeScript + Svelte 5, SVG/canvas for waveforms, design tokens in `app/src/theme/` | Fast to iterate, same UI online later, re-skinnable |
 | Audio I/O | cpal (output), symphonia (decode) | Native, streams from disk |
 | Transcription | Parakeet TDT 0.6B via ONNX Runtime (CoreML on Mac, DirectML/CUDA on Windows); whisper.cpp fallback | Offline, word timestamps, one runtime on both platforms |
 | AI interpretation | Provider interface; first implementation: Claude Code CLI | Text tasks need judgment; provider stays swappable |
@@ -62,7 +78,7 @@ A show is a normal folder with a shared library and one folder per episode. Ever
 
 ```
 TARMAC/                              show
-├ TARMAC.apcshow                     show file: library database, settings, aliases
+├ TARMAC.cutawayshow                 show file: library database, settings, aliases
 ├ Library/
 │  ├ SFX/
 │  │  ├ Doors/  Alarms/  Machines/  Foley/  ...
@@ -70,7 +86,7 @@ TARMAC/                              show
 │  └ Music/
 ├ Episodes/
 │  └ Ep02/
-│     ├ Ep02.apc                     openable episode file (SQLite)
+│     ├ Ep02.cutaway                 openable episode file (SQLite)
 │     ├ Audio/
 │     │  └ Session 2026-10-30/
 │     │     ├ Paul.wav  Sara.wav  Room.wav
@@ -85,7 +101,7 @@ TARMAC/                              show
 ```
 
 - **Standalone episode:** an episode can also exist on its own without a show. It then keeps a local library in the same structure.
-- **Opening:** double-click the `.apc` file to open an episode, or the `.apcshow` file to open the show overview (episodes, library).
+- **Opening:** double-click the `.cutaway` file to open an episode, or the `.cutawayshow` file to open the show overview (episodes, library).
 
 **Media handling:**
 - **Copy into project (default).** Import copies files in, so the folder is self-contained.
@@ -257,19 +273,19 @@ This is the opposite direction from the AI provider. The AI provider is the app 
 Every pipeline step is available headless. The CLI, the MCP server and the desktop app share the same core.
 
 ```
-apc show new "TARMAC"                      create show folder with library
-apc new "Ep02" --show TARMAC               create episode inside the show
-apc import-script script.fountain          add a new script version
-apc import-audio ./session --copy          import and auto-assign roles
-apc roles                                  show/confirm the file-to-role mapping
-apc transcribe                             run the local ASR (downloads the model once)
-apc align                                  deterministic matching + AI for ambiguous parts
-apc notes                                  room classification, note condensing, picks
-apc sfx spot --scene S2                    AI sound spotting into the bucket
-apc sfx import ./sounds                    add files to the show library
-apc export fcpxml --scene S1               export a rough cut
-apc status                                 progress, match rate, flagged items
-apc mcp                                    run as MCP server (stdio)
+cutaway show new "TARMAC"                      create show folder with library
+cutaway new "Ep02" --show TARMAC               create episode inside the show
+cutaway import-script script.fountain          add a new script version
+cutaway import-audio ./session --copy          import and auto-assign roles
+cutaway roles                                  show/confirm the file-to-role mapping
+cutaway transcribe                             run the local ASR (downloads the model once)
+cutaway align                                  deterministic matching + AI for ambiguous parts
+cutaway notes                                  room classification, note condensing, picks
+cutaway sfx spot --scene S2                    AI sound spotting into the bucket
+cutaway sfx import ./sounds                    add files to the show library
+cutaway export fcpxml --scene S1               export a rough cut
+cutaway status                                 progress, match rate, flagged items
+cutaway mcp                                    run as MCP server (stdio)
 ```
 
 ## Model manager

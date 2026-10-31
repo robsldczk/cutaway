@@ -2,7 +2,7 @@
 
 ## Scope of this run
 
-Build the Audioplay Cutter desktop app on macOS from an empty repo to a working app, following the three specs in `docs/specs/`. Implement milestones M0 to M8 in order.
+Build the Cutaway desktop app on macOS from an empty repo to a working app, following the three specs in `docs/specs/`. Implement milestones M0 to M8 in order.
 
 - **Done means green.** Each milestone is done when its acceptance checks pass. Then commit, push to `dev`, update `docs/PLAN.md`, and move on.
 - **Out of scope for this run:**
@@ -19,7 +19,7 @@ If time runs out, `docs/PLAN.md` and `docs/RUN_REPORT.md` must make it obvious w
 Write `docs/PLAN.md` containing:
 1. **Crates and app modules:** each one's responsibility and its public interface (main types and traits).
 2. **Schemas:**
-   - the SQLite schema for the episode `.apc` and the show `.apcshow`,
+   - the SQLite schema for the episode `.cutaway` and the show `.cutawayshow`,
    - the command list (every command, with its parameters and its undo).
 3. **Interfaces:**
    - the AI task list with input/output JSON schemas,
@@ -40,7 +40,7 @@ Commit as `docs: implementation plan`, push to `dev`, then start M0 immediately.
 
 ### M1: Core document and project folders
 - Show and episode folders exactly as in the architecture spec:
-  - `.apcshow` and `.apc` files as SQLite (WAL),
+  - `.cutawayshow` and `.cutaway` files as SQLite (WAL),
   - the folders `Audio/`, `Script/`, `Backups/`, `Exports/`, `Cache/`, `Logs/` and `Library/`.
 - Command bus with an undo/redo log; every command persisted immediately.
 - Autosave backups: a snapshot every 10 minutes while changes happen; keep the last 20 plus one per day. Named versions; revert.
@@ -114,7 +114,7 @@ Commit as `docs: implementation plan`, push to `dev`, then start M0 immediately.
   - `RUN_REPORT.md` tells Rob how to check the import in Resolve manually.
 
 ### M4: CLI and MCP server
-- The `apc` CLI with all commands from the architecture spec, including `apc mcp`.
+- The `cutaway` CLI (crate `apc-cli`) with all commands from the architecture spec, including `cutaway mcp`.
 - MCP server on stdio, using the official Rust MCP SDK (`rmcp`) unless DECISIONS.md records a reason not to.
   - Tools as listed in the architecture spec.
   - Resources: script versions, cut list, scene bucket, match report.
@@ -132,24 +132,28 @@ Commit as `docs: implementation plan`, push to `dev`, then start M0 immediately.
   - Splices have no clicks: no sample jump above the threshold in a test signal.
 
 ### M6: Desktop app: Options, Arrange, box editor
-- Tauri app per the frontend spec:
-  - dark-first, a Japanese-palette character color per role,
-  - script typography,
-  - dialogue as the most prominent element,
+- Tauri app per the frontend spec, visually matching the **Option C prototype** (`docs/design/prototype/`):
+  - frosted glass on the night-blue stage, Figtree + Courier Prime,
+  - a Japanese-palette character color per role, take shades per take,
+  - all visual values as **design tokens** in `app/src/theme/` (no literal colors in components),
+  - the app name from `brand.json`,
+  - dialogue as the most prominent element, the current box as a deck with take pills,
   - notes beside the box,
-  - smaller action lines,
-  - one Play/Stop transport,
+  - smaller action lines as glass pills,
+  - one Play/Stop transport with the scene map, locator and play-from-locator,
+  - the numbered scene rail,
   - an inspector on demand,
-  - a settings sheet for pacing and room tone.
+  - a settings sheet for pacing and room tone,
+  - keyboard help overlay (?).
 - **Importer UI:** script, then audio with role confirmation, then background analysis with progress.
 - **Options page:**
   - take carousel with keyboard navigation,
   - passage mode,
   - edge trim with ripple,
   - unmatched bin.
-- **Arrange page:** drag reorder with ripple.
+- **Arrange page:** drag reorder with ripple, waveform strips with head/tail trim and the "Cuts a word" warning, I/O at the locator, pause rows you drag (negative = overlap), the "Moved" badge.
 - **Box editor overlay:**
-  - comp mode (text-aligned swipe comping),
+  - comp mode (paint across take lanes, text-aligned by script words, nudgeable segments, seam warnings, use whole take 1…5, reset),
   - edit mode (delete words with strike-through restore, close or keep the pause, pause trim, head and tail).
 - **Save and history:** autosave indicator, Save Version, a list of backups and versions with revert.
 - **Accept:**
@@ -157,7 +161,7 @@ Commit as `docs: implementation plan`, push to `dev`, then start M0 immediately.
   - Manual checklist for Rob in `RUN_REPORT.md`.
 
 ### M7: Edit page, show library and sound
-- **Edit page:** a horizontal multitrack timeline of the same document.
+- **Edit page:** a horizontal multitrack timeline of the same document, built from the box editor's lane components and tokens.
   - Groups: dialogue (one lane per role, fully editable), sound effects (auto layers), ambience, music.
   - Ripple by default; Option to move a single clip and allow overlap.
   - Nudge, trim, fades, clip gain, anchors to dialogue words or lines.

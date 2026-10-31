@@ -1,11 +1,11 @@
-# Audioplay Cutter
+# Cutaway
 
 A desktop editor that turns unslated audio play recording sessions (one WAV per role + a director room mic + the script) into script-matched rough cuts.
 
 Owner: Rob. Read the specs before changing behaviour:
-- `docs/specs/audioplay-cutter-architecture.md`: stack, layers, folders, providers, MCP, CLI
-- `docs/specs/audioplay-cutter-how-it-works.md`: pipeline, data model, audio rules, Stage 0 learnings
-- `docs/specs/audioplay-cutter-frontend-design.md`: pages, hierarchy, visual direction, keyboard map
+- `docs/specs/architecture.md`: stack, layers, folders, providers, MCP, CLI
+- `docs/specs/how-it-works.md`: pipeline, data model, audio rules, Stage 0 learnings
+- `docs/specs/frontend-design.md`: pages, hierarchy, visual direction, keyboard map
 - `docs/BUILD_BRIEF.md`: milestones, acceptance tests, scope of the current run
 - `docs/reference/stage0/`: the Python prototype that proved the matching. Port its logic, don't copy its shortcuts.
 
@@ -48,7 +48,7 @@ Owner: Rob. Read the specs before changing behaviour:
   - `apc-ai`: AI provider interface, Claude Code provider, mock provider, prompts
   - `apc-sound`: library, bucket, sound providers
   - `apc-export`: FCPXML, SRT, cut list, mix bounce
-  - `apc-cli`: the `apc` binary
+  - `apc-cli`: the `cutaway` binary (name from `brand.json`)
   - `apc-mcp`: MCP server
 - **App:** Tauri in `app/`, UI in TypeScript (Svelte preferred; React acceptable if recorded in DECISIONS.md).
 - **Separation:**
