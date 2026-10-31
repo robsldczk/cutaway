@@ -95,6 +95,19 @@ impl BackupManager {
         Ok(Some(info))
     }
 
+    /// Takes an auto snapshot now if anything changed since the last one (closing an episode,
+    /// quitting the app), so the last minutes of work are in `Backups/` too.
+    pub fn flush(&mut self, store: &EpisodeStore) -> Result<Option<BackupInfo>> {
+        if !self.dirty {
+            return Ok(None);
+        }
+        let info = self.snapshot(store, "auto", None)?;
+        self.rotate(store)?;
+        self.last_auto = self.clock.now();
+        self.dirty = false;
+        Ok(Some(info))
+    }
+
     /// Writes a full copy of the episode file into `Backups/`.
     pub fn snapshot(
         &self,
@@ -343,6 +356,21 @@ mod tests {
         clock.advance(Duration::minutes(8));
         assert!(bm.maybe_autosave(bus.store()).unwrap().is_some());
         assert_eq!(BackupManager::list(bus.store()).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn flush_snapshots_only_unsaved_changes() {
+        let (_d, paths, mut bus, clock) = setup();
+        let mut bm = BackupManager::new(&paths, RotationPolicy::default(), Box::new(clock));
+        assert!(bm.flush(bus.store()).unwrap().is_none(), "nothing changed");
+        bus.execute(&Command::SetConfig {
+            key: "ai.model".into(),
+            value: "m1".into(),
+        })
+        .unwrap();
+        bm.note_change();
+        assert!(bm.flush(bus.store()).unwrap().is_some());
+        assert!(bm.flush(bus.store()).unwrap().is_none(), "already saved");
     }
 
     #[test]

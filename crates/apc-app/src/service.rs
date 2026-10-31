@@ -126,6 +126,14 @@ impl Service {
         Ok(r)
     }
 
+    /// Before the episode is closed: stop playback and snapshot unsaved changes into
+    /// `Backups/` (every command is already on disk; this keeps the last minutes restorable).
+    pub fn close(&mut self) -> Result<Value> {
+        crate::player::stop(self)?;
+        let snap = self.backups.flush(self.bus.store())?;
+        Ok(json!({ "file": self.paths.file.to_string_lossy(), "snapshot": snap.map(|b| b.file) }))
+    }
+
     pub fn after_write(&mut self) -> Result<()> {
         self.backups.note_change();
         self.backups.maybe_autosave(self.bus.store())?;

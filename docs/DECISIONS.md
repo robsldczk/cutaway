@@ -183,3 +183,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Display names** drop the folder, the extension, the download id ("(Epidemic 1000)") and duplicate counters; the files keep them.
 - **Inspector values** are text fields that accept "−4,5", "-4.5" or "40", so they read the same in every locale.
 - **Spec notes:** `docs/specs/frontend-design.md` and `how-it-works.md` are read-only in this checkout, so the Round 2 behaviour is written up in `docs/design/round2-screens.md` instead of a "Changed in implementation" note in the spec.
+
+### D44 Back to the start screen, and saving (Rob, 2026-10-31)
+- **Choice:** the episode name in the header opens a menu with *Back to start screen* (`close_project`). Closing stops playback and, if anything changed since the last auto snapshot, writes one more snapshot into `Backups/`; the same happens when switching episodes and when the app quits. Closing is refused while a background job runs, so an analysis or a download can't lose its window. The start screen lists the last six episodes opened (kept per viewer in the browser storage).
+- **Saving as it stands:** every change is written to the episode file (SQLite, WAL) the moment its command runs, so there is no Save command and nothing to lose on a crash. On top of that, a full snapshot goes to `Backups/` every 10 minutes while you work (the last 20 plus one per day are kept), and ⌘S / History saves named versions that are never rotated.

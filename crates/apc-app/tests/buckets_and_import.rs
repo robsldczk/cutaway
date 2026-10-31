@@ -388,3 +388,34 @@ fn import_matching_keeps_hand_links_and_lists_fixes() {
         .clone();
     assert_eq!(paul["recordings"][0]["rooms"][0]["locked"], false);
 }
+
+#[test]
+fn closing_snapshots_unsaved_changes_and_returns_to_no_project() {
+    env();
+    let dir = tempfile::tempdir().unwrap();
+    let file = apc_app::demo::create(dir.path(), "test", true)
+        .unwrap()
+        .paths
+        .file
+        .clone();
+    let mut s = apc_app::Session::with_project(&file, "ui").unwrap();
+    s.call(
+        "set_config",
+        &json!({ "key": "pacing.breath_gap_s", "value": 0.4 }),
+    )
+    .unwrap();
+    let r = s.call("close_project", &json!({})).unwrap();
+    assert!(
+        r["snapshot"].is_string(),
+        "unsaved changes go to Backups/: {r}"
+    );
+    let err = s.call("project_status", &json!({})).unwrap_err();
+    assert_eq!(apc_app::error::ErrorBody::from(&err).code, "no_project");
+    // nothing new since: closing again after reopening takes no snapshot
+    s.call("open_project", &json!({ "path": file })).unwrap();
+    assert_eq!(
+        s.call("project_status", &json!({})).unwrap()["breath_gap_s"],
+        0.4
+    );
+    assert!(s.call("close_project", &json!({})).unwrap()["snapshot"].is_null());
+}

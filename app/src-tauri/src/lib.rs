@@ -53,6 +53,14 @@ pub fn run() {
         }
     };
     app.run(|_handle, _event| {
+        // Quitting: snapshot unsaved changes of the open episode.
+        if let tauri::RunEvent::Exit = &_event {
+            if let Some(state) = _handle.try_state::<AppSession>() {
+                if let Ok(mut s) = state.0.lock() {
+                    s.shutdown();
+                }
+            }
+        }
         // Double-clicking an episode file in Finder while the app runs.
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         if let tauri::RunEvent::Opened { urls } = &_event {
@@ -60,6 +68,7 @@ pub fn run() {
                 if let Some(state) = _handle.try_state::<AppSession>() {
                     if let Ok(mut s) = state.0.lock() {
                         if let Ok(n) = Session::with_project(&path, "ui") {
+                            s.shutdown();
                             *s = n;
                         }
                     }

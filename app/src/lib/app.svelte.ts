@@ -11,6 +11,30 @@ export type Drawer = null | 'inspector' | 'unmatched' | 'bucket';
 
 export type Theme = 'dark' | 'light';
 
+export interface RecentEpisode {
+  name: string;
+  path: string;
+}
+
+/** Recently opened episodes (this viewer only), newest first. */
+export function recentEpisodes(): RecentEpisode[] {
+  try {
+    const v = JSON.parse(localStorage.getItem('cutaway.recent') ?? '[]');
+    return Array.isArray(v) ? v.filter((r) => r && typeof r.path === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function remember(r: RecentEpisode) {
+  try {
+    const list = [r, ...recentEpisodes().filter((x) => x.path !== r.path)].slice(0, 6);
+    localStorage.setItem('cutaway.recent', JSON.stringify(list));
+  } catch {
+    /* private mode: no recent list */
+  }
+}
+
 function storedTheme(): Theme {
   try {
     return localStorage.getItem('cutaway.theme') === 'light' ? 'light' : 'dark';
@@ -115,6 +139,7 @@ class AppState {
     try {
       this.status = await call<Status>('project_status');
       this.noProject = false;
+      if (this.status.path) remember({ name: this.status.name, path: this.status.path });
     } catch (e) {
       if (e instanceof BridgeError && e.code === 'no_project') {
         this.noProject = true;
@@ -131,6 +156,31 @@ class AppState {
       this.page = 'import';
     }
     this.watch();
+  }
+
+  /** Back to the start screen: the core snapshots unsaved changes and closes the episode. */
+  async closeProject() {
+    if (this.playing) await this.stop();
+    const r = await this.run(() => call<{ snapshot: string | null }>('close_project'));
+    if (!r) return;
+    if (this.revTimer) clearInterval(this.revTimer);
+    this.revTimer = null;
+    this.lastRev = -1;
+    this.status = null;
+    this.view = null;
+    this.edit = null;
+    this.sceneId = '';
+    this.curId = null;
+    this.passageTo = null;
+    this.editSel = null;
+    this.openBucket = null;
+    this.overlay = null;
+    this.drawer = null;
+    this.pos = 0;
+    this.locator = 0;
+    this.page = 'options';
+    this.importTab = 'files';
+    this.noProject = true;
   }
 
   /** Picks up changes made elsewhere (CLI, MCP, a background job). */

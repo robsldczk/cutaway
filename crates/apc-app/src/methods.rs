@@ -512,6 +512,7 @@ registry! {
     "create_show", CreateShowP, Write, true, "Create a show folder with its library (TARMAC/TARMAC.cutawayshow, Library/, Episodes/).";
     "create_episode", CreateEpisodeP, Write, true, "Create an episode (inside a show, or standalone) and open it.";
     "open_project", OpenP, Read, true, "Open an episode file or folder. Later calls work on it.";
+    "close_project", NoParams, Read, true, "Close the open episode (back to the start screen). Unsaved changes are snapshotted into Backups/ first. Refused while an analysis runs.";
     "create_demo", CreateShowP, Write, false, "Create the synthetic demo session in parent/name, analyze it and open it.";
     "project_status", NoParams, Read, true, "Progress, match rate, flagged items, undo state and AI provider of the open episode.";
     "list_scenes", NoParams, Read, true, "Scenes with heading, place, line counts and flagged items.";
@@ -1174,6 +1175,25 @@ impl Session {
         })
     }
 
+    /// Switches to another episode, closing the open one first (final snapshot).
+    fn replace(&mut self, svc: Service) -> Result<()> {
+        if let Some(old) = self.service.as_mut() {
+            old.close()?;
+        }
+        self.service = Some(svc);
+        Ok(())
+    }
+
+    /// Closes the open episode (on quit). Errors are reported, not raised: quitting goes on.
+    pub fn shutdown(&mut self) {
+        if let Some(svc) = self.service.as_mut() {
+            if let Err(e) = svc.close() {
+                eprintln!("closing the episode: {e}");
+            }
+        }
+        self.service = None;
+    }
+
     pub fn call(&mut self, name: &str, params: &Value) -> Result<Value> {
         match name {
             "create_show" => {
@@ -1191,7 +1211,7 @@ impl Session {
                     &self.client,
                 )?;
                 let file = svc.paths.file.to_string_lossy().into_owned();
-                self.service = Some(svc);
+                self.replace(svc)?;
                 Ok(json!({ "file": file }))
             }
             "create_demo" => {
@@ -1200,15 +1220,26 @@ impl Session {
                 std::fs::create_dir_all(&dir)?;
                 let svc = crate::demo::create(&dir, &self.client, true)?;
                 let file = svc.paths.file.to_string_lossy().into_owned();
-                self.service = Some(svc);
+                self.replace(svc)?;
                 Ok(json!({ "file": file }))
             }
             "open_project" => {
                 let p: OpenP = parse(params)?;
                 let svc = Service::open(Path::new(&p.path), &self.client)?;
                 let file = svc.paths.file.to_string_lossy().into_owned();
-                self.service = Some(svc);
+                self.replace(svc)?;
                 Ok(json!({ "file": file }))
+            }
+            "close_project" => {
+                let svc = self.service.as_mut().ok_or(AppError::NoProject)?;
+                if svc.jobs.list().iter().any(|j| j.state == "running") {
+                    return Err(AppError::Params(
+                        "a background job (analysis or a download) is still running; close the episode when it is done".into(),
+                    ));
+                }
+                let r = svc.close()?;
+                self.service = None;
+                Ok(r)
             }
             _ => self
                 .service

@@ -14,11 +14,22 @@
   /** Import and Edit have no scene rail: the header starts at the edge (Round 2). */
   const wide = $derived(app.page === 'import' || app.page === 'edit');
   const ready = $derived(!!app.view);
+  let menu = $state(false);
 </script>
 
 <header class="hdr" class:wide>
   <div class="title">
-    <span class="ep" title={brand.displayName}>{app.view?.episode ?? app.status?.name ?? brand.displayName}</span>
+    <div class="epm">
+      <button class="ep" aria-haspopup="menu" aria-expanded={menu} title={app.status?.path ?? brand.displayName} onclick={() => (menu = !menu)}>{app.view?.episode ?? app.status?.name ?? brand.displayName}<Icon name="chevron" size={10} stroke={2.4} /></button>
+      {#if menu}
+        <div class="scrim0" role="presentation" onclick={() => (menu = false)}></div>
+        <div class="glass pop" role="menu" aria-label="Episode">
+          <div class="muted ellip pth">{app.status?.path ?? ''}</div>
+          <button role="menuitem" onclick={() => { menu = false; app.overlay = 'history'; }}>Versions and history…</button>
+          <button role="menuitem" onclick={() => { menu = false; void app.closeProject(); }}>Back to start screen</button>
+        </div>
+      {/if}
+    </div>
     {#if sc && app.page === 'edit'}
       <label class="scene muted2">
         <select aria-label="Scene" value={sc.id} onchange={(e) => app.loadScene((e.currentTarget as HTMLSelectElement).value)}>
@@ -89,8 +100,51 @@
     gap: 10px;
     font-size: var(--fs-ui);
   }
+  .epm {
+    position: relative;
+  }
   .ep {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     font-weight: 600;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    border-radius: 8px;
+  }
+  .ep:hover {
+    background: var(--glass-hover);
+  }
+  .scrim0 {
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+  }
+  .pop {
+    position: absolute;
+    top: 30px;
+    left: -8px;
+    z-index: 20;
+    min-width: 240px;
+    max-width: 380px;
+    padding: 6px;
+    border-radius: 14px;
+    background: var(--panel-solid);
+    display: flex;
+    flex-direction: column;
+  }
+  .pop button {
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 9px;
+    font-size: 13px;
+  }
+  .pop button:hover {
+    background: var(--glass-hover);
+  }
+  .pth {
+    font-size: 11px;
+    padding: 6px 10px 4px;
   }
   .muted2 {
     color: var(--text-3);

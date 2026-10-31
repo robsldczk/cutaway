@@ -82,3 +82,14 @@ test('edit: control bar toggles the bucket, inspector, mixer, cycle; lanes mute 
   await page.keyboard.press('ControlOrMeta+z');
   await expect(mute).toHaveAttribute('aria-pressed', 'false');
 });
+
+test('back to the start screen and reopen the episode from Recent', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('current-box')).toBeVisible();
+  await page.getByRole('button', { name: /^Demo/ }).first().click();
+  await page.getByRole('menuitem', { name: 'Back to start screen' }).click();
+  await expect(page.getByRole('button', { name: 'New episode…' })).toBeVisible();
+  await page.getByText('Recent').waitFor();
+  await page.locator('.rc').first().click();
+  await expect(page.getByTestId('current-box')).toBeVisible();
+});

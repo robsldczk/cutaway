@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { app } from '../lib/app.svelte';
+  import { app, recentEpisodes } from '../lib/app.svelte';
   import { brand } from '../lib/brand';
   import { call, inTauri, pickPath } from '../lib/bridge';
 
   let path = $state('');
   let name = $state('Ep01');
   let folder = $state('');
+  const recent = recentEpisodes();
 
   async function open(p?: string) {
     let target = p ?? path;
@@ -50,6 +51,16 @@
   <div class="glass card">
     <h1>{brand.displayName}</h1>
     <p class="muted">{brand.tagline}</p>
+    {#if recent.length}
+      <div class="grp">
+        <div class="label">Recent</div>
+        <div class="recent">
+          {#each recent as r (r.path)}
+            <button class="rc" onclick={() => open(r.path)} title={r.path}><span class="rn">{r.name}</span><span class="muted ellip rp">{r.path}</span></button>
+          {/each}
+        </div>
+      </div>
+    {/if}
     <div class="grp">
       <div class="label">Open</div>
       <div class="row">
@@ -99,6 +110,32 @@
     gap: 8px;
     margin-top: 8px;
     flex-wrap: wrap;
+  }
+  .recent {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+  }
+  .rc {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    text-align: left;
+    min-width: 0;
+  }
+  .rc:hover {
+    background: var(--glass-hover);
+  }
+  .rn {
+    font-weight: 600;
+    flex: none;
+  }
+  .rp {
+    font-size: 11.5px;
+    min-width: 0;
   }
   .row .field {
     flex: 1;
