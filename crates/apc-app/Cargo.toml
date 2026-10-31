@@ -1,0 +1,26 @@
+[package]
+name = "apc-app"
+description = "Cutaway service layer shared by the UI, CLI and MCP server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apc-core.workspace = true
+apc-media.workspace = true
+apc-audio.workspace = true
+apc-analysis.workspace = true
+apc-ai.workspace = true
+apc-sound.workspace = true
+apc-export.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+chrono.workspace = true
+tiny_http.workspace = true
+hound.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

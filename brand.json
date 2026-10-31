@@ -1,0 +1,9 @@
+{
+  "displayName": "Cutaway",
+  "slug": "cutaway",
+  "cliName": "cutaway",
+  "episodeExt": "cutaway",
+  "showExt": "cutawayshow",
+  "bundleId": "com.cutaway.app",
+  "tagline": "Script-matched rough cuts from unslated audio play sessions"
+}

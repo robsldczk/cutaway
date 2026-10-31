@@ -1,0 +1,17 @@
+[package]
+name = "apc-mcp"
+description = "Cutaway MCP server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apc-core.workspace = true
+apc-app.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

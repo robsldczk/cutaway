@@ -1,0 +1,19 @@
+[package]
+name = "apc-export"
+description = "Cutaway export: FCPXML, SRT, cut list, bounce"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apc-core.workspace = true
+apc-media.workspace = true
+apc-audio.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+roxmltree.workspace = true

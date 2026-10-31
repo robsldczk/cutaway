@@ -1,0 +1,65 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/apc-core",
+  "crates/apc-media",
+  "crates/apc-audio",
+  "crates/apc-analysis",
+  "crates/apc-ai",
+  "crates/apc-sound",
+  "crates/apc-export",
+  "crates/apc-app",
+  "crates/apc-cli",
+  "crates/apc-mcp",
+  "app/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+publish = false
+rust-version = "1.85"
+
+[workspace.dependencies]
+apc-core = { path = "crates/apc-core" }
+apc-media = { path = "crates/apc-media" }
+apc-audio = { path = "crates/apc-audio" }
+apc-analysis = { path = "crates/apc-analysis" }
+apc-ai = { path = "crates/apc-ai" }
+apc-sound = { path = "crates/apc-sound" }
+apc-export = { path = "crates/apc-export" }
+apc-app = { path = "crates/apc-app" }
+apc-mcp = { path = "crates/apc-mcp" }
+
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.41", features = ["bundled"] }
+blake3 = "1"
+regex = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+uuid = { version = "1", features = ["v4"] }
+toml = "1"
+dirs = "7"
+schemars = "1"
+symphonia = { version = "0.6", features = ["mp3", "wav", "pcm", "aiff", "flac"] }
+hound = "3.5"
+ebur128 = "0.1"
+cpal = "0.18"
+clap = { version = "4", features = ["derive"] }
+tiny_http = "0.12"
+ureq = { version = "3", features = ["json"] }
+crossbeam-channel = "0.5"
+tempfile = "3"
+roxmltree = "0.21"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev.package.apc-analysis]
+opt-level = 3
+
+[profile.dev.package.apc-media]
+opt-level = 3

@@ -268,13 +268,13 @@ pub trait SoundGenerateProvider: Send + Sync {
 ## 4. Tasks
 
 ### M0: Repository and tooling
-- [ ] `brand.json`, `scripts/rebrand.mjs` (sync + `--check`)
-- [ ] Rust workspace with the crates (`apc-core`, `apc-media`, `apc-audio`, `apc-analysis`, `apc-ai`, `apc-sound`, `apc-export`, `apc-app`, `apc-cli`, `apc-mcp`)
-- [ ] Tauri 2 + Svelte 5 + TypeScript skeleton in `app/`, theme tokens folder, ESLint + svelte-check
-- [ ] `scripts/check.sh`: brand check, `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `npm run lint`, `npm run check`
-- [ ] `.gitignore` (fixtures except README, target, node_modules, .env, Cache)
-- [ ] GitHub Actions: `scripts/check.sh` on macOS and Windows (Windows `continue-on-error` until M8)
-- [ ] Push `dev`
+- [x] `brand.json`, `scripts/rebrand.mjs` (sync + `--check`)
+- [x] Rust workspace with the crates (`apc-core`, `apc-media`, `apc-audio`, `apc-analysis`, `apc-ai`, `apc-sound`, `apc-export`, `apc-app`, `apc-cli`, `apc-mcp`)
+- [x] Tauri 2 + Svelte 5 + TypeScript skeleton in `app/`, theme tokens folder, ESLint + svelte-check
+- [x] `scripts/check.sh`: brand check, `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `npm run lint`, `npm run check`
+- [x] `.gitignore` (fixtures except README, target, node_modules, .env, Cache)
+- [x] GitHub Actions: `scripts/check.sh` on macOS and Windows (Windows `continue-on-error` until M8)
+- [x] Push `dev`
 
 ### M1: Core document and project folders
 - [ ] Show and episode folder creation (`Audio/ Script/ Backups/ Exports/ Cache/ Logs/ Library/`), `.cutawayshow` / `.cutaway` SQLite WAL
@@ -372,3 +372,4 @@ pub trait SoundGenerateProvider: Send + Sync {
 ## 6. Progress log
 
 (dated lines, newest last)
+- 2026-10-31 M0 done: workspace (10 crates + Tauri shell), brand.json + rebrand check, Svelte 5 app skeleton with bundled fonts, check.sh green, CI for macOS + Windows. `gh` CLI not installed: the PR at the end needs Rob (or gh).

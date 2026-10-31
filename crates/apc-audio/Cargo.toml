@@ -1,0 +1,18 @@
+[package]
+name = "apc-audio"
+description = "Cutaway audio: real-time engine and offline render"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apc-core.workspace = true
+apc-media.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+cpal.workspace = true
+crossbeam-channel.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

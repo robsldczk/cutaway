@@ -1,0 +1,19 @@
+[package]
+name = "apc-media"
+description = "Cutaway media: decode, envelope, peaks, loudness, sync, BWF metadata"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apc-core.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+symphonia.workspace = true
+hound.workspace = true
+ebur128.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

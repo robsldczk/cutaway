@@ -1,0 +1,23 @@
+[package]
+name = "apc-cli"
+description = "Cutaway command-line interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apc-core.workspace = true
+apc-app.workspace = true
+apc-mcp.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+# Synced from brand.json by scripts/rebrand.mjs
+[[bin]]
+name = "cutaway"
+path = "src/main.rs"

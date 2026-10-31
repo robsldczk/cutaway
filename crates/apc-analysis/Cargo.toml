@@ -1,0 +1,22 @@
+[package]
+name = "apc-analysis"
+description = "Cutaway analysis: ASR providers, aligner, take detection, room classification"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apc-core.workspace = true
+apc-media.workspace = true
+apc-ai.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+blake3.workspace = true
+dirs.workspace = true
+ureq.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

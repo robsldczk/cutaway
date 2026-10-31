@@ -1,0 +1,22 @@
+[package]
+name = "apc-sound"
+description = "Cutaway sound: show library, bucket, sound providers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+apc-core.workspace = true
+apc-media.workspace = true
+apc-ai.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+blake3.workspace = true
+ureq.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

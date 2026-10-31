@@ -1,0 +1,24 @@
+[package]
+name = "apc-core"
+description = "Cutaway core: document, command bus, undo, project I/O"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+blake3.workspace = true
+regex.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+toml.workspace = true
+
+[build-dependencies]
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
