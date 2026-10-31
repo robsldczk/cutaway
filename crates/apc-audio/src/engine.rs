@@ -290,3 +290,65 @@ impl Drop for Engine {
         let _ = self.tx.send(Cmd::Quit);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schedule::ScheduledClip;
+
+    /// Plays 300 ms of a test tone on the default device (skips without one).
+    #[test]
+    fn plays_and_reports_the_playhead() {
+        if std::env::var("CI").is_ok() {
+            eprintln!("skipped: no audio device on CI");
+            return;
+        }
+        let Ok(engine) = Engine::start() else {
+            eprintln!("skipped: no output device");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let sr = engine.sample_rate();
+        let tone: Vec<f32> = (0..sr)
+            .map(|i| 0.05 * (i as f32 * 440.0 * std::f32::consts::TAU / sr as f32).sin())
+            .collect();
+        let p = dir.path().join("t.wav");
+        apc_media::wav::write_wav(&p, sr, 1, &tone).unwrap();
+        let mut set = SourceSet::new(sr);
+        set.add("t", p);
+        let clip = ScheduledClip {
+            source_id: "t".into(),
+            src_in: 0.0,
+            src_out: 1.0,
+            start_s: 0.0,
+            gain_db: 0.0,
+            fade_in_s: 0.01,
+            fade_out_s: 0.01,
+            lane: "x".into(),
+            loop_len_s: None,
+            owner: "o".into(),
+        };
+        engine.load(
+            PlaySchedule {
+                clips: vec![clip],
+                duration_s: 1.0,
+            },
+            Arc::new(set),
+        );
+        let rx = engine.subscribe();
+        let t0 = std::time::Instant::now();
+        engine.play(0.0, Some(0.3));
+        assert!(engine.is_playing());
+        let mut events = 0;
+        while t0.elapsed() < Duration::from_millis(600) {
+            if rx.recv_timeout(Duration::from_millis(50)).is_ok() {
+                events += 1;
+            }
+        }
+        assert!(events >= 20, "about 60 Hz playhead events, got {events}");
+        assert!(!engine.is_playing(), "stops at until_s");
+        assert!(engine.position_s() >= 0.25, "{}", engine.position_s());
+        engine.seek(0.5);
+        assert!((engine.position_s() - 0.5).abs() < 0.01);
+    }
+}

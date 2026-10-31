@@ -318,10 +318,10 @@ pub trait SoundGenerateProvider: Send + Sync {
 - [x] README: add the server to Claude Desktop and Claude Code
 
 ### M5: Audio engine
-- [ ] Schedule from layout: per-clip gain (LUFS match), equal-power fades at splices, gaps, room tone bed, lanes/layers
-- [ ] Mixer + offline render (shared)
-- [ ] cpal real-time engine, feeder thread, ~60 Hz playhead events, start/stop/seek
-- [ ] Tests: scheduler (gaps, ripple, anchors), offline length of S1 within 10 ms, no clicks at splices
+- [x] Schedule from layout: per-clip gain (LUFS match), equal-power fades at splices, gaps, room tone bed, lanes/layers
+- [x] Mixer + offline render (shared)
+- [x] cpal real-time engine, feeder thread, ~60 Hz playhead events, start/stop/seek
+- [x] Tests: scheduler (gaps, ripple, anchors), offline length of S1 within 10 ms, no clicks at splices
 
 ### M6: Desktop app
 - [ ] Theme tokens + palette from the prototype; fonts
@@ -378,3 +378,4 @@ pub trait SoundGenerateProvider: Send + Sync {
 - 2026-10-31 M2 done: media (symphonia decode, envelopes, peaks, EBU R128, sync, BWF), AI layer (tasks + schemas, Claude Code + mock providers, versioned prompts, cache, call log), aligner port (bit-parallel fuzzy ratio, two passes, short-line rule, bleed, edges, overlaps), takes/types/word maps, room classification, note linking, picks. Fixture acceptance passes: 36 PAUL takes on 9 lines, 5/4/4/10 takes, one 'time machine' partial, picks Science T4 / Lunch T4 / edible T3 as defaults, room offset +0.275 s. Analysis runs in 1.2 s. Parakeet via sherpa-onnx behind the `parakeet` feature (fixture run pending at commit time).
 - 2026-10-31 M3 done: FCPXML 1.9 (lanes per role, source TC, fades, scene + note markers), SRT, cut list CSV/Markdown, per-scene bounce through the shared offline mixer (MP3 via ffmpeg). Structural FCPXML test green; no FCP DTD on this Mac. Schedule/mixer/offline render of M5 built early (D27). Parakeet fixture run: works end to end, 26/35+ takes (test ignored with reason).
 - 2026-10-31 M4 done: apc-app service (method registry with schemas, views, jobs, player with virtual clock, sound glue, synthetic demo session, HTTP dev bridge), `cutaway` CLI with all spec commands, rmcp 3.8 MCP server (tools from the registry, 4 resource kinds, confirm for destructive tools). Parity test: CLI and MCP give identical results on the demo and the TARMAC fixture. apc-sound library/providers written early. Golden cut list on the demo session.
+- 2026-10-31 M5 done: schedule (gaps, ripple, anchors, loudness offsets, room-tone bed, lanes/layers), shared mixer with equal-power fades, offline render, cpal engine (feeder thread + ring buffer, ~60 Hz playhead, play/stop/seek, stop-at). Fixture S1 renders at exactly the layout length (23.240 s); splice click test green; engine smoke test played on this Mac's device.
