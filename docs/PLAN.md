@@ -287,20 +287,20 @@ pub trait SoundGenerateProvider: Send + Sync {
 - [x] Unit tests: undo/redo, autosave rotation, script diff (edit, delete, insert), relink
 
 ### M2: Import and analysis pipeline
-- [ ] Fountain parser checks against the TARMAC fixture
-- [ ] Role matching by file name (+ aliases, room keywords), content fallback
-- [ ] Sessions by overlapping timecode (BWF `bext` / iXML)
-- [ ] Decode (symphonia), envelope, sync offset (cross-correlation); fixture room offset 0.25 s ± 0.1
-- [ ] `TranscriptImportProvider` (fixture JSON)
-- [ ] `ParakeetProvider` spike (sherpa-onnx vs `ort`), model manager (download, checksum, cache)
-- [ ] Fuzzy ratio (bit-parallel LCS), aligner port (all characters, short-line rule, two passes)
-- [ ] Edge snapping, overlap prevention, bleed drop, partial flag
-- [ ] Take detection (type + number), defaults (pick, else last complete take)
-- [ ] Room classification, note linking (8 s / 30 s)
-- [ ] `AiProvider`, `ClaudeCodeProvider`, `MockProvider`, prompts, cache, `ai-calls.jsonl`
-- [ ] AI tasks wired (line match, room refine, note condense, picks, spotting, tagging, name match)
-- [ ] Unmatched bin
-- [ ] Acceptance test on `tarmac-ep2` (skips without fixtures) + synthetic demo test (runs in CI)
+- [x] Fountain parser checks against the TARMAC fixture
+- [x] Role matching by file name (+ aliases, room keywords), content fallback
+- [x] Sessions by overlapping timecode (BWF `bext` / iXML)
+- [x] Decode (symphonia), envelope, sync offset (cross-correlation); fixture room offset 0.25 s ± 0.1
+- [x] `TranscriptImportProvider` (fixture JSON)
+- [x] `ParakeetProvider` spike (sherpa-onnx vs `ort`), model manager (download, checksum, cache)
+- [x] Fuzzy ratio (bit-parallel LCS), aligner port (all characters, short-line rule, two passes)
+- [x] Edge snapping, overlap prevention, bleed drop, partial flag
+- [x] Take detection (type + number), defaults (pick, else last complete take)
+- [x] Room classification, note linking (8 s / 30 s)
+- [x] `AiProvider`, `ClaudeCodeProvider`, `MockProvider`, prompts, cache, `ai-calls.jsonl`
+- [x] AI tasks wired (line match, room refine, note condense, picks, spotting, tagging, name match)
+- [x] Unmatched bin
+- [x] Acceptance test on `tarmac-ep2` (skips without fixtures) + synthetic demo test (runs in CI)
 
 ### M3: Export
 - [ ] FCPXML 1.9: one audio track (lane) per role, asset-clips with source TC, 1 s handles, crossfades, scene and note markers
@@ -374,3 +374,4 @@ pub trait SoundGenerateProvider: Send + Sync {
 (dated lines, newest last)
 - 2026-10-31 M0 done: workspace (10 crates + Tauri shell), brand.json + rebrand check, Svelte 5 app skeleton with bundled fonts, check.sh green, CI for macOS + Windows. `gh` CLI not installed: the PR at the end needs Rob (or gh).
 - 2026-10-31 M1 done: entity store + command bus (persisted undo/redo, multi-client rev sync), Fountain parser (matches Stage 0 unit numbering on the fixture, 27 PAUL lines), script versions with ID-keeping diff, autosave/rotation/named versions/revert, copy/reference import with BLAKE3 + relink, shared timing model. 39 tests. Push after M1 was refused by the session's permission check; commits stay local until a push is allowed.
+- 2026-10-31 M2 done: media (symphonia decode, envelopes, peaks, EBU R128, sync, BWF), AI layer (tasks + schemas, Claude Code + mock providers, versioned prompts, cache, call log), aligner port (bit-parallel fuzzy ratio, two passes, short-line rule, bleed, edges, overlaps), takes/types/word maps, room classification, note linking, picks. Fixture acceptance passes: 36 PAUL takes on 9 lines, 5/4/4/10 takes, one 'time machine' partial, picks Science T4 / Lunch T4 / edible T3 as defaults, room offset +0.275 s. Analysis runs in 1.2 s. Parakeet via sherpa-onnx behind the `parakeet` feature (fixture run pending at commit time).

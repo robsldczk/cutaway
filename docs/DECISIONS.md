@@ -78,3 +78,18 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Context:** the specs fix "gap to the previous clip" but not how action lines and the breath gap combine.
 - **Choice:** the pause before a box is its `gap_s` override, else `(breath gap + enabled spacers since the previous box) × scene tightness`. Spacer length defaults to `0.6 s + 0.04 s per word` (max 2.5 s). Lines without takes take no time. A new script version resets the scene order to script order (ad-libs keep their place).
 - **Reason:** matches the prototype's single pause per gap row and keeps one number per gesture.
+
+### D23 Parakeet runtime: sherpa-onnx
+- **Context:** the brief asks for a short spike between `sherpa-onnx` bindings and the `ort` crate for Parakeet TDT 0.6B v3.
+- **Options:** `ort` (ONNX Runtime directly; we would write the mel front end and the TDT greedy decoder ourselves) or the official `sherpa-onnx` crate (Apache-2.0; ships prebuilt static ONNX Runtime; supports NeMo transducers incl. Parakeet TDT v3 with token timestamps and durations).
+- **Choice:** `sherpa-onnx` 2.0.1 behind the cargo feature `parakeet` (off by default). The spike built in 12 s without cmake. The model is the int8 release tarball from the sherpa-onnx `asr-models` release, unpacked into `<app support>/cutaway/models/`. Its BLAKE3 is recorded on first download (trust on first use) because no upstream checksum is published in a form we can pin; pin it in `PARAKEET_TDT_V3` once known. Execution provider: CoreML on macOS, DirectML on Windows, CPU fallback (`CUTAWAY_ONNX_PROVIDER` overrides).
+- **Reason:** least custom DSP code and a maintained decoder; keeping it optional keeps CI light.
+
+### D24 Claude Code effort setting
+- **Context:** the spec wants Sonnet 5.5 at high effort through `claude -p --output-format json`; the CLI flag for effort could not be confirmed offline (the `claude` CLI is not installed on this machine).
+- **Choice:** the provider passes `--model` and exports `CUTAWAY_AI_EFFORT`; extra CLI flags come from `CUTAWAY_CLAUDE_ARGS`, so the effort flag can be added without a rebuild. Listed as an open question.
+- **Reason:** never guess at CLI flags that could break every call.
+
+### D25 Mock AI provider
+- **Choice:** the mock answers every task with deterministic rules (Stage 0 pick phrases, keyword note condensing, keyword spotting) and can replay recorded responses from `<dir>/<task>/<input-hash>.json`. The `line_match` input carries the aligner's proposal and score; the mock confirms it.
+- **Reason:** tests run offline and deterministic; recorded responses from real runs can't be committed (they contain fixture text), so they stay in `fixtures/`.
