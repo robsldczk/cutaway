@@ -442,6 +442,8 @@ pub struct PlacementView {
     pub asset_id: String,
     pub name: String,
     pub lane: Lane,
+    /// Whose dialogue lane (`lane: dialogue`).
+    pub character: Option<String>,
     pub layer: u32,
     pub start_s: f64,
     pub len_s: f64,
@@ -520,6 +522,7 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
                 .map(|a| sound_name(&a.file))
                 .unwrap_or_default(),
             lane: p.lane,
+            character: p.character.clone(),
             layer: p.layer,
             start_s: placement_start(&layout, p),
             len_s: p.len_s,
@@ -539,6 +542,7 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
                     (_, Some("epidemic")) => "Epidemic Sound".to_string(),
                     (_, Some("elevenlabs")) => "ElevenLabs".to_string(),
                     (AssetSource::Generated, _) => "Generated".to_string(),
+                    (AssetSource::Recorded, _) => "Recording".to_string(),
                     _ => "Library".to_string(),
                 })
                 .unwrap_or_default(),

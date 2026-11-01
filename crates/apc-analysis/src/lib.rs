@@ -11,6 +11,7 @@ pub mod parakeet;
 pub mod pipeline;
 pub mod roles;
 pub mod sessions;
+pub mod vocals;
 pub mod wordmap;
 
 pub use error::{AnalysisError, Result};

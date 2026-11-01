@@ -7,6 +7,7 @@
   import Icon from './Icon.svelte';
   import Waveform from './Waveform.svelte';
   import type { BucketsView, DragSound } from '../lib/types';
+  import { colorOf, solid } from '../theme';
 
   let data = $state<BucketsView | null>(null);
   let closed = $state<Record<string, boolean>>({});
@@ -71,18 +72,20 @@
   <div class="list">
     {#each data?.buckets ?? [] as b, i (b.id)}
       {@const open = isOpen(b.id, i)}
+      {@const col = b.character ? solid(colorOf(b.color_index ?? 0).rgb) : null}
       <section class="bkt" aria-label={b.name}>
         <button class="bh" aria-expanded={open} onclick={() => (closed = { ...closed, [b.id]: open })}>
           <span class="chev" style="transform: rotate({open ? 0 : -90}deg)"><Icon name="chevron" size={11} stroke={2.4} /></span>
+          {#if col}<span class="dot" style="background: {col}"></span>{/if}
           <span class="bn">{b.name}</span>
-          <span class="muted tn cnt">{b.kept.length} + {b.previews.length}</span>
+          <span class="muted tn cnt">{col ? b.kept.length : `${b.kept.length} + ${b.previews.length}`}</span>
         </button>
         {#if open}
           {#each b.kept as s (s.id)}
-            <div class="srow kept" draggable="true" role="listitem" ondragstart={(e) => drag(e, { bucket_id: b.id, asset_id: s.id, name: s.name, duration_s: s.duration_s })} data-testid="bucket-sound">
+            <div class="srow kept" style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} draggable="true" role="listitem" ondragstart={(e) => drag(e, { bucket_id: b.id, asset_id: s.id, name: s.name, duration_s: s.duration_s })} data-testid={col ? 'vocal-sound' : 'bucket-sound'}>
               <span class="grip"><Icon name="grip" /></span>
-              <button class="play gold" aria-label="Play {s.name}" onclick={() => toggle({ asset_id: s.id })}><Icon name={app.playing && app.sound === s.id ? 'stop' : 'play'} size={10} /></button>
-              <div class="mid"><span class="ellip nm4">{s.name}</span><span class="wv"><Waveform peaks={s.peaks} fill="var(--sfx)" /></span></div>
+              <button class="play gold" style={col ? `background: ${col}; color: #16110d` : ''} aria-label="Play {s.name}" onclick={() => toggle({ asset_id: s.id })}><Icon name={app.playing && app.sound === s.id ? 'stop' : 'play'} size={10} /></button>
+              <div class="mid"><span class="ellip nm4">{s.name}</span><span class="wv"><Waveform peaks={s.peaks} fill={col ?? 'var(--sfx)'} /></span></div>
               <span class="muted tn d">{len(s.duration_s)}</span>
             </div>
           {/each}
@@ -94,7 +97,7 @@
               <span class="muted tn d">{len(p.duration_s)}</span>
             </div>
           {/each}
-          {#if data?.connected.epidemic && b.keywords.length}<button class="btn sm" onclick={() => more(b.id)} disabled={busy === b.id}>{busy === b.id ? 'Searching…' : 'More like these'}</button>{/if}
+          {#if !col && data?.connected.epidemic && b.keywords.length}<button class="btn sm" onclick={() => more(b.id)} disabled={busy === b.id}>{busy === b.id ? 'Searching…' : 'More like these'}</button>{/if}
         {/if}
       </section>
     {:else}

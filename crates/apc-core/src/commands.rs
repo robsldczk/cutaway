@@ -31,6 +31,11 @@ pub struct AnalysisPayload {
     /// Only these lines' takes are replaced (all when empty).
     #[serde(default)]
     pub line_scope: Vec<String>,
+    /// Characters' vocal sounds cut from the recordings, and their vocal buckets.
+    #[serde(default)]
+    pub assets: Vec<Asset>,
+    #[serde(default)]
+    pub buckets: Vec<SoundBucket>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
@@ -324,6 +329,7 @@ impl Command {
             Command::ApplyAnalysis { payload } => json!({
                 "takes": payload.takes.len(), "notes": payload.notes.len(),
                 "unmatched": payload.unmatched.len(), "sessions": payload.sessions.len(),
+                "vocals": payload.assets.len(),
             }),
             Command::ApplyMatch {
                 sessions, sources, ..
@@ -891,6 +897,19 @@ impl Command {
             } => {
                 let mut b = bucket(tx, bucket_id)?;
                 b.kept.retain(|a| a != asset_id);
+                // a removed vocal stays out when the analysis runs again
+                if b.character.is_some() {
+                    if let Some(key) = tx
+                        .doc()
+                        .assets
+                        .get(asset_id)
+                        .and_then(|a| a.remote_id.clone())
+                    {
+                        if !b.dismissed.contains(&key) {
+                            b.dismissed.push(key);
+                        }
+                    }
+                }
                 tx.put(&b)?;
                 Ok(Value::Null)
             }
@@ -1060,10 +1079,15 @@ fn free_layer(doc: &Document, p: &Placement, pacing: &crate::timeline::Pacing) -
     let mut layer = 0;
     loop {
         let clash = doc.placements.values().any(|o| {
-            o.id != p.id && o.scene_id == p.scene_id && o.lane == p.lane && o.layer == layer && {
-                let os = placement_start(&layout, o);
-                os < end && start < os + o.len_s
-            }
+            o.id != p.id
+                && o.scene_id == p.scene_id
+                && o.lane == p.lane
+                && o.character == p.character
+                && o.layer == layer
+                && {
+                    let os = placement_start(&layout, o);
+                    os < end && start < os + o.len_s
+                }
         });
         if !clash {
             return layer;
@@ -1233,6 +1257,12 @@ pub fn default_take<'a>(takes: &[&'a Take]) -> Option<&'a Take> {
 
 fn apply_analysis(tx: &mut Tx, payload: &AnalysisPayload) -> Result<Value> {
     let doc = tx.doc().clone();
+    for a in &payload.assets {
+        tx.put(a)?;
+    }
+    for b in &payload.buckets {
+        tx.put(b)?;
+    }
     for s in &payload.sessions {
         tx.put(s)?;
     }

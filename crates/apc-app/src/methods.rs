@@ -272,6 +272,9 @@ pub struct PlaceSoundP {
     pub cue_id: Option<String>,
     #[serde(default)]
     pub lane: Option<Lane>,
+    /// For `lane: dialogue`: whose lane (a character id).
+    #[serde(default)]
+    pub character: Option<String>,
     /// Anchor to a line (and word); otherwise `at_s` is absolute scene time.
     #[serde(default)]
     pub anchor_line_id: Option<String>,
@@ -472,6 +475,9 @@ pub struct PlaceFromBucketP {
     pub bucket_id: Option<String>,
     #[serde(default)]
     pub lane: Option<Lane>,
+    /// For `lane: dialogue` (vocals default to their character's lane).
+    #[serde(default)]
+    pub character: Option<String>,
     #[serde(default)]
     pub at_s: Option<f64>,
     #[serde(default)]
@@ -583,7 +589,7 @@ registry! {
     "bucket_search", BucketSearchP, Write, true, "Search for a bucket's keywords. Epidemic Sound results become previews (not downloaded).";
     "bucket_download", BucketRemoteP, Write, true, "Download a preview (licensed) and keep it in the bucket. Counts against the plan.";
     "bucket_keep", BucketAssetP, Write, true, "Keep a library sound in a bucket.";
-    "bucket_remove", BucketAssetP, Write, true, "Take a kept sound out of a bucket (it stays in the library).";
+    "bucket_remove", BucketAssetP, Write, true, "Take a kept sound out of a bucket (it stays in the library). A removed vocal stays out on the next analysis.";
     "bucket_dismiss", BucketRemoteP, Write, true, "Dismiss a preview so searches skip it.";
     "bucket_generate", BucketGenerateP, Write, true, "Generate sounds for a bucket (ElevenLabs) and keep them.";
     "place_from_bucket", PlaceFromBucketP, Write, true, "Place a bucket sound on the timeline. A preview downloads first (returns a job_id).";
@@ -1062,7 +1068,12 @@ impl Service {
             }
             "bucket_keep" => {
                 let p: BucketAssetP = parse(params)?;
-                crate::sound::ensure_asset_in_doc(self, &p.asset_id)?;
+                let a = crate::sound::ensure_asset_in_doc(self, &p.asset_id)?;
+                if let Some(b) = self.doc().buckets.get(&p.bucket_id) {
+                    if a.source != AssetSource::Recorded {
+                        crate::buckets::only_sourced(b)?;
+                    }
+                }
                 Ok(self.exec(&Command::BucketKeep { bucket_id: p.bucket_id, asset_id: p.asset_id })?.result)
             }
             "bucket_remove" => {
@@ -1079,7 +1090,7 @@ impl Service {
             }
             "place_from_bucket" => {
                 let p: PlaceFromBucketP = parse(params)?;
-                crate::buckets::place(self, p.bucket_id, p.asset_id, p.remote_id, p.scene, p.lane, p.at_s, p.anchor_line_id, p.anchor_word)
+                crate::buckets::place(self, p)
             }
             "play_sound" => {
                 let p: PlaySoundP = parse(params)?;

@@ -656,6 +656,9 @@ pub enum Lane {
     Sfx,
     Ambience,
     Music,
+    /// A character's dialogue lane (`Placement::character`): vocal sounds from the actor's
+    /// own recordings (breaths, "mh-hm", efforts) sit with that character's lines.
+    Dialogue,
 }
 
 /// A sound placed on the timeline.
@@ -667,6 +670,9 @@ pub struct Placement {
     #[serde(default)]
     pub cue_id: Option<String>,
     pub lane: Lane,
+    /// The character whose dialogue lane holds this sound (`Lane::Dialogue`).
+    #[serde(default)]
+    pub character: Option<String>,
     #[serde(default)]
     pub layer: u32,
     /// Anchored placements follow their line; otherwise `at_s` is absolute scene time.
@@ -707,6 +713,8 @@ pub enum AssetSource {
     Imported,
     Licensed,
     Generated,
+    /// Cut from the episode's own recordings (a character's vocal sounds).
+    Recorded,
 }
 
 /// A library sound (show library, or the local library of a standalone episode).
@@ -776,6 +784,10 @@ pub struct SoundBucket {
     pub ai_suggested: bool,
     #[serde(default)]
     pub order: u32,
+    /// A character's vocal bucket: filled by the analysis from the actor's own recordings
+    /// only (no search, no generation).
+    #[serde(default)]
+    pub character: Option<String>,
 }
 
 impl Entity for SoundBucket {

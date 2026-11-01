@@ -367,6 +367,7 @@ pub fn import(
                 scene: sc,
                 cue_id: cue_id.clone(),
                 lane: None,
+                character: None,
                 anchor_line_id: None,
                 anchor_word: None,
                 at_s: Some(t),
@@ -420,18 +421,26 @@ pub fn place(svc: &mut Service, p: PlaceSoundP) -> Result<Value> {
         (None, Some(_)) => None,
     };
     let lane = p.lane.unwrap_or(match cue.as_ref().map(|c| c.cue_type) {
+        _ if p.character.is_some() && a.category.starts_with("Vocals") => Lane::Dialogue,
         Some(CueType::Ambience) => Lane::Ambience,
         Some(CueType::Music) => Lane::Music,
         _ if a.category.starts_with("Ambience") => Lane::Ambience,
         _ if a.category.starts_with("Music") => Lane::Music,
         _ => Lane::Sfx,
     });
+    let character = match lane {
+        Lane::Dialogue => Some(p.character.clone().ok_or_else(|| {
+            AppError::Params("a sound on a dialogue lane needs its character".into())
+        })?),
+        _ => None,
+    };
     let placement = Placement {
         id: new_id("pl"),
         scene_id: scene.id.clone(),
         asset_id: a.id.clone(),
         cue_id: p.cue_id.clone(),
         lane,
+        character,
         layer: 0,
         anchor,
         at_s: p.at_s.unwrap_or(0.0),

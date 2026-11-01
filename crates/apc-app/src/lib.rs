@@ -12,6 +12,7 @@ pub mod player;
 pub mod service;
 pub mod sound;
 pub mod views;
+pub mod vocals;
 
 pub use error::{AppError, Result};
 pub use methods::{methods, Access, MethodInfo, Session};

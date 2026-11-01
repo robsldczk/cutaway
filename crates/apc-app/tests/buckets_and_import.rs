@@ -509,3 +509,143 @@ fn director_files_link_only_to_the_recording_they_are_named_after() {
     s.call("match_files", &json!({})).unwrap();
     check(&mut s);
 }
+
+/// The analysis fills each character's vocal bucket from the actor's own mic; nothing else
+/// goes in, a removed vocal stays out, and a vocal is placed on the character's lane.
+#[test]
+fn the_analysis_fills_character_vocal_buckets_from_the_recordings() {
+    env();
+    let dir = tempfile::tempdir().unwrap();
+    let demo = dir.path().join("session");
+    let wavs = apc_app::demo::write_session(&demo).unwrap();
+    // Paul says an unscripted "Mh-hm." at 40 s
+    let pj = demo.join("Paul.json");
+    let mut t: Value = serde_json::from_str(&std::fs::read_to_string(&pj).unwrap()).unwrap();
+    t["lines"].as_array_mut().unwrap().push(json!({
+        "startTime": "00:00:40,000", "endTime": "00:00:40,600", "speakerDesignation": "Speaker 1", "text": "Mh-hm."
+    }));
+    std::fs::write(&pj, t.to_string()).unwrap();
+
+    let mut s = apc_app::Session::new("test");
+    s.call(
+        "create_episode",
+        &json!({ "parent": dir.path().to_string_lossy(), "name": "Ep" }),
+    )
+    .unwrap();
+    s.call(
+        "import_script",
+        &json!({ "path": demo.join("Demo Episode.fountain").to_string_lossy() }),
+    )
+    .unwrap();
+    let paths: Vec<String> = wavs
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    s.call("import_audio", &json!({ "paths": paths, "copy": true }))
+        .unwrap();
+    s.call("run_alignment", &json!({})).unwrap();
+
+    let paul = |s: &mut apc_app::Session| {
+        s.call("buckets", &json!({})).unwrap()["buckets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|b| b["character"] == "PAUL")
+            .cloned()
+            .expect("Paul's vocal bucket")
+    };
+    let b = paul(&mut s);
+    assert_eq!(b["name"], "Paul · vocals");
+    let bid = b["id"].as_str().unwrap().to_string();
+    let mhm = b["kept"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["tags"][0] == "mhm")
+        .cloned()
+        .expect("the mh-hm");
+    assert_eq!(mhm["heard"], "Mh-hm.");
+    assert_eq!(mhm["source"], "recorded");
+    assert!(
+        mhm["file"].as_str().unwrap().starts_with("Vocals/Paul/"),
+        "{}",
+        mhm["file"]
+    );
+    assert!(mhm["duration_s"].as_f64().unwrap() > 0.5);
+    // the scene filter shows it where Paul speaks
+    let sc1 = s.call("buckets", &json!({ "scene": "1" })).unwrap();
+    assert!(sc1["buckets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|x| x["id"] == bid.as_str()));
+
+    // only the actor's own recordings: no search, no generation, no outside sounds
+    assert!(s
+        .call(
+            "bucket_search",
+            &json!({ "bucket_id": bid, "provider": "library" })
+        )
+        .is_err());
+    assert!(s
+        .call("bucket_generate", &json!({ "bucket_id": bid }))
+        .is_err());
+
+    // placed on Paul's dialogue lane
+    let aid = mhm["id"].as_str().unwrap().to_string();
+    s.call(
+        "place_from_bucket",
+        &json!({ "scene": "1", "asset_id": aid, "at_s": 2.0 }),
+    )
+    .unwrap();
+    let ev = s.call("edit_view", &json!({ "scene": "1" })).unwrap();
+    let pl = &ev["placements"][0];
+    assert_eq!(pl["lane"], "dialogue");
+    assert_eq!(pl["character"], "PAUL");
+
+    // removed, it stays out when the analysis runs again
+    let n = b["kept"].as_array().unwrap().len();
+    s.call(
+        "bucket_remove",
+        &json!({ "bucket_id": bid, "asset_id": aid }),
+    )
+    .unwrap();
+    s.call("run_alignment", &json!({})).unwrap();
+    let again = paul(&mut s);
+    assert_eq!(again["kept"].as_array().unwrap().len(), n - 1);
+    assert!(again["kept"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|k| k["id"] != aid.as_str()));
+
+    // the analysis, vocals included, is one undo step
+    let first = {
+        let mut f = apc_app::Session::new("test");
+        f.call(
+            "create_episode",
+            &json!({ "parent": dir.path().join("b").to_string_lossy(), "name": "Ep" }),
+        )
+        .unwrap();
+        f.call(
+            "import_script",
+            &json!({ "path": demo.join("Demo Episode.fountain").to_string_lossy() }),
+        )
+        .unwrap();
+        f.call("import_audio", &json!({ "paths": paths, "copy": true }))
+            .unwrap();
+        f.call("run_alignment", &json!({})).unwrap();
+        assert!(f.call("buckets", &json!({})).unwrap()["buckets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|b| b["character"] == "PAUL"));
+        f.call("undo", &json!({})).unwrap();
+        f.call("buckets", &json!({})).unwrap()
+    };
+    assert!(first["buckets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|b| b["character"].is_null()));
+}

@@ -238,6 +238,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             asset_id: "door".into(),
             cue_id: None,
             lane: Lane::Sfx,
+            character: None,
             layer: 0,
             anchor: Some(Anchor {
                 line_id: "l2".into(),

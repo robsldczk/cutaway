@@ -8,6 +8,7 @@
   import KeywordField from './KeywordField.svelte';
   import Waveform from './Waveform.svelte';
   import type { Bucket, BucketSound, Preview } from '../lib/types';
+  import { colorOf, solid } from '../theme';
 
   let { bucket, connected, onchange }: { bucket: Bucket; connected: { epidemic: boolean; elevenlabs: boolean }; onchange: () => Promise<void> } = $props();
   let provider = $state<'epidemic' | 'elevenlabs' | 'library'>('epidemic');
@@ -16,6 +17,12 @@
   let library = $state<BucketSound[]>([]);
   let busy = $state<string | null>(null);
   let cursor = $state(0);
+  let tagFilter = $state<string | null>(null);
+  /** A character's vocal bucket: the actor's own recordings, nothing to search or generate. */
+  const vocal = $derived(!!bucket.character);
+  const col = $derived(bucket.character ? solid(colorOf(bucket.color_index ?? 0).rgb) : null);
+  const who = $derived(bucket.name.replace(/ · vocals$/, ''));
+  const kept = $derived(vocal && tagFilter ? bucket.kept.filter((k) => k.tags[0] === tagFilter) : bucket.kept);
 
   let shownId = '';
   $effect(() => {
@@ -26,6 +33,7 @@
     prompt = bucket.keywords.join(', ');
     library = [];
     cursor = 0;
+    tagFilter = null;
   });
 
   async function search(more = false) {
@@ -71,7 +79,7 @@
   }
 
   // Space plays, ← → step through results (SND-51)
-  const rows = $derived([...bucket.kept.map((k) => ({ asset_id: k.id })), ...bucket.previews.map((p) => ({ remote_id: p.remote_id }))]);
+  const rows = $derived([...kept.map((k) => ({ asset_id: k.id })), ...(vocal ? [] : bucket.previews.map((p) => ({ remote_id: p.remote_id })))]);
   function key(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
     if (t.tagName === 'INPUT' || app.overlay || !rows.length) return;
@@ -111,47 +119,57 @@
     {#each bucket.scenes as s (s)}<span class="chip">{s}</span>{/each}
     <button class="ib" aria-label="Close panel" onclick={() => (app.openBucket = null)}><Icon name="x" /></button>
   </div>
-  <div class="seg" role="tablist" aria-label="Provider">
-    {#each [['epidemic', 'Epidemic Sound'], ['elevenlabs', 'ElevenLabs'], ['library', 'Library']] as [k, l] (k)}
-      <button role="tab" aria-selected={provider === k} class="tab" class:on={provider === k} onclick={() => (provider = k as typeof provider)}>{l}</button>
-    {/each}
-  </div>
-
-  {#if provider === 'elevenlabs'}
-    <div class="q">
-      <input class="field grow" bind:value={prompt} aria-label="Prompt" placeholder="Describe the sound" />
-      <button class="btn" onclick={generate} disabled={busy === 'generate' || !connected.elevenlabs}>{busy === 'generate' ? 'Generating…' : 'Generate'}</button>
+  {#if vocal}
+    <p class="muted note">From {who}’s own recordings, found by the analysis. Removing one keeps it out of the next analysis.</p>
+    <div class="tags" role="group" aria-label="Kinds">
+      <button class="chip" class:on={!tagFilter} onclick={() => (tagFilter = null)}>All {bucket.kept.length}</button>
+      {#each bucket.keywords as k (k)}<button class="chip" class:on={tagFilter === k} onclick={() => (tagFilter = tagFilter === k ? null : k)}>{k} {bucket.kept.filter((x) => x.tags[0] === k).length}</button>{/each}
     </div>
-    {#if !connected.elevenlabs}<p class="muted note">Connect ElevenLabs in Settings → Connections to generate sounds.</p>{/if}
   {:else}
-    <div class="q">
-      <div class="grow"><KeywordField bind:keywords /></div>
-      <button class="btn" onclick={() => search()} disabled={!!busy || (provider === 'epidemic' && !connected.epidemic)}>{busy === 'search' ? 'Searching…' : 'Search'}</button>
+  <div class="seg" role="tablist" aria-label="Provider">
+      {#each [['epidemic', 'Epidemic Sound'], ['elevenlabs', 'ElevenLabs'], ['library', 'Library']] as [k, l] (k)}
+        <button role="tab" aria-selected={provider === k} class="tab" class:on={provider === k} onclick={() => (provider = k as typeof provider)}>{l}</button>
+      {/each}
     </div>
-    {#if provider === 'epidemic' && !connected.epidemic}<p class="muted note">Connect Epidemic Sound in Settings → Connections to search and preview.</p>{/if}
+  
+    {#if provider === 'elevenlabs'}
+      <div class="q">
+        <input class="field grow" bind:value={prompt} aria-label="Prompt" placeholder="Describe the sound" />
+        <button class="btn" onclick={generate} disabled={busy === 'generate' || !connected.elevenlabs}>{busy === 'generate' ? 'Generating…' : 'Generate'}</button>
+      </div>
+      {#if !connected.elevenlabs}<p class="muted note">Connect ElevenLabs in Settings → Connections to generate sounds.</p>{/if}
+    {:else}
+      <div class="q">
+        <div class="grow"><KeywordField bind:keywords /></div>
+        <button class="btn" onclick={() => search()} disabled={!!busy || (provider === 'epidemic' && !connected.epidemic)}>{busy === 'search' ? 'Searching…' : 'Search'}</button>
+      </div>
+      {#if provider === 'epidemic' && !connected.epidemic}<p class="muted note">Connect Epidemic Sound in Settings → Connections to search and preview.</p>{/if}
+    {/if}
   {/if}
 
   <div class="list">
-    <div class="label sec">In this bucket</div>
-    {#each bucket.kept as r, i (r.id)}
-      <div class="srow kept" class:cur={cursor === i}>
-        <button class="ib pl gold" aria-label="Play {r.name}" onclick={() => toggle({ asset_id: r.id })}><Icon name={app.playing && app.sound === r.id ? 'stop' : 'play'} size={11} /></button>
+    <div class="label sec">{vocal ? 'Vocals' : 'In this bucket'}</div>
+    {#each kept as r, i (r.id)}
+      <div class="srow kept" class:cur={cursor === i} style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} data-testid="kept-row">
+        <button class="ib pl gold" style={col ? `background: ${col}; color: #16110d` : ''} aria-label="Play {r.name}" onclick={() => toggle({ asset_id: r.id })}><Icon name={app.playing && app.sound === r.id ? 'stop' : 'play'} size={11} /></button>
         <div class="mid">
-          <span class="ellip nm3">{r.name}</span>
+          <span class="ellip nm3">{r.name}{#if r.heard}<span class="muted heard"> · “{r.heard}”</span>{/if}</span>
           <span class="wv" role="button" tabindex="-1" aria-label="Play {r.name} from here" onclick={(e) => playAt(e, { asset_id: r.id }, r.duration_s)} onkeydown={() => {}}>
-            <Waveform peaks={r.peaks} fill="var(--sfx)" />
+            <Waveform peaks={r.peaks} fill={col ?? 'var(--sfx)'} />
             {#if app.playing && app.sound === r.id}<span class="ph" style="left: {progress(r.duration_s)}%"></span>{/if}
           </span>
         </div>
         <span class="muted tn d">{len(r.duration_s)}</span>
-        <span class="ib ok" role="img" aria-label="Downloaded"><Icon name="check" stroke={2.4} /></span>
+        {#if vocal}<span></span>{:else}<span class="ib ok" role="img" aria-label="Downloaded"><Icon name="check" stroke={2.4} /></span>{/if}
         <button class="ib" aria-label="Remove {r.name}" onclick={() => act('bucket_remove', { asset_id: r.id })}><Icon name="x" size={13} /></button>
       </div>
     {:else}
-      <p class="muted note">Nothing kept yet. Download a preview to keep it.</p>
+      <p class="muted note">{vocal ? 'Nothing found yet. The analysis collects these.' : 'Nothing kept yet. Download a preview to keep it.'}</p>
     {/each}
 
-    {#if provider === 'library'}
+    {#if vocal}
+      <!-- the actor's own recordings only -->
+    {:else if provider === 'library'}
       <div class="label sec">Library</div>
       {#each library as r (r.id)}
         <div class="srow">
@@ -276,6 +294,18 @@
     background: var(--sfx);
     color: var(--on-sfx);
     box-shadow: none;
+  }
+  .tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .tags .chip.on {
+    background: var(--button-light-active);
+    color: var(--text-on-light);
+  }
+  .heard {
+    font-weight: 400;
   }
   .ok {
     color: var(--sfx);

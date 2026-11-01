@@ -23,6 +23,7 @@ export interface LaneRow {
 export const GROUP_LABEL: Record<LaneGroup, string> = { dialogue: 'Dialogue', sfx: 'Sound effects', ambience: 'Ambience', music: 'Music' };
 
 export function placementLane(p: PlacementView): string {
+  if (p.lane === 'dialogue') return p.character ?? 'dialogue';
   return p.lane === 'sfx' ? `sfx${p.layer + 1}` : p.lane;
 }
 

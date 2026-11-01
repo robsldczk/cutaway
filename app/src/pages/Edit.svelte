@@ -266,29 +266,31 @@
 
   // ---- drops from the scene bucket ----
   function dragOver(e: DragEvent, r: LaneRow) {
-    if (r.lane === 'dialogue' || r.lane === 'roomtone') return;
+    if (r.lane === 'roomtone') return;
     if (!e.dataTransfer?.types.includes('application/x-cutaway-bucket')) return;
     e.preventDefault();
   }
 
   async function drop(e: DragEvent, r: LaneRow) {
     const raw = e.dataTransfer?.getData('application/x-cutaway-bucket');
-    if (!raw || !v || r.lane === 'dialogue' || r.lane === 'roomtone' || !r.lane) return;
+    if (!raw || !v || r.lane === 'roomtone' || !r.lane) return;
     e.preventDefault();
     const s = JSON.parse(raw) as DragSound;
     const t = timeAt(e.clientX);
     const snap = snapAt(t);
     const where = snap ? { anchor_line_id: snap.line_id, anchor_word: snap.word ?? undefined } : { at_s: +t.toFixed(3) };
+    // a dialogue lane takes the sound as that character's (a vocal sits with their lines)
     const lane = r.lane;
+    const character = r.lane === 'dialogue' ? r.char : undefined;
     if (s.asset_id) {
-      await app.method('place_from_bucket', { scene: v.scene.id, asset_id: s.asset_id, lane, ...where });
+      await app.method('place_from_bucket', { scene: v.scene.id, asset_id: s.asset_id, lane, character, ...where });
       await app.loadEdit();
       return;
     }
     // a preview: downloads on drop, shown as a grey clip with a gold progress bar
     const gx = x(snap?.t ?? t);
     ghost = { x: gx, y: r.y + 4, w: Math.max(24, Math.min(x(s.duration_s || 1), width - gx)), name: s.name, progress: 0, snap: snap?.label ?? null };
-    const job = await app.run(() => call<{ job_id: string }>('place_from_bucket', { scene: v!.scene.id, bucket_id: s.bucket_id, remote_id: s.remote_id, lane, ...where }));
+    const job = await app.run(() => call<{ job_id: string }>('place_from_bucket', { scene: v!.scene.id, bucket_id: s.bucket_id, remote_id: s.remote_id, lane, character, ...where }));
     if (!job) {
       ghost = null;
       return;
@@ -361,6 +363,23 @@
   const flat = Array.from({ length: 60 }, (_, i) => 0.18 + 0.1 * Math.abs(Math.sin(i * 1.7)));
 </script>
 
+{#snippet soundClip(p: PlacementView, rgb: Rgb, vocal: boolean)}
+  {@const sel = app.editSel?.id === p.id}
+  {@const dx = drag?.id === p.id && app.tool === 'pointer' ? drag.dx : 0}
+  {@const fe = fadeEdit?.id === p.id ? fadeEdit : p}
+  <div class="clip" class:sel class:vocal role="button" tabindex="-1" onmousedown={(e) => soundDown(e, p)} title={p.name} style="left: {x(p.start_s) + dx}px; width: {Math.max(4, x(p.len_s))}px; {clipBg(rgb, sel)}; box-shadow: inset 0 0 0 {sel ? '1.5px var(--playhead)' : `1px ${rgba(rgb, 0.45)}`}" data-testid={vocal ? 'vocal-clip' : 'sound-clip'}>
+    <Waveform peaks={p.peaks} fill={rgba(rgb, 0.75)} />
+    <span class="cl ellip">{p.name.replace(/\.[a-z0-9]+$/i, '')}</span>
+    {#if sel}
+      {@const fi = Math.min(50, (fe.fade_in_s / p.len_s) * 100)}
+      {@const fo = Math.max(50, 100 - (fe.fade_out_s / p.len_s) * 100)}
+      <svg class="fx" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,40 {fi},4" /><polyline points="{fo},4 100,40" /></svg>
+      <span class="fh" style="left: {fi}%"></span><span class="fh" style="left: {fo}%"></span>
+      <span class="gl" style="top: {clamp(50 - p.gain_db * 3, 6, 94)}%"></span>
+    {/if}
+  </div>
+{/snippet}
+
 <EditBar bind:zoom lcdDetail={lcd} />
 
 {#if app.editInspector}<EditInspector />{/if}
@@ -418,6 +437,7 @@
                     {#if l.pinned}<span class="pin">pinned</span>{/if}
                   </div>
                 {/each}
+                {#each (ev?.placements ?? []).filter((p) => p.lane === 'dialogue' && p.character === r.char) as p (p.id)}{@render soundClip(p, r.rgb, true)}{/each}
               {:else if r.lane === 'roomtone'}
                 {#if ev?.room_tone}
                   {@const sel = app.editSel?.kind === 'roomtone'}
@@ -428,22 +448,7 @@
                   {#each ev.room_tone.seams.filter((s) => s < (v?.duration_s ?? 0)) as s (s)}<span class="seam" style="left: {x(s)}px"></span>{/each}
                 {/if}
               {:else}
-                {#each (ev?.placements ?? []).filter((p) => placementLane(p) === r.key) as p (p.id)}
-                  {@const sel = app.editSel?.id === p.id}
-                  {@const dx = drag?.id === p.id && app.tool === 'pointer' ? drag.dx : 0}
-                  {@const fe = fadeEdit?.id === p.id ? fadeEdit : p}
-                  <div class="clip" class:sel role="button" tabindex="-1" onmousedown={(e) => soundDown(e, p)} title={p.name} style="left: {x(p.start_s) + dx}px; width: {Math.max(4, x(p.len_s))}px; {clipBg(r.rgb, sel)}; box-shadow: inset 0 0 0 {sel ? '1.5px var(--playhead)' : `1px ${rgba(r.rgb, 0.45)}`}" data-testid="sound-clip">
-                    <Waveform peaks={p.peaks} fill={rgba(r.rgb, 0.75)} />
-                    <span class="cl ellip">{p.name.replace(/\.[a-z0-9]+$/i, '')}</span>
-                    {#if sel}
-                      {@const fi = Math.min(50, (fe.fade_in_s / p.len_s) * 100)}
-                      {@const fo = Math.max(50, 100 - (fe.fade_out_s / p.len_s) * 100)}
-                      <svg class="fx" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true"><polyline points="0,40 {fi},4" /><polyline points="{fo},4 100,40" /></svg>
-                      <span class="fh" style="left: {fi}%"></span><span class="fh" style="left: {fo}%"></span>
-                      <span class="gl" style="top: {clamp(50 - p.gain_db * 3, 6, 94)}%"></span>
-                    {/if}
-                  </div>
-                {/each}
+                {#each (ev?.placements ?? []).filter((p) => placementLane(p) === r.key) as p (p.id)}{@render soundClip(p, r.rgb, false)}{/each}
               {/if}
             </div>
           {/if}
@@ -676,6 +681,11 @@
     font-weight: 600;
     color: rgb(var(--ink-rgb) / 0.92);
     pointer-events: none;
+  }
+  /* a character's vocal on their dialogue lane: dashed, so it reads apart from the takes */
+  .clip.vocal:not(.sel) {
+    outline: 1px dashed rgb(var(--ink-rgb) / 0.4);
+    outline-offset: -1px;
   }
   .pin {
     position: absolute;

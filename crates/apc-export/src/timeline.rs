@@ -173,6 +173,8 @@ impl EpisodeTimeline {
                 Lane::Sfx => format!("SFX {}", p.layer + 1),
                 Lane::Ambience => "AMBIENCE".into(),
                 Lane::Music => "MUSIC".into(),
+                // vocals go on the character's own track
+                Lane::Dialogue => p.character.clone().unwrap_or_else(|| "DIALOGUE".into()),
             };
             let desc = p
                 .cue_id
@@ -186,7 +188,7 @@ impl EpisodeTimeline {
                 owner: p.id.clone(),
                 line_ref: format!("S{}", scene.number),
                 lane,
-                character: None,
+                character: p.character.clone().filter(|_| p.lane == Lane::Dialogue),
                 take_no: None,
                 part: (1, 1),
                 source_id: format!("asset:{}", p.asset_id),

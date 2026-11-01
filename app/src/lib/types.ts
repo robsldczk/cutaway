@@ -197,7 +197,9 @@ export interface PlacementView {
   id: string;
   asset_id: string;
   name: string;
-  lane: 'sfx' | 'ambience' | 'music';
+  lane: 'sfx' | 'ambience' | 'music' | 'dialogue';
+  /** Whose dialogue lane (lane 'dialogue': a character's vocal sound). */
+  character: string | null;
   layer: number;
   start_s: number;
   len_s: number;
@@ -336,6 +338,9 @@ export interface BucketSound {
   source: string;
   category: string;
   peaks: number[];
+  tags: string[];
+  /** What the recogniser heard ("Mm.") for a character's vocal. */
+  heard: string | null;
 }
 
 export interface Preview {
@@ -358,6 +363,9 @@ export interface Bucket {
   exclude: string[];
   ai_suggested: boolean;
   anchors: Anchor[];
+  /** A character's vocal bucket: the actor's own recordings, found by the analysis. */
+  character: string | null;
+  color_index: number | null;
 }
 
 export interface BucketsView {

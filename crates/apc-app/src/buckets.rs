@@ -132,6 +132,7 @@ pub fn spot(svc: &mut Service, scene: Option<&str>) -> Result<Value> {
                 exclude: vec!["music".into(), "voices".into()],
                 ai_suggested: true,
                 order,
+                character: None,
             });
             if !b.scene_ids.contains(&sc.id) {
                 b.scene_ids.push(sc.id.clone());
@@ -191,6 +192,7 @@ fn asset_view(svc: &mut Service, a: &Asset) -> Value {
         "id": a.id, "name": crate::views::sound_name(&a.file),
         "file": a.file, "duration_s": a.duration_s, "provider": a.provider, "license": a.license,
         "source": a.source, "category": a.category, "peaks": peaks,
+        "tags": a.tags, "heard": a.prompt.clone().filter(|_| a.source == AssetSource::Recorded),
     })
 }
 
@@ -209,12 +211,23 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
     let mut list: Vec<&SoundBucket> = doc
         .buckets
         .values()
-        .filter(|b| {
-            sid.as_ref()
-                .map(|s| b.scene_ids.contains(s))
-                .unwrap_or(true)
+        .filter(|b| match (&sid, &b.character) {
+            (None, _) => true,
+            // a character's vocals belong to every scene the character speaks in
+            (Some(s), Some(ch)) => doc
+                .lines
+                .values()
+                .any(|l| &l.scene_id == s && l.character.as_deref() == Some(ch.as_str())),
+            (Some(s), None) => b.scene_ids.contains(s),
         })
         .collect();
+    // characters' vocal buckets first, in cast order
+    let cast = |b: &SoundBucket| {
+        b.character
+            .as_ref()
+            .and_then(|c| doc.characters.get(c))
+            .map(|c| c.color_index)
+    };
     let first_scene = |b: &SoundBucket| {
         b.scene_ids
             .iter()
@@ -230,6 +243,7 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
         }
         _ => list.sort_by_key(|b| (first_scene(b), b.order)),
     }
+    list.sort_by_key(|b| cast(b).map(|i| (0, i)).unwrap_or((1, 0)));
     let mut out = Vec::new();
     for b in list {
         let kept: Vec<Value> = b
@@ -245,6 +259,7 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
             "id": b.id, "name": b.name, "keywords": b.keywords, "scenes": scene_labels(&doc, b), "scene_ids": b.scene_ids,
             "kept": kept, "previews": b.previews, "length_min_s": b.length_min_s, "length_max_s": b.length_max_s,
             "exclude": b.exclude, "ai_suggested": b.ai_suggested,
+            "character": b.character, "color_index": cast(b),
             "anchors": b.cue_ids.iter().filter_map(|c| doc.cues.get(c)).filter_map(|c| c.anchor.clone()).collect::<Vec<_>>(),
         }));
     }
@@ -293,6 +308,7 @@ pub fn create(
         exclude,
         ai_suggested: false,
         order: svc.doc().buckets.len() as u32,
+        character: None,
     };
     let id = b.id.clone();
     svc.exec(&Command::PutBucket { bucket: b })?;
@@ -334,6 +350,17 @@ pub fn update(svc: &mut Service, p: crate::methods::UpdateBucketP) -> Result<Val
     Ok(svc.exec(&Command::PutBucket { bucket: b })?.result)
 }
 
+/// A character's vocal bucket holds the actor's own recordings only.
+pub fn only_sourced(b: &SoundBucket) -> Result<()> {
+    if b.character.is_some() {
+        return Err(AppError::Params(format!(
+            "{} holds the actor's own recordings only (found by the analysis); it can't be searched or generated",
+            b.name
+        )));
+    }
+    Ok(())
+}
+
 fn bucket(svc: &Service, id: &str) -> Result<SoundBucket> {
     svc.doc()
         .buckets
@@ -352,6 +379,7 @@ pub fn search(
     query: Option<Vec<String>>,
 ) -> Result<Value> {
     let mut b = bucket(svc, bucket_id)?;
+    only_sourced(&b)?;
     if let Some(q) = query {
         b.keywords = q
             .into_iter()
@@ -487,6 +515,7 @@ pub fn generate(
     variations: Option<u32>,
 ) -> Result<Value> {
     let b = bucket(svc, bucket_id)?;
+    only_sourced(&b)?;
     let prompt = prompt
         .filter(|p| !p.trim().is_empty())
         .unwrap_or_else(|| b.keywords.join(", "));
@@ -532,24 +561,42 @@ pub fn play(
 }
 
 /// Places a bucket sound on the timeline. A preview downloads first (a background job with
-/// progress, "downloads on drop"); a kept sound is placed at once.
-#[allow(clippy::too_many_arguments)]
-pub fn place(
-    svc: &mut Service,
-    bucket_id: Option<String>,
-    asset_id: Option<String>,
-    remote_id: Option<String>,
-    scene: String,
-    lane: Option<Lane>,
-    at_s: Option<f64>,
-    anchor_line_id: Option<String>,
-    anchor_word: Option<usize>,
-) -> Result<Value> {
+/// progress, "downloads on drop"); a kept sound is placed at once. A character's vocal
+/// goes on that character's dialogue lane unless a lane is given.
+pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<Value> {
+    let crate::methods::PlaceFromBucketP {
+        scene,
+        asset_id,
+        remote_id,
+        bucket_id,
+        lane,
+        character,
+        at_s,
+        anchor_line_id,
+        anchor_word,
+    } = q;
+    let vocal_of = bucket_id
+        .as_ref()
+        .and_then(|b| svc.doc().buckets.get(b))
+        .or_else(|| {
+            asset_id.as_ref().and_then(|a| {
+                svc.doc()
+                    .buckets
+                    .values()
+                    .find(|b| b.character.is_some() && b.kept.contains(a))
+            })
+        })
+        .and_then(|b| b.character.clone());
+    let (lane, character) = match (lane, character.or(vocal_of)) {
+        (None, Some(ch)) => (Some(Lane::Dialogue), Some(ch)),
+        (l, ch) => (l, ch),
+    };
     let p = crate::methods::PlaceSoundP {
         asset_id: String::new(),
         scene,
         cue_id: None,
         lane,
+        character,
         anchor_line_id,
         anchor_word,
         at_s,

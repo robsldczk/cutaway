@@ -149,6 +149,7 @@ impl PlaySchedule {
                         Lane::Sfx => format!("sfx{}", p.layer + 1),
                         Lane::Ambience => "ambience".into(),
                         Lane::Music => "music".into(),
+                        Lane::Dialogue => p.character.clone().unwrap_or_else(|| "dialogue".into()),
                     },
                     loop_len_s: None,
                     pan: 0.0,
@@ -375,6 +376,7 @@ mod tests {
                 asset_id: "as".into(),
                 cue_id: None,
                 lane: Lane::Sfx,
+                character: None,
                 layer: 0,
                 anchor: Some(Anchor {
                     line_id: "b".into(),

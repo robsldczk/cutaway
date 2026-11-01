@@ -482,9 +482,14 @@ impl Service {
         if let Some(w) = warn {
             report.flagged.insert(0, w);
         }
-        self.exec(&Command::ApplyAnalysis {
-            payload: out.payload,
-        })?;
+        progress(apc_analysis::Progress {
+            stage: "vocals".into(),
+            fraction: 1.0,
+            message: format!("Collecting {} vocal sounds", out.vocals.len()),
+        });
+        let mut payload = out.payload;
+        (payload.assets, payload.buckets) = crate::vocals::prepare(self, &out.vocals)?;
+        self.exec(&Command::ApplyAnalysis { payload })?;
         std::fs::write(self.paths.logs.join("match-report.md"), &report.markdown)?;
         self.media.clear();
         self.last_report = Some(report.clone());

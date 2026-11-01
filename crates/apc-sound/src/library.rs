@@ -276,6 +276,7 @@ fn source_str(s: AssetSource) -> &'static str {
         AssetSource::Imported => "imported",
         AssetSource::Licensed => "licensed",
         AssetSource::Generated => "generated",
+        AssetSource::Recorded => "recorded",
     }
 }
 
@@ -283,6 +284,7 @@ fn parse_source(s: &str) -> AssetSource {
     match s {
         "licensed" => AssetSource::Licensed,
         "generated" => AssetSource::Generated,
+        "recorded" => AssetSource::Recorded,
         _ => AssetSource::Imported,
     }
 }

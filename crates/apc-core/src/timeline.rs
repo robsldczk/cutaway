@@ -780,6 +780,7 @@ pub(crate) mod tests {
             asset_id: "as".into(),
             cue_id: None,
             lane: Lane::Sfx,
+            character: None,
             layer: 0,
             anchor: Some(Anchor {
                 line_id: "b".into(),

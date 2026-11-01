@@ -70,6 +70,8 @@ pub struct MatchReport {
 pub struct AnalysisOutput {
     pub payload: AnalysisPayload,
     pub report: MatchReport,
+    /// Each character's vocal sounds (breaths, "mh-hm", efforts …) for their vocal bucket.
+    pub vocals: Vec<crate::vocals::VocalCandidate>,
 }
 
 /// Deterministic id from parts (sessions are named by their members).
@@ -992,7 +994,46 @@ pub fn analyze(
             report.takes_found, report.lines_matched
         ),
     );
+    // 8. Vocal sounds of each actor, from their own mic.
+    let only_interjections = |line_id: &str| {
+        doc.lines
+            .get(line_id)
+            .map(|l| {
+                let w = apc_core::text::norm_words(&l.text);
+                !w.is_empty()
+                    && w.iter()
+                        .all(|x| crate::vocals::interjection_tag(x).is_some())
+            })
+            .unwrap_or(false)
+    };
+    let tracks: Vec<crate::vocals::VocalTrack> = sources
+        .iter()
+        .filter(|d| d.src.role == Role::Character)
+        .filter_map(|d| {
+            Some(crate::vocals::VocalTrack {
+                source_id: d.src.id.clone(),
+                character: d.src.character.clone()?,
+                offset_s: d.src.offset_s,
+                session: d.src.session_id.clone(),
+                env: &d.analysis.env,
+                words: d
+                    .tr
+                    .words
+                    .iter()
+                    .map(|w| (w.raw.clone(), w.t0 + d.src.offset_s, w.t1 + d.src.offset_s))
+                    .collect(),
+                takes: takes
+                    .iter()
+                    .filter(|t| t.source_id == d.src.id)
+                    .map(|t| (t.t0, t.t1, only_interjections(&t.line_id)))
+                    .collect(),
+            })
+        })
+        .collect();
+    let vocals = crate::vocals::find_vocals(&tracks);
+    drop(tracks);
     Ok(AnalysisOutput {
+        vocals,
         payload: AnalysisPayload {
             sessions,
             sources: sources.into_iter().map(|d| d.src).collect(),
@@ -1000,6 +1041,8 @@ pub fn analyze(
             notes,
             unmatched,
             line_scope: vec![],
+            assets: vec![],
+            buckets: vec![],
         },
         report,
     })
