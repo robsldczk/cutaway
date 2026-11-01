@@ -229,11 +229,20 @@ pub fn active_scenes(
         .map(|(i, _)| i)
         .collect();
     let (pass1, _) = align(all, &long, words, opts);
-    let active: BTreeSet<usize> = pass1
+    let mut active: BTreeSet<usize> = pass1
         .iter()
         .filter(|h| all[h.unit].character.as_deref() == Some(role))
         .map(|h| all[h.unit].scene_idx)
         .collect();
+    // Pass 1 can't see scenes where the role only has short lines ("D…d…dad?!"): keep them.
+    let mut has_long: std::collections::BTreeMap<usize, bool> = Default::default();
+    for u in all
+        .iter()
+        .filter(|u| u.kind == LineKind::Dialogue && u.character.as_deref() == Some(role))
+    {
+        *has_long.entry(u.scene_idx).or_default() |= u.n_words >= 4;
+    }
+    active.extend(has_long.into_iter().filter(|(_, l)| !l).map(|(s, _)| s));
     let n_scenes = all.iter().map(|u| u.scene_idx + 1).max().unwrap_or(0);
     let mut near = BTreeSet::new();
     for s in active {
@@ -315,5 +324,30 @@ mod tests {
         );
         // "and lunch then": "lunch" doesn't open the segment, so it is not a take
         assert_eq!(hits.iter().filter(|h| all[h.unit].id == "p2").count(), 1);
+    }
+
+    #[test]
+    fn a_role_with_only_short_lines_keeps_its_scenes() {
+        let all = vec![
+            unit("d1", 0, "DAD", "Nina, who is it at the door?"),
+            unit("n1", 3, "NINA", "D... d... dad?!"),
+        ];
+        // what Parakeet heard on Nina's mic
+        let t = Transcript::from_segments(
+            vec![
+                (50.5, 51.0, "D d".into(), None),
+                (51.3, 51.8, "Dad?".into(), None),
+            ],
+            "t",
+        );
+        let near = active_scenes(&all, &t.words, "NINA", &AlignOptions::default());
+        assert!(near.contains(&3), "{near:?}");
+        let (hits, _) = align(
+            &all,
+            &dialogue_in(&all, &near),
+            &t.words,
+            &AlignOptions::default(),
+        );
+        assert_eq!(hits.len(), 1);
     }
 }

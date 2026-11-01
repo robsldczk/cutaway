@@ -26,9 +26,12 @@ use crate::wordmap::{coverage, map_words};
 /// Feedback window after a take, direction window before it (seconds).
 pub const FEEDBACK_WINDOW_S: f64 = 8.0;
 pub const DIRECTION_WINDOW_S: f64 = 30.0;
-/// Takes quieter than this on their own mic are bleed.
-pub const BLEED_DB: f64 = -38.0;
-/// Takes this far below the mic's median take level are bleed too.
+/// Takes quieter than this on their own mic are bleed, whatever the mic's gain.
+/// (Stage 0 used −38 dB, which fit its fixture's gain but drops real takes from mics
+/// recorded a few dB lower; see DECISIONS.md D44.)
+pub const BLEED_DB: f64 = -50.0;
+/// Takes this far below the mic's median take level are bleed: the director or the
+/// reader heard across the room, not the actor on the close mic.
 pub const RELATIVE_BLEED_DB: f64 = 10.0;
 
 pub struct Providers<'a> {
@@ -374,10 +377,10 @@ pub fn analyze(
         // Bleed: quiet in absolute terms, or far below this mic's typical take level.
         let mut levels: Vec<f64> = mine.iter().map(|t| t.db).collect();
         levels.sort_by(f64::total_cmp);
-        if let Some(median) = levels.get(levels.len() / 2).copied() {
-            for t in mine.iter_mut() {
-                t.bleed = t.db < BLEED_DB || t.db < median - RELATIVE_BLEED_DB;
-            }
+        let median = levels.get(levels.len() / 2).copied();
+        let quiet = |db: f64| db < BLEED_DB || median.is_some_and(|m| db < m - RELATIVE_BLEED_DB);
+        for t in mine.iter_mut() {
+            t.bleed = quiet(t.db);
         }
         mine.sort_by(|a, b| a.t0.total_cmp(&b.t0));
         for i in 1..mine.len() {
@@ -409,7 +412,7 @@ pub fn analyze(
             }
             let cov = (s.w0..s.w1).filter(|w| used.contains(w)).count() as f64 / n as f64;
             let db = d.analysis.rms_db(s.start + off, s.end + off);
-            if cov < 0.5 && db > BLEED_DB {
+            if cov < 0.5 && !quiet(db) {
                 unmatched.push(Unmatched {
                     id: stable_id("um", &[&d.src.id, &format!("{:.2}", s.start + off)]),
                     scene_id: None,
