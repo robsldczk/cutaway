@@ -188,9 +188,13 @@ pub struct NoteCondenseInput {
 pub struct CondensedNote {
     pub take_id: String,
     /// A few words: what was asked before the take ("quieter, to yourself").
+    /// Models leave out empty notes now and then, so missing means none.
+    #[serde(default)]
     pub direction: String,
     /// A few words: the reaction after it ("liked it").
+    #[serde(default)]
     pub feedback: String,
+    #[serde(default)]
     pub tags: Vec<String>,
 }
 

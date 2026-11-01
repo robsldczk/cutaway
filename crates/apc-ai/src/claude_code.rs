@@ -173,6 +173,29 @@ impl AiProvider for ClaudeCodeProvider {
         let mut child = cmd
             .spawn()
             .map_err(|e| AiError::Unavailable(format!("cannot start '{}': {e}", self.binary)))?;
+        // Drain stdout/stderr while the CLI runs: a reply bigger than the pipe buffer
+        // (64 KiB) would otherwise block the CLI and time out, or arrive cut off.
+        let drain = |s: Option<Box<dyn Read + Send>>| {
+            std::thread::spawn(move || {
+                let mut buf = String::new();
+                if let Some(mut s) = s {
+                    let _ = s.read_to_string(&mut buf);
+                }
+                buf
+            })
+        };
+        let stdout = drain(
+            child
+                .stdout
+                .take()
+                .map(|s| Box::new(s) as Box<dyn Read + Send>),
+        );
+        let stderr = drain(
+            child
+                .stderr
+                .take()
+                .map(|s| Box::new(s) as Box<dyn Read + Send>),
+        );
         if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(req.render().as_bytes())?;
         }
@@ -187,16 +210,10 @@ impl AiProvider for ClaudeCodeProvider {
             }
             std::thread::sleep(Duration::from_millis(50));
         }
-        let mut out = String::new();
-        if let Some(mut s) = child.stdout.take() {
-            s.read_to_string(&mut out)?;
-        }
         let status = child.wait()?;
+        let out = stdout.join().unwrap_or_default();
         if !status.success() {
-            let mut err = String::new();
-            if let Some(mut s) = child.stderr.take() {
-                let _ = s.read_to_string(&mut err);
-            }
+            let err = stderr.join().unwrap_or_default();
             return Err(AiError::Failed(format!("exit {status}: {}", err.trim())));
         }
         let envelope: Value = serde_json::from_str(out.trim())
@@ -238,6 +255,44 @@ mod tests {
         assert!(
             v("anthropic.claude-code-2.1.314-darwin-arm64") > v("anthropic.claude-code-2.1.99")
         );
+    }
+
+    /// A reply bigger than the pipe buffer used to hang the CLI until the timeout.
+    #[cfg(unix)]
+    #[test]
+    fn large_replies_are_read_whole() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("claude");
+        let body = "x".repeat(200_000);
+        std::fs::write(
+            &bin,
+            format!(
+                "#!/bin/sh\ncat > /dev/null\nprintf '%s' '{{\"result\": \"{{\\\"a\\\": \\\"{body}\\\"}}\"}}'\n"
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut p = ClaudeCodeProvider::new("m", "low", 20);
+        p.binary = bin.to_string_lossy().into_owned();
+        let req = AiRequest {
+            task: crate::task::AiTask::RoomClassify,
+            prompt: "p".into(),
+            prompt_version: 1,
+            input: Value::Null,
+            output_schema: Value::Null,
+        };
+        let v = p.run(&req).unwrap();
+        assert_eq!(v["a"].as_str().map(str::len), Some(200_000));
+    }
+
+    #[test]
+    fn notes_without_feedback_parse() {
+        let o: crate::task::NoteCondenseOutput =
+            serde_json::from_str(r#"{"notes": [{"take_id": "t1", "direction": "go for it"}]}"#)
+                .unwrap();
+        assert_eq!(o.notes[0].feedback, "");
+        assert!(o.notes[0].tags.is_empty());
     }
 
     /// Live call through the Claude Code CLI (needs `claude` and a login).
