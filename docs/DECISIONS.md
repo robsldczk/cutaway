@@ -203,3 +203,13 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Placement:** a vocal goes on its character's dialogue lane (`Lane::Dialogue` with the character), so it follows that lane's mute, solo and volume and exports on the actor's track; dropping it on an SFX lane puts it there. Any bucket sound can be dropped on a dialogue lane.
 - **One undo:** the vocal assets and buckets ride in the analysis command, so undoing an analysis takes its vocals back too (the cut files stay in the library and are found again by hash).
 - **Checked:** TARMAC with its transcripts: 25 sounds for Paul (6 ah, 6 mhm, 4 whoa, 6 breaths, 1 panting, 1 effort, 1 huh); takes unchanged (36). The breath, panting and running thresholds need tuning on real sessions; they are listed in the run report.
+
+### D48 Bleed is relative to the mic, not −38 dB (Rob, 2026-11-01)
+- **Finding:** on the real TARMAC Ep2 session, 24 of Sara's and 17 of the Colonel's own-mic reads were dropped as bleed. They peak around −20 dBFS on the actor's close mic but average −38 to −44 dB RMS, because those mics were recorded a few dB lower than the Stage 0 fixture. The −38 dB cut was Stage 0's number for that fixture.
+- **Options:** keep −38 dB; lower it to another fixed value; make it relative to the mic.
+- **Choice:** a take is bleed when it is more than 10 dB under the mic's median take (the director or the reader heard across the room), or under −50 dB whatever the mic. Unmatched speech uses the same rule. Pass 1 also keeps the scenes where a role only has short lines, since the four-word pass can never find them (Nina's "D…d…dad?!").
+- **Checked:** TARMAC fixture unchanged (36 Paul takes). Real Ep2 session with cached Parakeet transcripts: 328 → 372 takes; Sara 17 → 20 lines, the Colonel 29 → 31, Nina 0 → 1, bleed drops 47 → 4. A comparison against the room mic's level per take would be the stronger test; not done yet.
+
+### D49 Finding the Claude Code CLI (Rob, 2026-11-01)
+- **Finding:** an app started from Finder doesn't get the shell's PATH, and this Mac has no `claude` on PATH at all (only the one inside the VS Code extension), so every AI task silently ran on the mock rules.
+- **Choice:** `CUTAWAY_CLAUDE_BIN`, then `claude` on PATH, then the usual install folders (`~/.claude/local`, `~/.local/bin`, npm/bun/volta, Homebrew, `/usr/local/bin`, `%APPDATA%\npm`), then the newest Claude Code extension in VS Code / Cursor (`resources/native-binary/claude`). The first one that answers `--version` wins.

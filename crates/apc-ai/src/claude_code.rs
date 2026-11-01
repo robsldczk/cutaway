@@ -17,10 +17,87 @@ pub struct ClaudeCodeProvider {
     pub extra_args: Vec<String>,
 }
 
+fn starts(binary: &std::path::Path) -> bool {
+    Command::new(binary)
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// `1.2.3` out of `anthropic.claude-code-1.2.3-darwin-arm64`, for picking the newest.
+fn extension_version(dir: &std::path::Path) -> Vec<u64> {
+    let name = dir.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    name.trim_start_matches("anthropic.claude-code-")
+        .split('-')
+        .next()
+        .unwrap_or("")
+        .split('.')
+        .map(|p| p.parse().unwrap_or(0))
+        .collect()
+}
+
+/// Where the Claude Code CLI lives. An app started from Finder doesn't get the shell's
+/// PATH, so the usual install folders are searched too, and as a last resort the CLI that
+/// ships inside the VS Code / Cursor extension (same binary, same login).
+pub fn find_binary() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    if let Ok(b) = std::env::var("CUTAWAY_CLAUDE_BIN") {
+        return Some(PathBuf::from(b));
+    }
+    let exe = if cfg!(windows) {
+        "claude.exe"
+    } else {
+        "claude"
+    };
+    if starts(std::path::Path::new(exe)) {
+        return Some(PathBuf::from(exe));
+    }
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)?;
+    let mut cands: Vec<PathBuf> = vec![
+        home.join(".claude/local").join(exe),
+        home.join(".local/bin").join(exe),
+        home.join(".npm-global/bin").join(exe),
+        home.join(".bun/bin").join(exe),
+        home.join(".volta/bin").join(exe),
+        PathBuf::from("/opt/homebrew/bin/claude"),
+        PathBuf::from("/usr/local/bin/claude"),
+    ];
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        cands.push(PathBuf::from(appdata).join("npm/claude.cmd"));
+    }
+    for editor in [".vscode", ".cursor", ".vscode-insiders"] {
+        let Ok(rd) = std::fs::read_dir(home.join(editor).join("extensions")) else {
+            continue;
+        };
+        let mut exts: Vec<PathBuf> = rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("anthropic.claude-code-"))
+            })
+            .collect();
+        exts.sort_by_key(|p| std::cmp::Reverse(extension_version(p)));
+        cands.extend(
+            exts.iter()
+                .map(|p| p.join("resources/native-binary").join(exe)),
+        );
+    }
+    cands.into_iter().find(|p| p.is_file() && starts(p))
+}
+
 impl ClaudeCodeProvider {
     pub fn new(model: &str, effort: &str, timeout_s: u64) -> Self {
         ClaudeCodeProvider {
-            binary: std::env::var("CUTAWAY_CLAUDE_BIN").unwrap_or_else(|_| "claude".into()),
+            binary: find_binary()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "claude".into()),
             model: model.to_string(),
             effort: effort.to_string(),
             timeout: Duration::from_secs(timeout_s),
@@ -32,13 +109,7 @@ impl ClaudeCodeProvider {
 
     /// True when the CLI can be started.
     pub fn available(&self) -> bool {
-        Command::new(&self.binary)
-            .arg("--version")
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+        starts(std::path::Path::new(&self.binary))
     }
 }
 
@@ -158,6 +229,15 @@ mod tests {
         assert!(extract_json("no json here").is_none());
         let nested = extract_json("x {\"a\": {\"b\": \"}\"}} y").unwrap();
         assert_eq!(nested["a"]["b"], "}");
+    }
+
+    #[test]
+    fn newest_extension_sorts_first() {
+        let v = |n: &str| extension_version(std::path::Path::new(n));
+        assert_eq!(v("anthropic.claude-code-2.1.314-darwin-arm64"), [2, 1, 314]);
+        assert!(
+            v("anthropic.claude-code-2.1.314-darwin-arm64") > v("anthropic.claude-code-2.1.99")
+        );
     }
 
     /// Live call through the Claude Code CLI (needs `claude` and a login).
