@@ -104,6 +104,30 @@ mod tests {
     }
 
     #[test]
+    fn renders_source_samples_bit_exact() {
+        let dir = tempfile::tempdir().unwrap();
+        let set = sine_source(dir.path());
+        let mut reader = apc_media::AudioReader::open(&dir.path().join("sine.wav")).unwrap();
+        let src = reader.read_range(0.5, 1.5).unwrap();
+        // whole-sample clip starts used to land between samples and repeat/skip them
+        for start in [0.0, 0.25, 1.5, 0.123_456] {
+            let s = PlaySchedule {
+                clips: vec![clip(0.5, 1.5, start, 0.0)],
+                duration_s: start + 1.0,
+            };
+            let out = render_to_buffer(&s, &set).unwrap();
+            let first = (start * 48000.0).round() as usize;
+            let left: Vec<f32> = out.iter().step_by(2).skip(first).copied().collect();
+            let wrong = left
+                .iter()
+                .zip(&src)
+                .filter(|(a, b)| (*a - *b).abs() > 1e-6)
+                .count();
+            assert_eq!(wrong, 0, "start {start}: {wrong} samples differ");
+        }
+    }
+
+    #[test]
     fn render_length_is_exact() {
         let dir = tempfile::tempdir().unwrap();
         let set = sine_source(dir.path());

@@ -154,13 +154,18 @@ impl Mixer {
             let gain = 10f64.powf(c.gain_db / 20.0) as f32;
             let (gl, gr) = pan_gains(c.pan);
             let len = c.len();
-            let first = ((c.start_s - t0) * rate).ceil().max(0.0) as usize;
+            // Whole frames, not seconds: `floor(t * rate)` lands just under an integer on
+            // many samples and repeats/skips them, which is audible as grit.
+            let clip_start = (c.start_s * rate).round() as i64;
+            let len_frames = (len * rate).round() as i64;
+            let first = (clip_start - start_frame as i64).max(0) as usize;
             for n in first..frames {
-                let local = (start_frame + n as u64) as f64 / rate - c.start_s;
-                if local >= len {
+                let k = start_frame as i64 + n as i64 - clip_start;
+                if k >= len_frames {
                     break;
                 }
-                let mut idx = (local * rate) as usize;
+                let local = k as f64 / rate;
+                let mut idx = k as usize;
                 if c.loop_len_s.is_some() {
                     idx %= buf.len();
                 } else if idx >= buf.len() {
