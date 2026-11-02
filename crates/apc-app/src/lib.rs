@@ -11,7 +11,9 @@ pub mod jobs;
 pub mod methods;
 pub mod player;
 pub mod service;
+pub mod shows;
 pub mod sound;
+pub mod studio;
 pub mod views;
 pub mod vocals;
 

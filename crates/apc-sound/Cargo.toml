@@ -17,6 +17,7 @@ rusqlite.workspace = true
 blake3.workspace = true
 ureq.workspace = true
 chrono.workspace = true
+dirs.workspace = true
 keyring = "4.2"
 
 schemars.workspace = true

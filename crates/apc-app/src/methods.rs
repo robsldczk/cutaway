@@ -53,8 +53,47 @@ pub struct SceneP {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct CreateShowP {
+    /// The show's folder: an existing production folder (it is kept as it is) or a new one.
+    #[serde(default)]
+    pub root: Option<String>,
+    /// Instead of `root`: a new folder `parent/name`.
+    #[serde(default)]
+    pub parent: Option<String>,
+    /// The show's name (defaults to the folder's).
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct DemoP {
     pub parent: String,
     pub name: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct ShowPathP {
+    /// The show's folder or its `.cutawayshow` file.
+    pub path: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct OpenEpisodeP {
+    /// Episode folder name in the open show ("Episode 2").
+    pub episode: String,
+    /// Make the Cutaway project (and the folders) when the episode has none yet.
+    #[serde(default = "yes")]
+    pub create: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct MigrateP {
+    /// A standalone episode file or its folder.
+    pub source: String,
+    /// Episode folder name in the open show ("Episode 2").
+    pub episode: String,
+    /// Only report what would be copied.
+    #[serde(default)]
+    pub dry_run: bool,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -294,6 +333,9 @@ pub struct PlaceSoundP {
 #[derive(Deserialize, JsonSchema)]
 pub struct ImportSoundsP {
     pub paths: Vec<String>,
+    /// Keep the sounds in this bucket (in a show: saved into its folder).
+    #[serde(default)]
+    pub bucket_id: Option<String>,
     /// Attach the imported sounds to this cue as candidates.
     #[serde(default)]
     pub cue_id: Option<String>,
@@ -429,6 +471,9 @@ pub struct CreateBucketP {
     /// Results of `search_epidemic` to start the bucket with (dropped in by hand).
     #[serde(default)]
     pub previews: Vec<Preview>,
+    /// A music bucket (in a show its folder goes under `music/`).
+    #[serde(default)]
+    pub music: bool,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -611,11 +656,19 @@ macro_rules! registry {
 }
 
 registry! {
-    "create_show", CreateShowP, Write, true, "Create a show folder with its library (TARMAC/TARMAC.cutawayshow, Library/, Episodes/).";
+    "create_show", CreateShowP, Write, true, "Make a folder a show (studio mode): writes <root>/<name>.cutawayshow next to the production's files and adds Episodes/ and Sound/{sfx,music}/ when missing. Nothing that exists is touched. Opens the show.";
+    "open_show", ShowPathP, Read, true, "Open a show (its folder or .cutawayshow file): its episodes, library and theme. Then open_episode.";
+    "show_view", NoParams, Read, true, "The open show: name, folders, episodes (number, title, has a project) and theme.";
+    "show_backdrop", NoParams, Read, false, "The show's backdrop image as a data URL, with its theme colours.";
+    "set_show_backdrop", PathP, Write, false, "Set the show's backdrop (once for the show): stored as Sound/Cutaway/backdrop.jpg; the theme colours come from it.";
+    "open_episode", OpenEpisodeP, Write, true, "Open an episode of the open show by its folder name; makes its Cutaway project in Episodes/<episode>/Sound/ when it has none.";
+    "close_show", NoParams, Read, true, "Close the show (and its open episode).";
+    "rescan_library", NoParams, Write, true, "Read the show's sound library again (new files from the pipeline); new folders become buckets.";
+    "migrate_episode", MigrateP, Write, true, "Copy a standalone episode into an episode folder of the open show (the source stays as it is). Its sounds go into the show's library, vocals stay with the episode. dry_run reports first.";
     "create_episode", CreateEpisodeP, Write, true, "Create an episode (inside a show, or standalone) and open it.";
     "open_project", OpenP, Read, true, "Open an episode file or folder. Later calls work on it.";
     "close_project", NoParams, Read, true, "Close the open episode (back to the start screen). Unsaved changes are snapshotted into Backups/ first. Refused while an analysis runs.";
-    "create_demo", CreateShowP, Write, false, "Create the synthetic demo session in parent/name, analyze it and open it.";
+    "create_demo", DemoP, Write, false, "Create the synthetic demo session in parent/name, analyze it and open it.";
     "project_status", NoParams, Read, true, "Progress, match rate, flagged items, undo state and AI provider of the open episode.";
     "list_scenes", NoParams, Read, true, "Scenes with heading, place, line counts and flagged items.";
     "import_script", ImportScriptP, Write, true, "Import a script as the next version (vNNN): Fountain, or a Throughline .thrl project with its story context (scene titles and summaries, acts, cast, settings, character bios). Returns the change summary.";
@@ -1168,11 +1221,11 @@ impl Service {
             }
             "generate_sound" => {
                 let p: GenerateP = parse(params)?;
-                crate::sound::generate(self, p.cue_id, p.prompt, p.variations, p.duration_s)
+                crate::sound::generate(self, p.cue_id, p.prompt, p.variations, p.duration_s, None)
             }
             "import_sounds" => {
                 let p: ImportSoundsP = parse(params)?;
-                crate::sound::import(self, &p.paths, p.cue_id, p.scene, p.at_s)
+                crate::sound::import(self, &p.paths, p.cue_id, p.scene, p.at_s, p.bucket_id)
             }
             "connections" => crate::sound::connections(self),
             "connect_service" => {
@@ -1304,7 +1357,7 @@ impl Service {
             }
             "create_bucket" => {
                 let p: CreateBucketP = parse(params)?;
-                let id = crate::buckets::create(self, &p.name, p.keywords, p.scenes, p.length_min_s, p.length_max_s, p.exclude, p.previews)?;
+                let id = crate::buckets::create(self, &p.name, p.keywords, p.scenes, p.length_min_s, p.length_max_s, p.exclude, p.previews, p.music)?;
                 let found = if p.search { crate::buckets::search(self, &id, "epidemic", false, None).ok() } else { None };
                 Ok(json!({ "bucket_id": id, "search": found }))
             }
@@ -1314,7 +1367,22 @@ impl Service {
             }
             "delete_bucket" => {
                 let p: BucketP = parse(params)?;
-                Ok(self.exec(&Command::DeleteBucket { bucket_id: p.bucket_id })?.result)
+                let folder = self.doc().buckets.get(&p.bucket_id).and_then(|b| {
+                    let f = b.folder.clone()?;
+                    Some((f, crate::studio::folder_has_files(self, b)))
+                });
+                if let (Some((f, true)), Some(show)) = (&folder, &self.paths.show) {
+                    return Err(AppError::Params(format!(
+                        "this bucket is the folder {} of the show's library; it holds sounds other episodes use. Empty or remove the folder in the Finder to remove the bucket.",
+                        show.sound_dir().join(f).display()
+                    )));
+                }
+                let r = self.exec(&Command::DeleteBucket { bucket_id: p.bucket_id })?.result;
+                // an empty folder made for the bucket goes with it
+                if let (Some((f, false)), Some(show)) = (&folder, &self.paths.show) {
+                    let _ = std::fs::remove_dir(show.sound_dir().join(f));
+                }
+                Ok(r)
             }
             "bucket_search" => {
                 let p: BucketSearchP = parse(params)?;
@@ -1332,10 +1400,23 @@ impl Service {
                         crate::buckets::only_sourced(b)?;
                     }
                 }
+                // in a show the bucket's folder gets a copy, so every episode has it there
+                if let Some(dest) = crate::studio::bucket_dest(self, &p.bucket_id)? {
+                    let path = self.library().path_of(&a);
+                    crate::sound::import_into(self, &path, &dest, &a)?;
+                    let id = a.id.clone();
+                    crate::buckets::unhide(self, &p.bucket_id, &id)?;
+                }
                 Ok(self.exec(&Command::BucketKeep { bucket_id: p.bucket_id, asset_id: p.asset_id })?.result)
             }
             "bucket_remove" => {
                 let p: BucketAssetP = parse(params)?;
+                // a sound of the bucket's folder is hidden in this episode; the file stays
+                if let Some(b) = self.doc().buckets.get(&p.bucket_id).cloned() {
+                    if crate::studio::folder_sounds(self, &b).iter().any(|a| a.id == p.asset_id) {
+                        return crate::buckets::hide(self, &p.bucket_id, &p.asset_id);
+                    }
+                }
                 Ok(self.exec(&Command::BucketRemove { bucket_id: p.bucket_id, asset_id: p.asset_id })?.result)
             }
             "bucket_dismiss" => {
@@ -1354,7 +1435,10 @@ impl Service {
                 let p: PlaySoundP = parse(params)?;
                 crate::buckets::play(self, p.asset_id, p.remote_id, p.from_s)
             }
-            "create_show" | "create_episode" | "open_project" | "create_demo" => {
+            "rescan_library" => crate::studio::rescan(self),
+            "create_show" | "create_episode" | "open_project" | "create_demo" | "open_show"
+            | "show_view" | "show_backdrop" | "set_show_backdrop" | "open_episode" | "close_show"
+            | "migrate_episode" => {
                 Err(AppError::Other(format!("{name} is handled by the session")))
             }
             other => Err(AppError::UnknownMethod(other.into())),
@@ -1397,7 +1481,12 @@ impl Service {
             "app": apc_core::brand::DISPLAY_NAME,
             "name": self.name(),
             "path": self.paths.file.to_string_lossy(),
-            "show": self.paths.show_file.as_ref().map(|p| p.to_string_lossy().into_owned()),
+            "show": self.paths.show.as_ref().map(|s| json!({
+                "name": s.name(), "root": s.root.to_string_lossy(),
+                "episode": s.episode_folder_of(&self.paths.root),
+                "colors": s.data.theme.colors,
+            })),
+            "warnings": self.warnings,
             "script_version": doc.current_script_version().map(|v| v.number),
             "scenes": doc.scenes.len(),
             "lines": dialogue.len(),
@@ -1423,9 +1512,12 @@ impl Service {
     }
 }
 
-/// A client session: maybe an open episode, plus the project-level methods.
+/// A client session: maybe an open show, maybe an open episode, plus the project-level
+/// methods.
 pub struct Session {
     pub service: Option<Service>,
+    /// The open show (studio mode): set by `open_show`, or by opening one of its episodes.
+    pub show: Option<apc_core::show::Show>,
     pub client: String,
 }
 
@@ -1433,15 +1525,49 @@ impl Session {
     pub fn new(client: &str) -> Self {
         Session {
             service: None,
+            show: None,
             client: client.to_string(),
         }
     }
 
+    /// Opens an episode file or folder, or a show folder or file.
     pub fn with_project(path: &Path, client: &str) -> Result<Self> {
-        Ok(Session {
-            service: Some(Service::open(path, client)?),
-            client: client.to_string(),
-        })
+        let mut s = Session::new(client);
+        let is_show = path.extension().and_then(|e| e.to_str()) == Some(apc_core::brand::SHOW_EXT)
+            || (path.is_dir()
+                && apc_core::project::find_episode_file(path).is_err()
+                && apc_core::show::Show::open(path).is_ok());
+        if is_show {
+            s.show = Some(apc_core::show::Show::open(path)?);
+        } else {
+            let svc = Service::open(path, client)?;
+            s.show = svc.paths.show.clone();
+            s.service = Some(svc);
+        }
+        Ok(s)
+    }
+
+    fn need_show(&self) -> Result<&apc_core::show::Show> {
+        self.show
+            .as_ref()
+            .ok_or_else(|| AppError::Params("no show is open (open_show)".into()))
+    }
+
+    /// Opens an episode, keeping the session's show in step with it.
+    fn open_service(&mut self, svc: Service) -> Result<Value> {
+        let file = svc.paths.file.to_string_lossy().into_owned();
+        let show = svc.paths.show.clone();
+        self.replace(svc)?;
+        if show.is_some()
+            || self
+                .show
+                .as_ref()
+                .map(|s| !Path::new(&file).starts_with(&s.root))
+                .unwrap_or(false)
+        {
+            self.show = show;
+        }
+        Ok(json!({ "file": file }))
     }
 
     /// Switches to another episode, closing the open one first (final snapshot).
@@ -1450,6 +1576,22 @@ impl Session {
             old.close()?;
         }
         self.service = Some(svc);
+        Ok(())
+    }
+
+    /// Opening another show closes an episode that isn't part of it.
+    fn close_episode_outside(&mut self, root: &Path) -> Result<()> {
+        let outside = self
+            .service
+            .as_ref()
+            .map(|s| !s.paths.root.starts_with(root))
+            .unwrap_or(false);
+        if outside {
+            if let Some(svc) = self.service.as_mut() {
+                svc.close()?;
+            }
+            self.service = None;
+        }
         Ok(())
     }
 
@@ -1467,8 +1609,86 @@ impl Session {
         match name {
             "create_show" => {
                 let p: CreateShowP = parse(params)?;
-                let (sf, _) = apc_core::project::ShowFolder::create(Path::new(&p.parent), &p.name)?;
-                Ok(json!({ "path": sf.root.to_string_lossy(), "file": sf.file.to_string_lossy() }))
+                let root = match (&p.root, &p.parent, &p.name) {
+                    (Some(r), _, _) => PathBuf::from(r),
+                    (None, Some(parent), Some(n)) => {
+                        Path::new(parent).join(apc_core::project::safe_name(n))
+                    }
+                    _ => return Err(AppError::Params("give root (or parent and name)".into())),
+                };
+                let show = apc_core::show::Show::create(&root, p.name.as_deref())?;
+                self.close_episode_outside(&show.root)?;
+                let v = crate::shows::view(&show, self.service.as_ref());
+                self.show = Some(show);
+                Ok(v)
+            }
+            "open_show" => {
+                let p: ShowPathP = parse(params)?;
+                let show = apc_core::show::Show::open(Path::new(&p.path))?;
+                self.close_episode_outside(&show.root)?;
+                let v = crate::shows::view(&show, self.service.as_ref());
+                self.show = Some(show);
+                Ok(v)
+            }
+            "show_view" => {
+                let show = apc_core::show::Show::open(&self.need_show()?.file)?;
+                let v = crate::shows::view(&show, self.service.as_ref());
+                self.show = Some(show);
+                Ok(v)
+            }
+            "show_backdrop" => crate::shows::backdrop(self.need_show()?),
+            "set_show_backdrop" => {
+                let p: PathP = parse(params)?;
+                let mut show = self.need_show()?.clone();
+                let r = crate::shows::set_backdrop(&mut show, Path::new(&p.path))?;
+                if let Some(svc) = self.service.as_mut() {
+                    if svc
+                        .paths
+                        .show
+                        .as_ref()
+                        .map(|s| s.file == show.file)
+                        .unwrap_or(false)
+                    {
+                        svc.paths.show = Some(show.clone());
+                    }
+                }
+                self.show = Some(show);
+                Ok(r)
+            }
+            "open_episode" => {
+                let p: OpenEpisodeP = parse(params)?;
+                let show = self.need_show()?.clone();
+                let info = show.episode_info(&p.episode);
+                let svc = match &info.file {
+                    Some(f) => Service::open(f, &self.client)?,
+                    None if p.create => {
+                        Service::create(&show.root, &p.episode, Some(&show.root), &self.client)?
+                    }
+                    None => {
+                        return Err(AppError::Params(format!(
+                            "{} has no {} project yet",
+                            info.label,
+                            apc_core::brand::DISPLAY_NAME
+                        )))
+                    }
+                };
+                let created = info.file.is_none();
+                let mut r = self.open_service(svc)?;
+                r["created"] = json!(created);
+                Ok(r)
+            }
+            "close_show" => {
+                if let Some(svc) = self.service.as_mut() {
+                    svc.close()?;
+                }
+                self.service = None;
+                self.show = None;
+                Ok(json!({ "closed": true }))
+            }
+            "migrate_episode" => {
+                let p: MigrateP = parse(params)?;
+                let show = self.need_show()?.clone();
+                crate::shows::migrate(&show, Path::new(&p.source), &p.episode, p.dry_run)
             }
             "create_episode" => {
                 let p: CreateEpisodeP = parse(params)?;
@@ -1479,12 +1699,10 @@ impl Session {
                     p.show.as_deref().map(Path::new),
                     &self.client,
                 )?;
-                let file = svc.paths.file.to_string_lossy().into_owned();
-                self.replace(svc)?;
-                Ok(json!({ "file": file }))
+                self.open_service(svc)
             }
             "create_demo" => {
-                let p: CreateShowP = parse(params)?;
+                let p: DemoP = parse(params)?;
                 let dir = Path::new(&p.parent).join(&p.name);
                 std::fs::create_dir_all(&dir)?;
                 let svc = crate::demo::create(&dir, &self.client, true)?;
@@ -1495,9 +1713,7 @@ impl Session {
             "open_project" => {
                 let p: OpenP = parse(params)?;
                 let svc = Service::open(Path::new(&p.path), &self.client)?;
-                let file = svc.paths.file.to_string_lossy().into_owned();
-                self.replace(svc)?;
-                Ok(json!({ "file": file }))
+                self.open_service(svc)
             }
             "close_project" => {
                 let svc = self.service.as_mut().ok_or(AppError::NoProject)?;
@@ -1509,6 +1725,13 @@ impl Session {
                 let r = svc.close()?;
                 self.service = None;
                 Ok(r)
+            }
+            "rescan_library" if self.service.is_none() => {
+                let show = self.need_show()?;
+                let (lib, report) = apc_sound::ShowLibrary::open(show)?;
+                Ok(
+                    json!({ "files": report.files, "hashed": report.hashed, "removed": report.removed, "folders": lib.folders().len() }),
+                )
             }
             _ => self
                 .service

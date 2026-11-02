@@ -1006,6 +1006,10 @@ pub struct SoundBucket {
     /// How far into the provider's results the keyword search has read ("Load more").
     #[serde(default)]
     pub search_offset: usize,
+    /// In a show: the bucket's folder in the show's library (`sfx/doors`). Its files are the
+    /// bucket's sounds; new sounds of the bucket are saved there (D65).
+    #[serde(default)]
+    pub folder: Option<String>,
 }
 
 impl Entity for SoundBucket {

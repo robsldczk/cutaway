@@ -8,6 +8,7 @@ use apc_ai::task::{
     CastNote, ScriptItem, SoundSpotInput, SoundTagInput, SpotContext, SpotCueType, SpotScene,
 };
 use apc_core::ids::new_id;
+use apc_core::project::SHOW_PREFIX;
 use apc_core::*;
 use apc_sound::epidemic::EpidemicProvider;
 use apc_sound::providers::{ElevenLabsProvider, LibrarySearchProvider};
@@ -152,14 +153,8 @@ pub fn merge(svc: &mut Service, ids: Vec<String>, into: String, show_level: bool
             .get(&into)
             .cloned()
             .ok_or_else(|| AppError::Params("cue vanished".into()))?;
-        if let Some(show) = svc.show_store() {
+        if svc.paths.show.is_some() {
             let sid = cue.show_cue_id.clone().unwrap_or_else(|| new_id("scue"));
-            show.conn()
-                .execute(
-                    "INSERT INTO show_cue(id,description,cue_type,tags,chosen_asset) VALUES(?1,?2,?3,?4,NULL) ON CONFLICT(id) DO UPDATE SET description=excluded.description",
-                    rusqlite_params(&sid, &cue),
-                )
-                .map_err(|e| AppError::Other(e.to_string()))?;
             svc.exec(&Command::UpdateCue {
                 cue_id: into.clone(),
                 patch: json!({ "show_cue_id": sid }),
@@ -167,15 +162,6 @@ pub fn merge(svc: &mut Service, ids: Vec<String>, into: String, show_level: bool
         }
     }
     Ok(json!({ "into": into }))
-}
-
-fn rusqlite_params<'a>(sid: &'a str, cue: &'a SoundCue) -> [String; 4] {
-    [
-        sid.to_string(),
-        cue.description.clone(),
-        format!("{:?}", cue.cue_type).to_lowercase(),
-        serde_json::to_string(&cue.tags).unwrap_or_else(|_| "[]".into()),
-    ]
 }
 
 /// Makes sure a library asset is mirrored into the episode document (placements need it).
@@ -249,6 +235,10 @@ pub fn search(
     Ok(json!({ "results": results, "unavailable": errors }))
 }
 
+/// Imports one file. `dest` is a bucket's folder in the show (`show:sfx/doors`); without
+/// it a show sound goes loose into `sfx/` or `music/`, and a standalone episode's into
+/// `Library/<category>/` (from the name, or the AI when the name says nothing).
+#[allow(clippy::too_many_arguments)]
 fn import_one(
     svc: &mut Service,
     path: &Path,
@@ -257,6 +247,7 @@ fn import_one(
     provider: Option<String>,
     cue_desc: Option<String>,
     remote_id: Option<String>,
+    dest: Option<String>,
 ) -> Result<Asset> {
     let name = path
         .file_name()
@@ -273,9 +264,20 @@ fn import_one(
             .unwrap_or(0.0)
     };
     let (cat, tags) = apc_sound::tagging::tag_from_name(&name);
-    let cat = match cat {
-        Some(c) => c,
-        None => {
+    let loose = svc.show_lib.as_ref().and_then(|l| {
+        let music = cat
+            .as_deref()
+            .map(|c| c.starts_with("Music"))
+            .unwrap_or(false);
+        l.lock()
+            .ok()
+            .map(|l| format!("{SHOW_PREFIX}{}", l.loose_folder(music)))
+    });
+    let cat = match (dest, loose, cat) {
+        (Some(d), _, _) => d,
+        (None, Some(l), _) => l,
+        (None, None, Some(c)) => c,
+        (None, None, None) => {
             let (runner, _) = svc.ai_runner();
             runner
                 .run(&SoundTagInput {
@@ -307,6 +309,7 @@ pub fn generate(
     prompt: Option<String>,
     variations: Option<u32>,
     duration_s: Option<f64>,
+    dest: Option<String>,
 ) -> Result<Value> {
     let cue = cue_id.as_ref().and_then(|c| svc.doc().cues.get(c).cloned());
     let prompt = prompt
@@ -350,6 +353,7 @@ pub fn generate(
             Some(g.provider.clone()),
             Some(prompt.clone()),
             None,
+            dest.clone(),
         )?;
         if let Some(c) = &cue {
             svc.exec(&Command::AttachCandidate {
@@ -374,7 +378,12 @@ pub fn import(
     cue_id: Option<String>,
     scene: Option<String>,
     at_s: Option<f64>,
+    bucket_id: Option<String>,
 ) -> Result<Value> {
+    let dest = match &bucket_id {
+        Some(b) => crate::studio::bucket_dest(svc, b)?,
+        None => None,
+    };
     let mut files: Vec<PathBuf> = Vec::new();
     for p in paths {
         let pb = PathBuf::from(p);
@@ -398,10 +407,17 @@ pub fn import(
             None,
             cue_desc.clone(),
             None,
+            dest.clone(),
         )?;
         if let Some(c) = &cue_id {
             svc.exec(&Command::AttachCandidate {
                 cue_id: c.clone(),
+                asset_id: a.id.clone(),
+            })?;
+        }
+        if let Some(b) = &bucket_id {
+            svc.exec(&Command::BucketKeep {
+                bucket_id: b.clone(),
                 asset_id: a.id.clone(),
             })?;
         }
@@ -558,7 +574,7 @@ pub fn fetch(
         .as_ref()
         .and_then(|c| svc.doc().cues.get(c))
         .map(|c| c.description.clone());
-    let a = import_licensed(svc, &file, remote_id, cue_desc)?;
+    let a = import_licensed(svc, &file, remote_id, cue_desc, None)?;
     if let Some(c) = &cue_id {
         svc.exec(&Command::AttachCandidate {
             cue_id: c.clone(),
@@ -574,6 +590,7 @@ pub fn import_licensed(
     file: &Path,
     remote_id: &str,
     describe: Option<String>,
+    dest: Option<String>,
 ) -> Result<Asset> {
     let mut a = import_one(
         svc,
@@ -583,10 +600,67 @@ pub fn import_licensed(
         Some("epidemic".into()),
         describe,
         Some(remote_id.to_string()),
+        dest,
     )?;
     if a.license.is_none() {
-        a.license = Some(format!("Epidemic Sound, sound effect {remote_id}"));
+        let license = format!("Epidemic Sound, sound effect {remote_id}");
+        record_show_meta(
+            svc,
+            &a,
+            apc_sound::show_library::SoundMeta {
+                license: Some(license.clone()),
+                ..Default::default()
+            },
+        )?;
+        a.license = Some(license);
         svc.exec(&Command::AddAsset { asset: a.clone() })?;
+    }
+    Ok(a)
+}
+
+/// Shares what a show sound's file can't say (licence, provider id) with the other
+/// episodes and machines.
+fn record_show_meta(
+    svc: &Service,
+    a: &Asset,
+    meta: apc_sound::show_library::SoundMeta,
+) -> Result<()> {
+    if !a.file.starts_with(SHOW_PREFIX) {
+        return Ok(());
+    }
+    if let Some(lib) = &svc.show_lib {
+        if let Ok(mut l) = lib.lock() {
+            l.record(&a.hash, meta)?;
+        }
+    }
+    Ok(())
+}
+
+/// Copies a known sound (from elsewhere in the show) into a bucket's folder, keeping what
+/// is known about it (licence, provider id, prompt).
+pub fn import_into(svc: &mut Service, file: &Path, dest: &str, known: &Asset) -> Result<Asset> {
+    let la = svc.library().import(
+        file,
+        dest,
+        &known.tags,
+        known.source,
+        known.duration_s,
+        known.prompt.clone(),
+        known.provider.clone(),
+        known.remote_id.clone(),
+        &[],
+    )?;
+    let mut a = la.asset;
+    if a.license.is_none() && known.license.is_some() {
+        record_show_meta(
+            svc,
+            &a,
+            apc_sound::show_library::SoundMeta {
+                license: known.license.clone(),
+                ..Default::default()
+            },
+        )?;
+        a.license = known.license.clone();
     }
     Ok(a)
 }

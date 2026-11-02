@@ -173,6 +173,12 @@ fn release_scene(
     scene_id: &str,
     stale_keywords: &BTreeSet<String>,
 ) -> Result<()> {
+    let has_files = svc
+        .doc()
+        .buckets
+        .get(id)
+        .map(|b| crate::studio::folder_has_files(svc, b))
+        .unwrap_or(false);
     let r = svc.bus.execute_fn(
         "edit_bucket",
         &json!({ "bucket_id": id, "release_scene": scene_id }),
@@ -193,7 +199,11 @@ fn release_scene(
             if !still_here {
                 b.scene_ids.retain(|s| s != scene_id);
             }
-            if b.cue_ids.is_empty() && b.kept.is_empty() && !b.previews.iter().any(|p| p.pinned) {
+            if b.cue_ids.is_empty()
+                && b.kept.is_empty()
+                && !has_files
+                && !b.previews.iter().any(|p| p.pinned)
+            {
                 tx.delete::<SoundBucket>(id)?;
             } else {
                 tx.put(&b)?;
@@ -278,12 +288,29 @@ pub fn spot(
                 .or_default()
                 .push(c);
         }
+        let folders = svc
+            .show_lib
+            .as_ref()
+            .and_then(|l| l.lock().ok().map(|l| l.folders()))
+            .unwrap_or_default();
         for (name, cs) in &groups {
+            // in a show, a group that names a library folder goes into that folder's bucket
+            let music = name.eq_ignore_ascii_case("music");
+            let keywords: Vec<String> = cs.iter().map(|c| keyword_of(&c.description)).collect();
+            let folder = crate::studio::match_folder(&folders, name, &keywords, music);
             let existing = svc
                 .doc()
                 .buckets
                 .values()
                 .find(|b| b.character.is_none() && b.name.eq_ignore_ascii_case(name))
+                .or_else(|| {
+                    folder.as_ref().and_then(|f| {
+                        svc.doc()
+                            .buckets
+                            .values()
+                            .find(|b| b.character.is_none() && b.folder.as_ref() == Some(f))
+                    })
+                })
                 .map(|b| b.id.clone());
             match existing {
                 Some(id) => {
@@ -306,6 +333,7 @@ pub fn spot(
                         order: svc.doc().buckets.len() as u32,
                         character: None,
                         search_offset: 0,
+                        folder,
                     };
                     merge_spotted(svc.doc(), &mut b, &sc.id, cs, &stale);
                     svc.exec(&Command::PutBucket { bucket: b })?;
@@ -327,6 +355,8 @@ pub fn spot(
             release_scene(svc, &id, &sc.id, &stale)?;
         }
     }
+    // new AI buckets get their folder names (the folders come with their first sounds)
+    crate::studio::link_folders(svc)?;
     if spotted == 0 && !failed.is_empty() {
         return Err(AppError::Other(format!(
             "spotting failed: {}",
@@ -428,19 +458,23 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
     list.sort_by_key(|b| cast(b).map(|i| (0, i)).unwrap_or((1, 0)));
     let mut out = Vec::new();
     for b in list {
-        let kept: Vec<Value> = b
+        let mut sounds: Vec<Asset> = b
             .kept
             .iter()
             .filter_map(|id| doc.assets.get(id))
             .cloned()
-            .collect::<Vec<_>>()
-            .iter()
-            .map(|a| asset_view(svc, a))
             .collect();
+        // in a show, the files in the bucket's folder are its sounds too
+        for a in crate::studio::folder_sounds(svc, b) {
+            if !sounds.iter().any(|x| x.id == a.id || x.hash == a.hash) {
+                sounds.push(a);
+            }
+        }
+        let kept: Vec<Value> = sounds.iter().map(|a| asset_view(svc, a)).collect();
         out.push(json!({
             "id": b.id, "name": b.name, "keywords": b.keywords, "scenes": scene_labels(&doc, b), "scene_ids": b.scene_ids,
             "kept": kept, "previews": b.previews, "length_min_s": b.length_min_s, "length_max_s": b.length_max_s,
-            "exclude": b.exclude, "ai_suggested": b.ai_suggested,
+            "exclude": b.exclude, "ai_suggested": b.ai_suggested, "folder": b.folder,
             "character": b.character, "color_index": cast(b),
             "anchors": b.cue_ids.iter().filter_map(|c| doc.cues.get(c)).filter_map(|c| c.anchor.clone()).collect::<Vec<_>>(),
         }));
@@ -450,6 +484,7 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
     let (scenes, pending) = spot_status(&doc);
     Ok(json!({
         "buckets": out,
+        "show": svc.paths.show.as_ref().map(|s| s.name().to_string()),
         "connected": { "epidemic": epidemic, "elevenlabs": elevenlabs },
         "spot": { "scenes": scenes.len(), "pending": pending.len() },
     }))
@@ -465,10 +500,39 @@ pub fn create(
     length_max_s: Option<f64>,
     exclude: Vec<String>,
     previews: Vec<Preview>,
+    music: bool,
 ) -> Result<String> {
     if name.trim().is_empty() {
         return Err(AppError::Params("a bucket needs a name".into()));
     }
+    // in a show a bucket made by hand is a folder of the library at once (D65)
+    let folder = match &svc.show_lib {
+        Some(lib) => {
+            let l = lib
+                .lock()
+                .map_err(|_| AppError::Other("library lock poisoned".into()))?;
+            let existing =
+                crate::studio::match_folder(&l.folders(), name, &[], music).filter(|f| {
+                    apc_sound::show_library::folder_slug(f.rsplit('/').next().unwrap_or(""))
+                        == apc_sound::show_library::folder_slug(name)
+                });
+            let f = existing.unwrap_or_else(|| l.folder_for(name, music));
+            if let Some(b) = svc
+                .doc()
+                .buckets
+                .values()
+                .find(|b| b.folder.as_deref() == Some(f.as_str()))
+            {
+                return Err(AppError::Params(format!(
+                    "the bucket “{}” is already the folder {f}",
+                    b.name
+                )));
+            }
+            l.make_folder(&f)?;
+            Some(f)
+        }
+        None => None,
+    };
     let scene_ids = scenes
         .iter()
         .map(|k| {
@@ -498,6 +562,7 @@ pub fn create(
         order: svc.doc().buckets.len() as u32,
         character: None,
         search_offset: 0,
+        folder,
     };
     let mut b = b;
     for p in previews {
@@ -596,10 +661,17 @@ pub fn search(
         "library" => {
             let lib = svc.library();
             let local: Vec<Asset> = svc.doc().assets.values().cloned().collect();
+            let in_folder: Vec<String> = crate::studio::folder_sounds(svc, &snap)
+                .into_iter()
+                .map(|a| a.id)
+                .collect();
             let mut hits: Vec<Asset> = Vec::new();
             for k in &keywords {
                 for a in lib.search(k, &local)? {
-                    if !hits.iter().any(|h| h.id == a.id) && !snap.kept.contains(&a.id) {
+                    if !hits.iter().any(|h| h.id == a.id)
+                        && !snap.kept.contains(&a.id)
+                        && !in_folder.contains(&a.id)
+                    {
                         hits.push(a);
                     }
                 }
@@ -620,7 +692,9 @@ pub fn search(
                 work.previews.retain(|p| p.pinned);
                 work.search_offset = 0;
             }
-            let kept_remote = kept_remote_of(svc.doc(), &work);
+            let folder_remote = crate::studio::folder_remote(svc, &snap);
+            let mut kept_remote = kept_remote_of(svc.doc(), &work);
+            kept_remote.extend(folder_remote.iter().cloned());
             let mut found: Vec<Preview> = Vec::new();
             let mut exhausted = false;
             // read on until a page is filled: results the filters rule out don't count
@@ -651,7 +725,8 @@ pub fn search(
                 if !more {
                     b.previews.retain(|p| p.pinned);
                 }
-                let kept_remote = kept_remote_of(doc, b);
+                let mut kept_remote = kept_remote_of(doc, b);
+                kept_remote.extend(folder_remote.iter().cloned());
                 for p in &found {
                     if admits(b, &kept_remote, &p.remote_id) {
                         b.previews.push(p.clone());
@@ -752,11 +827,13 @@ pub fn search_free(svc: &mut Service, query: &str, offset: usize) -> Result<Valu
 /// Adds a search result to a bucket by hand (dropped in from the free search). It stays a
 /// preview (nothing is downloaded) and survives the bucket's own searches.
 pub fn add_preview(svc: &mut Service, bucket_id: &str, p: Preview) -> Result<Value> {
-    only_sourced(&bucket(svc, bucket_id)?)?;
+    let snap = bucket(svc, bucket_id)?;
+    only_sourced(&snap)?;
+    let folder_remote = crate::studio::folder_remote(svc, &snap);
     let added = Cell::new(false);
     edit_bucket(svc, bucket_id, |doc, b| {
         added.set(false);
-        if kept_remote_of(doc, b).contains(&p.remote_id) {
+        if kept_remote_of(doc, b).contains(&p.remote_id) || folder_remote.contains(&p.remote_id) {
             return;
         }
         b.dismissed.retain(|d| d != &p.remote_id);
@@ -787,13 +864,26 @@ pub fn download(
     progress: &dyn Fn(f64),
 ) -> Result<Asset> {
     let b = bucket(svc, bucket_id)?;
-    if let Some(a) = svc
+    let dest = crate::studio::bucket_dest(svc, bucket_id)?;
+    // downloaded before (in this episode, or anywhere in the show): no second download
+    let known = svc
         .doc()
         .assets
         .values()
         .find(|a| a.remote_id.as_deref() == Some(remote_id))
         .cloned()
-    {
+        .or_else(|| {
+            svc.show_lib
+                .as_ref()
+                .and_then(|l| l.lock().ok()?.by_remote(remote_id).map(|e| e.asset.clone()))
+        });
+    if let Some(a) = known {
+        let a = match &dest {
+            // a copy in the bucket's folder, so the bucket holds it in every episode
+            Some(d) => crate::sound::import_into(svc, &svc.library().path_of(&a), d, &a)?,
+            None => a,
+        };
+        crate::sound::ensure_asset_in_doc(svc, &a.id)?;
         svc.exec(&Command::BucketKeep {
             bucket_id: b.id.clone(),
             asset_id: a.id.clone(),
@@ -813,7 +903,7 @@ pub fn download(
         &svc.paths.cache.join("downloads"),
         progress,
     )?;
-    let a = crate::sound::import_licensed(svc, &file, remote_id, Some(b.name.clone()))?;
+    let a = crate::sound::import_licensed(svc, &file, remote_id, Some(b.name.clone()), dest)?;
     svc.exec(&Command::BucketKeep {
         bucket_id: b.id.clone(),
         asset_id: a.id.clone(),
@@ -833,7 +923,8 @@ pub fn generate(
     let prompt = prompt
         .filter(|p| !p.trim().is_empty())
         .unwrap_or_else(|| b.keywords.join(", "));
-    let r = crate::sound::generate(svc, None, Some(prompt), variations, None)?;
+    let dest = crate::studio::bucket_dest(svc, bucket_id)?;
+    let r = crate::sound::generate(svc, None, Some(prompt), variations, None, dest)?;
     let ids: Vec<String> = r["assets"]
         .as_array()
         .map(|v| {
@@ -936,4 +1027,28 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         Ok(json!({ "asset_id": a.id, "placement": r }))
     });
     Ok(json!({ "job_id": job }))
+}
+
+/// Takes a sound of the bucket's folder out of this episode's bucket: hidden here, the
+/// file stays in the show's library for the other episodes.
+pub fn hide(svc: &mut Service, bucket_id: &str, asset_id: &str) -> Result<Value> {
+    edit_bucket(svc, bucket_id, |_, b| {
+        b.kept.retain(|a| a != asset_id);
+        if !b.dismissed.iter().any(|d| d == asset_id) {
+            b.dismissed.push(asset_id.to_string());
+        }
+    })?;
+    Ok(json!({ "hidden": asset_id }))
+}
+
+/// Shows a hidden folder sound again (it was kept by hand).
+pub fn unhide(svc: &mut Service, bucket_id: &str, asset_id: &str) -> Result<()> {
+    if bucket(svc, bucket_id)?
+        .dismissed
+        .iter()
+        .any(|d| d == asset_id)
+    {
+        edit_bucket(svc, bucket_id, |_, b| b.dismissed.retain(|d| d != asset_id))?;
+    }
+    Ok(())
 }

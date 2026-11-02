@@ -1,4 +1,4 @@
-//! SQLite storage for episode (`.cutaway`) and show (`.cutawayshow`) files.
+//! SQLite storage for episode (`.cutaway`) files. (A show file is JSON, see `show`.)
 
 use std::path::{Path, PathBuf};
 
@@ -10,7 +10,6 @@ use crate::error::{CoreError, Result};
 use crate::model::{Document, Kind};
 
 pub const EPISODE_SCHEMA_VERSION: i64 = 1;
-pub const SHOW_SCHEMA_VERSION: i64 = 1;
 
 const EPISODE_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -63,33 +62,36 @@ CREATE VIEW IF NOT EXISTS v_notes AS SELECT id, json_extract(data,'$.class') AS 
   json_extract(data,'$.t0') AS t0, json_extract(data,'$.text') AS text FROM entity WHERE kind='note';
 "#;
 
-const SHOW_SCHEMA: &str = r#"
-CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS asset (
-  id TEXT PRIMARY KEY, file TEXT NOT NULL, hash TEXT NOT NULL UNIQUE, category TEXT NOT NULL DEFAULT '',
-  duration_s REAL NOT NULL DEFAULT 0,
-  source TEXT NOT NULL CHECK (source IN ('imported','licensed','generated')),
-  license TEXT, prompt TEXT, provider TEXT, created_at TEXT NOT NULL, lufs REAL, remote_id TEXT
-);
-CREATE TABLE IF NOT EXISTS asset_tag (
-  asset_id TEXT NOT NULL REFERENCES asset(id) ON DELETE CASCADE, tag TEXT NOT NULL,
-  PRIMARY KEY (asset_id, tag)
-);
-CREATE TABLE IF NOT EXISTS alias (alias TEXT PRIMARY KEY, character TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS location (
-  name TEXT PRIMARY KEY, room_tone_asset TEXT REFERENCES asset(id) ON DELETE SET NULL, ambience_asset TEXT
-);
-CREATE TABLE IF NOT EXISTS show_cue (
-  id TEXT PRIMARY KEY, description TEXT NOT NULL, cue_type TEXT NOT NULL, tags TEXT NOT NULL DEFAULT '[]',
-  chosen_asset TEXT REFERENCES asset(id) ON DELETE SET NULL
-);
-CREATE TABLE IF NOT EXISTS episode (id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS command_log (
-  seq INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, client TEXT NOT NULL, name TEXT NOT NULL,
-  params TEXT NOT NULL, changes TEXT NOT NULL,
-  state TEXT NOT NULL CHECK (state IN ('done','undone','discarded'))
-);
-"#;
+/// Opens an episode file read-only without leaving anything next to it. A closed episode
+/// (no write-ahead log) opens immutable, so SQLite creates no `-wal`/`-shm` files; one
+/// that is open somewhere has its log read along.
+fn open_untouched(path: &Path) -> Result<Connection> {
+    use rusqlite::OpenFlags;
+    let wal = PathBuf::from(format!("{}-wal", path.display()));
+    let live = std::fs::metadata(&wal)
+        .map(|m| m.len() > 0)
+        .unwrap_or(false);
+    if live {
+        return Ok(Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?);
+    }
+    let mut uri = String::from("file:");
+    for c in path.to_string_lossy().replace('\\', "/").chars() {
+        match c {
+            '%' => uri.push_str("%25"),
+            '?' => uri.push_str("%3F"),
+            '#' => uri.push_str("%23"),
+            c => uri.push(c),
+        }
+    }
+    uri.push_str("?immutable=1");
+    Ok(Connection::open_with_flags(
+        uri,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
+    )?)
+}
 
 fn configure(conn: &Connection) -> Result<()> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -171,6 +173,22 @@ impl EpisodeStore {
         Ok(store)
     }
 
+    /// Opens an episode file only to read it (nothing is written, not even the log files'
+    /// headers): for copying another episode.
+    pub fn open_read_only(path: &Path) -> Result<Self> {
+        if !path.exists() {
+            return Err(CoreError::not_found(
+                "episode file",
+                path.display().to_string(),
+            ));
+        }
+        let conn = open_untouched(path)?;
+        Ok(EpisodeStore {
+            conn,
+            path: path.to_path_buf(),
+        })
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -191,6 +209,41 @@ impl EpisodeStore {
             "INSERT INTO meta(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             params![key, value],
         )?;
+        Ok(())
+    }
+
+    /// Folds the write-ahead log into the episode file, so a sync tool that copies the
+    /// file alone (Syncthing) carries every change. Other readers keep working.
+    pub fn checkpoint(&self) -> Result<()> {
+        self.conn
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+        Ok(())
+    }
+
+    /// A consistent single-file copy of the episode (write-ahead log included).
+    pub fn copy_to(&self, dest: &Path) -> Result<()> {
+        if dest.exists() {
+            return Err(CoreError::invalid(format!(
+                "{} already exists",
+                dest.display()
+            )));
+        }
+        self.conn
+            .execute("VACUUM INTO ?1", [dest.to_string_lossy().as_ref()])?;
+        Ok(())
+    }
+
+    /// Copies an episode file without writing to it (opened read-only; its write-ahead log
+    /// is included).
+    pub fn copy_file(src: &Path, dest: &Path) -> Result<()> {
+        if dest.exists() {
+            return Err(CoreError::invalid(format!(
+                "{} already exists",
+                dest.display()
+            )));
+        }
+        let conn = open_untouched(src)?;
+        conn.execute("VACUUM INTO ?1", [dest.to_string_lossy().as_ref()])?;
         Ok(())
     }
 
@@ -419,118 +472,4 @@ fn write_row(
         }
     }
     Ok(())
-}
-
-/// Adds columns introduced after the first show schema.
-fn migrate_show(conn: &Connection) -> Result<()> {
-    let has_remote: bool = conn
-        .prepare("SELECT 1 FROM pragma_table_info('asset') WHERE name='remote_id'")?
-        .exists([])?;
-    if !has_remote {
-        conn.execute("ALTER TABLE asset ADD COLUMN remote_id TEXT", [])?;
-    }
-    Ok(())
-}
-
-/// An open show file (library database).
-pub struct ShowStore {
-    conn: Connection,
-    path: PathBuf,
-}
-
-impl ShowStore {
-    pub fn create(path: &Path) -> Result<Self> {
-        if path.exists() {
-            return Err(CoreError::invalid(format!(
-                "{} already exists",
-                path.display()
-            )));
-        }
-        let conn = Connection::open(path)?;
-        configure(&conn)?;
-        conn.execute_batch(SHOW_SCHEMA)?;
-        conn.execute(
-            "INSERT INTO meta(key,value) VALUES('schema_version',?1),('created_at',?2),('app',?3)",
-            params![
-                SHOW_SCHEMA_VERSION.to_string(),
-                now_iso(),
-                crate::brand::DISPLAY_NAME
-            ],
-        )?;
-        Ok(ShowStore {
-            conn,
-            path: path.to_path_buf(),
-        })
-    }
-
-    pub fn open(path: &Path) -> Result<Self> {
-        if !path.exists() {
-            return Err(CoreError::not_found(
-                "show file",
-                path.display().to_string(),
-            ));
-        }
-        let conn = Connection::open(path)?;
-        configure(&conn)?;
-        conn.execute_batch(SHOW_SCHEMA)?;
-        migrate_show(&conn)?;
-        Ok(ShowStore {
-            conn,
-            path: path.to_path_buf(),
-        })
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn conn(&self) -> &Connection {
-        &self.conn
-    }
-
-    /// Logs a show-level operation (show commands are applied directly; see D21).
-    pub fn log(&self, client: &str, name: &str, params: &Value) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO command_log(ts,client,name,params,changes,state) VALUES(?1,?2,?3,?4,'[]','done')",
-            params![now_iso(), client, name, serde_json::to_string(params)?],
-        )?;
-        Ok(())
-    }
-
-    pub fn aliases(&self) -> Result<Vec<(String, String)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT alias, character FROM alias ORDER BY alias")?;
-        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
-        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-    }
-
-    pub fn add_alias(&self, alias: &str, character: &str) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO alias(alias,character) VALUES(?1,?2) ON CONFLICT(alias) DO UPDATE SET character=excluded.character",
-            params![alias, character],
-        )?;
-        self.log(
-            "core",
-            "add_alias",
-            &serde_json::json!({"alias": alias, "character": character}),
-        )?;
-        Ok(())
-    }
-
-    pub fn register_episode(&self, id: &str, name: &str, path: &str) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO episode(id,name,path) VALUES(?1,?2,?3) ON CONFLICT(id) DO UPDATE SET name=excluded.name, path=excluded.path",
-            params![id, name, path],
-        )?;
-        Ok(())
-    }
-
-    pub fn episodes(&self) -> Result<Vec<(String, String, String)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id, name, path FROM episode ORDER BY name")?;
-        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
-        Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-    }
 }

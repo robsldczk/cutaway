@@ -16,10 +16,10 @@ use apc_core::backup::{BackupManager, RotationPolicy, SystemClock};
 use apc_core::config::ProjectConfig;
 use apc_core::ids::new_id;
 use apc_core::project::{self, EpisodePaths};
-use apc_core::store::{EpisodeStore, ShowStore};
+use apc_core::store::EpisodeStore;
 use apc_core::*;
 use apc_media::AudioAnalysis;
-use apc_sound::Library;
+use apc_sound::{Library, SharedShowLibrary, ShowLibrary};
 
 use crate::error::{AppError, Result};
 
@@ -47,6 +47,12 @@ pub struct Service {
     pub player: crate::player::Player,
     /// API keys of sound services (OS credential store; in memory with `CUTAWAY_SECRETS=memory`).
     pub secrets: Arc<dyn apc_sound::secrets::SecretStore>,
+    /// The show's sound library, when the episode lives in a show.
+    pub show_lib: Option<SharedShowLibrary>,
+    /// Things to tell the user once (the episode is open on another machine, sync conflicts).
+    pub warnings: Vec<String>,
+    /// This UI session holds the episode's lock file (studio mode).
+    locked: bool,
 }
 
 fn default_secrets() -> Arc<dyn apc_sound::secrets::SecretStore> {
@@ -81,7 +87,11 @@ impl Service {
     fn from_store(paths: EpisodePaths, store: EpisodeStore, client: &str) -> Result<Self> {
         let bus = CommandBus::new(store, client)?;
         let backups = BackupManager::new(&paths, RotationPolicy::default(), Box::new(SystemClock));
-        Ok(Service {
+        let show_lib = match &paths.show {
+            Some(show) => Some(Arc::new(std::sync::Mutex::new(ShowLibrary::open(show)?.0))),
+            None => None,
+        };
+        let mut svc = Service {
             paths,
             bus,
             backups,
@@ -91,7 +101,22 @@ impl Service {
             jobs: crate::jobs::Jobs::default(),
             player: crate::player::Player::default(),
             secrets: default_secrets(),
-        })
+            show_lib,
+            warnings: Vec::new(),
+            locked: false,
+        };
+        if svc.paths.show.is_some() {
+            svc.warnings = crate::studio::sync_warnings(&svc.paths);
+            // the UI holds the lock; the CLI, MCP and background jobs share the episode
+            if client == "ui" {
+                if let Some(w) = crate::studio::take_lock(&svc.paths)? {
+                    svc.warnings.insert(0, w);
+                }
+                svc.locked = true;
+            }
+            crate::studio::link_folders(&mut svc)?;
+        }
+        Ok(svc)
     }
 
     pub fn doc(&self) -> &Document {
@@ -131,24 +156,25 @@ impl Service {
     pub fn close(&mut self) -> Result<Value> {
         crate::player::stop(self)?;
         let snap = self.backups.flush(self.bus.store())?;
+        // a sync tool copies the episode file alone: fold the log into it
+        self.bus.store().checkpoint()?;
+        if self.locked {
+            crate::studio::release_lock(&self.paths);
+            self.locked = false;
+        }
         Ok(json!({ "file": self.paths.file.to_string_lossy(), "snapshot": snap.map(|b| b.file) }))
     }
 
     pub fn after_write(&mut self) -> Result<()> {
         self.backups.note_change();
-        self.backups.maybe_autosave(self.bus.store())?;
+        if self.backups.maybe_autosave(self.bus.store())?.is_some() && self.paths.show.is_some() {
+            self.bus.store().checkpoint()?;
+        }
         Ok(())
     }
 
-    pub fn show_store(&self) -> Option<ShowStore> {
-        self.paths
-            .show_file
-            .as_ref()
-            .and_then(|f| ShowStore::open(f).ok())
-    }
-
     pub fn library(&self) -> Library {
-        Library::new(self.paths.library.clone(), self.show_store())
+        Library::new(self.paths.library.clone(), self.show_lib.clone())
     }
 
     pub fn aliases(&self) -> BTreeMap<String, String> {
@@ -158,10 +184,8 @@ impl Service {
                 m.insert(a.clone(), c.id.clone());
             }
         }
-        if let Some(show) = self.show_store() {
-            if let Ok(list) = show.aliases() {
-                m.extend(list);
-            }
+        if let Some(show) = &self.paths.show {
+            m.extend(show.data.aliases.clone());
         }
         m
     }
@@ -336,6 +360,8 @@ impl Service {
     /// Imports audio files or folders and assigns roles (name, aliases, room keywords,
     /// then AI name matching for files the rules can't place).
     pub fn import_audio(&mut self, inputs: &[PathBuf], copy: bool) -> Result<Vec<ImportedSource>> {
+        // in a show the episode travels through the pipeline: no paths outside it
+        let copy = copy || self.paths.show.is_some();
         let mut files = Vec::new();
         for p in inputs {
             files.extend(apc_core::media::audio_files_in(p)?);
@@ -475,8 +501,10 @@ impl Service {
                         .find(|t| t.len() >= 2)
                     {
                         if !ch.to_lowercase().contains(&tok.to_lowercase()) {
-                            if let Some(show) = self.show_store() {
-                                show.add_alias(tok, ch)?;
+                            if let Some(show) = self.paths.show.as_mut() {
+                                show.update(|d| {
+                                    d.aliases.insert(tok.to_string(), ch.clone());
+                                })?;
                             }
                         }
                     }

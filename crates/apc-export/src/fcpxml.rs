@@ -80,11 +80,7 @@ pub struct MediaInfo {
 pub fn media_info(doc: &Document, paths: &EpisodePaths, id: &str) -> Option<MediaInfo> {
     if let Some(aid) = id.strip_prefix("asset:") {
         let a = doc.assets.get(aid)?;
-        let path = if Path::new(&a.file).is_absolute() {
-            PathBuf::from(&a.file)
-        } else {
-            paths.library.join(&a.file)
-        };
+        let path = paths.asset_path(&a.file);
         let probe = apc_media::decode::probe(&path).ok();
         return Some(MediaInfo {
             name: Path::new(&a.file)

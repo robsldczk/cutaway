@@ -311,3 +311,69 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - Arrange keeps the clip's start in place: lengthening the head moves the words later and ripples the lines after it, the mirror of trimming. On the Edit page, which has a time scale, the words stay where they are.
   - Comps keep the take-only strip, because a comp's head and tail belong to different takes.
 - **Options not taken:** a strip that rescales live while dragging past its edge (moving handles under the cursor); a fixed handle length (too short for a cut deep in the next word, too wide for short lines).
+
+### D64 Studio mode: a show is the production's own folder (Rob, 2026-11-02)
+- **Rob:** besides standalone episodes, a studio mode where files and assets are organised per show, not per episode, inside the production pipeline (`tm-2610/`, a Syncthing share also used by Jetplane). Cutaway folders live in `Episodes/<Episode>/Sound/`, SFX and music in `Sound/`. A menu point creates or opens a show by its root; opening a show offers a dropdown of its episodes.
+- **Found:** the core had a show model (`TARMAC.cutawayshow` as SQLite, `Library/{SFX,Ambience,Music}`, `Episodes/<Ep>/<Ep>.cutaway`) that assumed Cutaway owns the folder. Nothing outside tests created one; the UI never did.
+- **Choice:**
+  - The show file is `<root>/<name>.cutawayshow` as **JSON** (like the pipeline's `*.jetplane.json`): name, id, layout, theme, file-name aliases. Written through a temporary file and a rename; changes re-read the file first, so two machines don't undo each other's edits.
+  - The **layout lives in the show file** with tm-2610's names as defaults (`Episodes`, episode folder `Sound`, library `Sound`, `sfx`, `music`). No path is hard-coded.
+  - "New show…" makes an **existing** folder a show: it writes the show file and creates only the folders that are missing. Nothing existing is touched.
+  - **Episodes** are the folders under `Episodes/`. Titles and numbers come from `episode.jetplane.json` (read only, never written). Opening an episode without a project creates `Episodes/<Episode>/Sound/<Episode>.cutaway`.
+  - An episode finds its show by walking up to a show file whose layout puts it exactly there.
+  - The old SQLite show file, its `ShowStore` and the `Library/` show layout are removed. A SQLite `.cutawayshow` is refused with a clear message. Show-level cues keep only their id (nothing ever read the table).
+- **Options not taken:** keeping SQLite for the show file (a database inside a sync share, see D66); hard-coding the tm-2610 layout; a hidden `.cutaway/` folder at the root (Rob wants the show file next to Jetplane's).
+
+### D65 The show's library: the folders are the library, the subfolders are the buckets (Rob, 2026-11-02)
+- **Rob:** SFX and music in `Sound/` are read into the buckets, and new files are saved there. Each bucket is a folder, so a new bucket can create a folder in the pipeline. Vocals stay with the episode.
+- **Choice:**
+  - **Scan, don't register.** Every audio file under `Sound/sfx` and `Sound/music` is a library sound. Skipped: zips, hidden files, Syncthing temp files and conflict copies.
+  - A **local index** (app data, `shows/<show id>/library-index.json`) keeps each file's BLAKE3 hash and length by path, size and modification time. Only new or changed files are hashed, and each machine hashes once. `CUTAWAY_DATA_DIR` overrides the location (tests).
+  - **Ids:** a show sound's id comes from its hash (`as_<12 hex>`), so it is the same on every machine and in every episode. Asset paths are `show:<path under Sound/>`.
+  - **Shared metadata:** what a file can't tell (licence, provider, Epidemic id, prompt, extra tags) goes in `Sound/Cutaway/library.json`, keyed by hash. Sync-conflict copies of it are merged on read.
+  - **Categories:** from the folder (`SFX/doors`, `Music/Stings`). Ambience comes from folder names (`room-tone`) or file names. The Edit page's lane choice works unchanged.
+  - **Buckets are folders:**
+    - The first-level folders of `sfx/` and `music/` become buckets (`room-tone` → "Room tone", keyword "room tone").
+    - A track's stems folder is not a bucket: it sits next to the `.wav`/`.zip` of the same name, or holds `… STEMS …` files.
+    - A bucket's sounds are its folder's files plus what the episode keeps.
+    - `SoundBucket.folder` (serde default) stores the link. Linking runs as one undoable command ("link_show_folders"), only when something changed, on open and on rescan.
+  - **New buckets:**
+    - A bucket made by hand creates its folder at once (`Doors and hatches` → `sfx/doors-and-hatches`).
+    - AI-spotted buckets get a folder name, but the folder is made with their first sound, so a spotting run doesn't fill the pipeline with empty folders.
+    - Spotting reuses an existing folder bucket when the group or its keywords name it ("Doors and hatches" → `doors`).
+  - **New files** (Epidemic downloads, generated sounds, drops onto a bucket) go into the bucket's folder. Sounds dropped without a bucket go loose into `sfx/` or `music/`.
+  - **Keeping** a library sound in a folder bucket copies it into the folder, so every episode sees it there. The same file already in that folder is reused, not copied twice.
+  - **Removing** a folder sound from a bucket hides it in that episode only; the file stays.
+  - **Deleting** a folder bucket that holds files is refused, with a message pointing to the folder. An empty one goes, along with its empty folder.
+  - **Renames:** renaming a bucket never moves its folder (other episodes point at its files). A file moved in the Finder is found again by hash.
+  - **Vocals** stay in the episode's own `Library/Vocals/` (they are cut from the episode's recordings, so not markers as first thought). Export and playback resolve both kinds through `EpisodePaths::asset_path`.
+- **Options not taken:** a library database in the show (a sync hazard, D66); storing folder membership in the document (stale as soon as the pipeline changes); moving files between folders (the pipeline is shared, so Cutaway only adds copies).
+
+### D66 Sync safety in a Syncthing share (2026-11-02)
+- **Context:** the episode file is SQLite in WAL mode. Syncthing copies files independently and can carry a `.cutaway` without its `-wal`. Two machines editing the same episode produce a conflict copy that can't be merged.
+- **Choice:**
+  - The log is folded into the episode file (`wal_checkpoint(TRUNCATE)`) on close and after every autosave snapshot in a show.
+  - **Lock file:** the UI writes `.<Episode>.cutaway.lock` (host, user, time) next to the episode file and removes it on close. Opening an episode locked by another host within the last 12 h shows a warning. It doesn't block: Syncthing's delay makes a lock advisory at best. The CLI, MCP and background jobs share the episode without a lock, as before.
+  - Sync-conflict copies of the episode file are reported when it opens.
+  - Imports into a show episode are always copied, because absolute paths don't travel between machines.
+  - Backups stay in the synced episode folder (Rob).
+- **Rob, manual:** add `*.cutaway-wal`, `*.cutaway-shm` and maybe `Cache/media` to `.stignore` on each device.
+
+### D67 The show's backdrop and theme (Rob, 2026-11-02)
+- **Rob:** opening a show shows the show itself as the splash backdrop, themed to the show, set once and kept near the Cutaway folders.
+- **Choice:**
+  - `set_show_backdrop` takes any JPEG/PNG/WebP and stores a JPEG copy (longest side 2400 px, quality 85) as `Sound/Cutaway/backdrop.jpg`, next to `library.json`, so it syncs to everyone.
+  - It also extracts three theme colours from saturation-weighted hue bins and stores them in the show file.
+  - The show home draws the backdrop full bleed. Inside the show's episodes, the colours tint the stage glows.
+  - The image travels to the UI as a data URL (`show_backdrop`), because the webview has no file access.
+  - New dependencies: `image` 0.25 (jpeg, png, webp; MIT/Apache-2.0) and `base64` 0.22 (MIT/Apache-2.0).
+
+### D68 Copying a standalone episode into a show (Rob, 2026-11-02)
+- **Rob:** migrate (copy, not move) the existing project into the show's folders.
+- **Choice:**
+  - `migrate_episode` (dry run first) copies the episode folder into `Episodes/<Episode>/Sound/`. The database goes through `VACUUM INTO` from a read-only connection: immutable when the episode is closed, so not even `-wal`/`-shm` files appear next to the source.
+  - Everything else is copied as is: Audio, Script, Backups, Cache (AI and transcription results are reused), Logs, the vocal library.
+  - The episode's own sounds that aren't vocals go into the show's library (a bucket's into its folder). Their document assets keep their ids and point at the show copy.
+  - The episode is renamed after the episode folder, and `migrated_from` records the source.
+  - The result reports missing sources and sounds; the source stays byte for byte.
+  - Sources referenced outside the source folder are listed as warnings.

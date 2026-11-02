@@ -150,11 +150,39 @@ pub enum Cmd {
 
 #[derive(Subcommand, Debug)]
 pub enum ShowCmd {
-    /// Create a show folder with a library.
+    /// Create a new show folder (`parent/name`) with Episodes/ and Sound/.
     New {
         name: String,
         #[arg(long, default_value = ".")]
         parent: PathBuf,
+    },
+    /// Make an existing production folder a show (writes <root>/<name>.cutawayshow only).
+    Init {
+        root: PathBuf,
+        #[arg(long)]
+        name: Option<String>,
+    },
+    /// The show's episodes (number, title, whether they have a project).
+    Episodes { root: PathBuf },
+    /// Read the show's sound library again; new folders become buckets.
+    Rescan { root: PathBuf },
+    /// Set the show's backdrop image (its theme colours come from it).
+    Backdrop {
+        image: PathBuf,
+        #[arg(long)]
+        root: PathBuf,
+    },
+    /// Copy a standalone episode into an episode folder of the show (the source stays).
+    Migrate {
+        source: PathBuf,
+        #[arg(long)]
+        root: PathBuf,
+        /// Episode folder name ("Episode 2").
+        #[arg(long)]
+        episode: String,
+        /// Only report what would be copied.
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -238,6 +266,42 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                 "create_show",
                 json!({ "parent": s(parent), "name": name }),
             )
+        }
+        Cmd::Show { cmd } => {
+            let mut sess = Session::new("cli");
+            let show = |sess: &mut Session, root: &Path| {
+                call(sess, "open_show", json!({ "path": s(root) }))
+            };
+            match cmd {
+                ShowCmd::New { .. } => unreachable!("handled above"),
+                ShowCmd::Init { root, name } => call(
+                    &mut sess,
+                    "create_show",
+                    json!({ "root": s(root), "name": name }),
+                ),
+                ShowCmd::Episodes { root } => show(&mut sess, root).map(|v| v["episodes"].clone()),
+                ShowCmd::Rescan { root } => {
+                    show(&mut sess, root)?;
+                    call(&mut sess, "rescan_library", json!({}))
+                }
+                ShowCmd::Backdrop { image, root } => {
+                    show(&mut sess, root)?;
+                    call(&mut sess, "set_show_backdrop", json!({ "path": s(image) }))
+                }
+                ShowCmd::Migrate {
+                    source,
+                    root,
+                    episode,
+                    dry_run,
+                } => {
+                    show(&mut sess, root)?;
+                    call(
+                        &mut sess,
+                        "migrate_episode",
+                        json!({ "source": s(source), "episode": episode, "dry_run": dry_run }),
+                    )
+                }
+            }
         }
         Cmd::New { name, show, parent } => {
             let mut sess = Session::new("cli");

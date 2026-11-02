@@ -1,15 +1,21 @@
-//! Show and episode folders, visible in Finder like a Logic project.
+//! Episode folders, visible in Finder like a Logic project. An episode stands alone, or
+//! lives in a show (studio mode, see `show`): then its folder is the show layout's
+//! `Episodes/<Episode>/Sound/`, and its sounds come from the show's library.
 //!
 //! ```text
-//! TARMAC/  TARMAC.cutawayshow  Library/{SFX,Ambience,Music}/  Episodes/Ep02/
-//! Ep02/    Ep02.cutaway  Audio/ Script/ Backups/ Exports/ Cache/ Logs/ [Library/]
+//! Ep02/    Ep02.cutaway  Audio/ Script/ Backups/ Exports/ Cache/ Logs/ Library/
 //! ```
 
 use std::path::{Path, PathBuf};
 
 use crate::brand;
 use crate::error::{CoreError, Result};
-use crate::store::{EpisodeStore, ShowStore};
+use crate::show::Show;
+use crate::store::EpisodeStore;
+
+/// Prefix of an asset path in the show's library (`show:sfx/doors/door.wav`); other asset
+/// paths are relative to the episode's own `Library/`.
+pub const SHOW_PREFIX: &str = "show:";
 
 /// Folders of one episode.
 #[derive(Clone, Debug)]
@@ -22,10 +28,11 @@ pub struct EpisodePaths {
     pub exports: PathBuf,
     pub cache: PathBuf,
     pub logs: PathBuf,
-    /// Local library of a standalone episode, or the show's library.
+    /// The episode's own library: everything of a standalone episode, a show episode's
+    /// vocals (cut from its own recordings).
     pub library: PathBuf,
-    /// The show file when the episode lives in a show.
-    pub show_file: Option<PathBuf>,
+    /// The show, when the episode lives in one.
+    pub show: Option<Show>,
 }
 
 impl EpisodePaths {
@@ -35,14 +42,7 @@ impl EpisodePaths {
             .parent()
             .ok_or_else(|| CoreError::invalid("episode file has no folder"))?
             .to_path_buf();
-        let show_file = find_show_file(&root);
-        let library = match &show_file {
-            Some(sf) => sf
-                .parent()
-                .map(|p| p.join("Library"))
-                .unwrap_or_else(|| root.join("Library")),
-            None => root.join("Library"),
-        };
+        let show = Show::find_for(&root);
         Ok(EpisodePaths {
             file: file.to_path_buf(),
             audio: root.join("Audio"),
@@ -51,8 +51,8 @@ impl EpisodePaths {
             exports: root.join("Exports"),
             cache: root.join("Cache"),
             logs: root.join("Logs"),
-            library,
-            show_file,
+            library: root.join("Library"),
+            show,
             root,
         })
     }
@@ -75,6 +75,23 @@ impl EpisodePaths {
         }
     }
 
+    /// Where an asset's file is: in the show's library (`show:`), absolute, or in the
+    /// episode's own library.
+    pub fn asset_path(&self, file: &str) -> PathBuf {
+        if let Some(rest) = file.strip_prefix(SHOW_PREFIX) {
+            return match &self.show {
+                Some(s) => s.sound_dir().join(rest),
+                None => self.library.join(rest),
+            };
+        }
+        let p = Path::new(file);
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            self.library.join(p)
+        }
+    }
+
     pub fn ensure_dirs(&self) -> Result<()> {
         for d in [
             &self.audio,
@@ -86,28 +103,13 @@ impl EpisodePaths {
         ] {
             std::fs::create_dir_all(d)?;
         }
-        if self.show_file.is_none() {
-            create_library(&self.library)?;
+        if self.show.is_none() {
+            for d in ["SFX", "Ambience", "Music"] {
+                std::fs::create_dir_all(self.library.join(d))?;
+            }
         }
         Ok(())
     }
-}
-
-fn create_library(lib: &Path) -> Result<()> {
-    for d in ["SFX", "Ambience", "Music"] {
-        std::fs::create_dir_all(lib.join(d))?;
-    }
-    Ok(())
-}
-
-/// Looks for `<Show>/<Show>.cutawayshow` two levels up (`<Show>/Episodes/<Ep>/`).
-fn find_show_file(episode_root: &Path) -> Option<PathBuf> {
-    let episodes = episode_root.parent()?;
-    if episodes.file_name()?.to_str()? != "Episodes" {
-        return None;
-    }
-    let show = episodes.parent()?;
-    first_with_ext(show, brand::SHOW_EXT)
 }
 
 fn first_with_ext(dir: &Path, ext: &str) -> Option<PathBuf> {
@@ -115,6 +117,12 @@ fn first_with_ext(dir: &Path, ext: &str) -> Option<PathBuf> {
         .ok()?
         .filter_map(|e| e.ok().map(|e| e.path()))
         .filter(|p| p.extension().and_then(|e| e.to_str()) == Some(ext))
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| !crate::show::ignored_name(n))
+                .unwrap_or(false)
+        })
         .collect();
     found.sort();
     found.into_iter().next()
@@ -133,58 +141,8 @@ pub fn find_episode_file(path: &Path) -> Result<PathBuf> {
     })
 }
 
-/// Finds the show file in a folder (or returns the path if it is one).
-pub fn find_show_file_in(path: &Path) -> Result<PathBuf> {
-    if path.is_file() {
-        return Ok(path.to_path_buf());
-    }
-    first_with_ext(path, brand::SHOW_EXT).ok_or_else(|| {
-        CoreError::not_found(
-            "show file",
-            format!("*.{} in {}", brand::SHOW_EXT, path.display()),
-        )
-    })
-}
-
-/// A show folder.
-pub struct ShowFolder {
-    pub root: PathBuf,
-    pub file: PathBuf,
-}
-
-impl ShowFolder {
-    /// Creates `<parent>/<name>/` with the show file, `Library/` and `Episodes/`.
-    pub fn create(parent: &Path, name: &str) -> Result<(ShowFolder, ShowStore)> {
-        let root = parent.join(safe_name(name));
-        if root.exists() {
-            return Err(CoreError::invalid(format!(
-                "{} already exists",
-                root.display()
-            )));
-        }
-        std::fs::create_dir_all(root.join("Episodes"))?;
-        create_library(&root.join("Library"))?;
-        let file = root.join(format!("{}.{}", safe_name(name), brand::SHOW_EXT));
-        let store = ShowStore::create(&file)?;
-        store
-            .conn()
-            .execute("INSERT INTO meta(key,value) VALUES('name',?1)", [name])?;
-        Ok((ShowFolder { root, file }, store))
-    }
-
-    pub fn open(path: &Path) -> Result<(ShowFolder, ShowStore)> {
-        let file = find_show_file_in(path)?;
-        let root = file
-            .parent()
-            .ok_or_else(|| CoreError::invalid("show file has no folder"))?
-            .to_path_buf();
-        let store = ShowStore::open(&file)?;
-        Ok((ShowFolder { root, file }, store))
-    }
-}
-
-/// Creates an episode folder: inside a show (`<show>/Episodes/<name>/`) or standalone
-/// (`<parent>/<name>/`, with a local `Library/`).
+/// Creates an episode: inside a show (`Episodes/<name>/Sound/`, the folders may already
+/// exist in the pipeline) or standalone (`<parent>/<name>/`, with a local `Library/`).
 pub fn create_episode(
     parent: &Path,
     name: &str,
@@ -192,33 +150,39 @@ pub fn create_episode(
 ) -> Result<(EpisodePaths, EpisodeStore)> {
     let root = match show {
         Some(show_path) => {
-            let (sf, _) = ShowFolder::open(show_path)?;
-            sf.root.join("Episodes").join(safe_name(name))
+            let show = Show::open(show_path)?;
+            let root = show.episode_dir(name);
+            if let Some(f) = first_with_ext(&root, brand::EPISODE_EXT) {
+                return Err(CoreError::invalid(format!(
+                    "{name} already has a {} project ({})",
+                    brand::DISPLAY_NAME,
+                    f.display()
+                )));
+            }
+            root
         }
-        None => parent.join(safe_name(name)),
+        None => {
+            let root = parent.join(safe_name(name));
+            if root.exists() {
+                return Err(CoreError::invalid(format!(
+                    "{} already exists",
+                    root.display()
+                )));
+            }
+            root
+        }
     };
-    if root.exists() {
-        return Err(CoreError::invalid(format!(
-            "{} already exists",
-            root.display()
-        )));
-    }
     std::fs::create_dir_all(&root)?;
     let file = root.join(format!("{}.{}", safe_name(name), brand::EPISODE_EXT));
     let paths = EpisodePaths::for_file(&file)?;
     paths.ensure_dirs()?;
     let store = EpisodeStore::create(&file)?;
     store.set_meta("name", name)?;
-    if let Some(sf) = &paths.show_file {
-        let show = ShowStore::open(sf)?;
-        let id = crate::ids::new_id("ep");
-        store.set_meta("episode_id", &id)?;
-        show.register_episode(&id, name, &format!("Episodes/{}", safe_name(name)))?;
-    }
+    store.set_meta("episode_id", &crate::ids::new_id("ep"))?;
     Ok((paths, store))
 }
 
-fn safe_name(name: &str) -> String {
+pub fn safe_name(name: &str) -> String {
     name.chars()
         .map(|c| if "/\\:*?\"<>|".contains(c) { '_' } else { c })
         .collect::<String>()
@@ -231,29 +195,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn show_and_episode_folders() {
+    fn episode_inside_a_show() {
         let dir = tempfile::tempdir().unwrap();
-        let (show, _store) = ShowFolder::create(dir.path(), "TARMAC").unwrap();
-        assert!(show.file.ends_with(format!("TARMAC.{}", brand::SHOW_EXT)));
-        for d in [
-            "Library/SFX",
-            "Library/Ambience",
-            "Library/Music",
-            "Episodes",
-        ] {
-            assert!(show.root.join(d).is_dir(), "{d}");
-        }
+        let root = dir.path().join("TARMAC");
+        std::fs::create_dir_all(root.join("Episodes/Ep02/Sound")).unwrap();
+        let show = Show::create(&root, None).unwrap();
         let (paths, store) = create_episode(dir.path(), "Ep02", Some(&show.root)).unwrap();
-        assert_eq!(paths.root, show.root.join("Episodes/Ep02"));
+        assert_eq!(paths.root, root.join("Episodes/Ep02/Sound"));
+        assert_eq!(paths.file, root.join("Episodes/Ep02/Sound/Ep02.cutaway"));
         for d in ["Audio", "Script", "Backups", "Exports", "Cache", "Logs"] {
             assert!(paths.root.join(d).is_dir(), "{d}");
         }
-        assert_eq!(paths.show_file.as_deref(), Some(show.file.as_path()));
-        assert_eq!(paths.library, show.root.join("Library"));
+        assert!(
+            !paths.library.join("SFX").exists(),
+            "sounds live in the show"
+        );
+        assert_eq!(paths.show.as_ref().map(|s| &s.root), Some(&root));
+        assert_eq!(
+            paths.asset_path("show:sfx/doors/door.wav"),
+            root.join("Sound/sfx/doors/door.wav")
+        );
+        assert_eq!(
+            paths.asset_path("Vocals/Paul/breath.wav"),
+            paths.root.join("Library/Vocals/Paul/breath.wav")
+        );
         assert_eq!(store.meta("name").unwrap().as_deref(), Some("Ep02"));
-        let (_, show_store) = ShowFolder::open(&show.root).unwrap();
-        assert_eq!(show_store.episodes().unwrap().len(), 1);
         assert_eq!(find_episode_file(&paths.root).unwrap(), paths.file);
+        assert!(
+            create_episode(dir.path(), "Ep02", Some(&root)).is_err(),
+            "once"
+        );
         let mode: String = store
             .conn()
             .query_row("PRAGMA journal_mode", [], |r| r.get(0))
@@ -265,7 +236,11 @@ mod tests {
     fn standalone_episode_has_local_library() {
         let dir = tempfile::tempdir().unwrap();
         let (paths, _) = create_episode(dir.path(), "Solo", None).unwrap();
-        assert!(paths.show_file.is_none());
+        assert!(paths.show.is_none());
         assert!(paths.root.join("Library/SFX").is_dir());
+        assert_eq!(
+            paths.asset_path("SFX/Misc/door.wav"),
+            paths.root.join("Library/SFX/Misc/door.wav")
+        );
     }
 }
