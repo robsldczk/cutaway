@@ -71,7 +71,7 @@ pub fn play_take(svc: &mut Service, take_id: &str, from_s: f64) -> Result<Value>
         src_in: t.t0,
         src_out: t.t1,
         start_s: 0.0,
-        gain_db: apc_media::loudness::match_gain_db(t.lufs, MixSettings::default().target_lufs),
+        gain_db: 0.0,
         fade_in_s: 0.005,
         fade_out_s: 0.005,
         lane: "audition".into(),

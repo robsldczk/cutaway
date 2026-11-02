@@ -57,7 +57,7 @@ pub struct MixSettings {
 impl Default for MixSettings {
     fn default() -> Self {
         MixSettings {
-            loudness_match: true,
+            loudness_match: false,
             target_lufs: -23.0,
             room_tone: true,
             include_sound: true,
@@ -298,7 +298,11 @@ mod tests {
     fn gaps_ripple_and_loudness_offsets() {
         let (mut doc, scene) = sample_doc();
         let p = Pacing::default();
-        let s = PlaySchedule::from_scene(&doc, &scene, &p, &MixSettings::default());
+        let matched = MixSettings {
+            loudness_match: true,
+            ..MixSettings::default()
+        };
+        let s = PlaySchedule::from_scene(&doc, &scene, &p, &matched);
         assert_eq!(s.clips.len(), 2);
         assert!((s.clips[1].start_s - 1.8).abs() < 1e-9);
         assert!(
@@ -329,7 +333,11 @@ mod tests {
         };
         doc.lane_mix
             .insert("PAUL".into(), mix("PAUL", -6.0, 0.5, false, false));
-        let s = PlaySchedule::from_scene(&doc, &scene, &p, &MixSettings::default());
+        let matched = MixSettings {
+            loudness_match: true,
+            ..MixSettings::default()
+        };
+        let s = PlaySchedule::from_scene(&doc, &scene, &p, &matched);
         assert!(
             (s.clips[0].gain_db - -9.0).abs() < 1e-9,
             "-3 loudness, -6 lane"
