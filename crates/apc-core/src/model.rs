@@ -43,10 +43,11 @@ pub enum Kind {
     Asset,
     Bucket,
     LaneMix,
+    Mark,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 18] = [
+    pub const ALL: [Kind; 19] = [
         Kind::Setting,
         Kind::ScriptVersion,
         Kind::Scene,
@@ -65,6 +66,7 @@ impl Kind {
         Kind::Asset,
         Kind::Bucket,
         Kind::LaneMix,
+        Kind::Mark,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -87,6 +89,7 @@ impl Kind {
             Kind::Asset => "asset",
             Kind::Bucket => "bucket",
             Kind::LaneMix => "lane_mix",
+            Kind::Mark => "mark",
         }
     }
 
@@ -432,8 +435,28 @@ pub struct Take {
     pub needs_rematch: bool,
     #[serde(default)]
     pub ai_flag: Option<String>,
+    /// Who found it. Shown only in the dev panel; the normal UI treats all takes alike.
+    #[serde(default)]
+    pub origin: TakeOrigin,
+    /// What the actor actually said, as Claude read it (rescued takes; dev panel only).
+    #[serde(default)]
+    pub read_as: Option<String>,
 }
 entity!(Take, Take, parent = line_id, ord = take_no);
+
+#[derive(
+    Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TakeOrigin {
+    /// The deterministic script matcher.
+    #[default]
+    Matcher,
+    /// Claude, from session-mic speech the matcher left over (misheard by the ASR).
+    Rescue,
+    /// Linked by hand in the dev panel.
+    Manual,
+}
 
 impl Take {
     pub fn duration(&self) -> f64 {
@@ -469,6 +492,67 @@ pub struct Note {
     pub tags: Vec<String>,
 }
 entity!(Note, Note);
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MarkKind {
+    MissedTake,
+    WrongLine,
+    NotATake,
+    Edges,
+    Other,
+}
+
+#[derive(
+    Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum MarkStatus {
+    #[default]
+    Open,
+    /// Claude answered; the proposal waits for Apply or Discard.
+    Proposed,
+    Applied,
+    Discarded,
+}
+
+/// What applying a mark would change.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, schemars::JsonSchema)]
+pub struct MarkProposal {
+    #[serde(default)]
+    pub add: Vec<Take>,
+    /// Take ids to remove.
+    #[serde(default)]
+    pub remove: Vec<String>,
+    /// One line per decision, for the dev panel.
+    #[serde(default)]
+    pub summary: Vec<String>,
+}
+
+/// A stretch of a session mic Rob pointed at in the dev panel ("this is a take of L3").
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, schemars::JsonSchema)]
+pub struct DevMark {
+    pub id: String,
+    pub source_id: String,
+    /// Source-file seconds.
+    pub t0: f64,
+    pub t1: f64,
+    pub kind: MarkKind,
+    #[serde(default)]
+    pub line_id: Option<String>,
+    #[serde(default)]
+    pub note: String,
+    /// The transcript text of the stretch when it was marked.
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub status: MarkStatus,
+    #[serde(default)]
+    pub proposal: Option<MarkProposal>,
+    #[serde(default)]
+    pub created_at: String,
+}
+entity!(DevMark, Mark);
 
 /// Loud role-track speech that matches no line (ad-libs, questions, chatter).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, schemars::JsonSchema)]
@@ -837,6 +921,7 @@ pub struct Document {
     pub assets: BTreeMap<String, Asset>,
     pub buckets: BTreeMap<String, SoundBucket>,
     pub lane_mix: BTreeMap<String, LaneMix>,
+    pub marks: BTreeMap<String, DevMark>,
 }
 
 macro_rules! dispatch {
@@ -897,6 +982,7 @@ dispatch!(
     Asset => assets,
     Bucket => buckets,
     LaneMix => lane_mix,
+    Mark => marks,
 );
 
 impl Document {

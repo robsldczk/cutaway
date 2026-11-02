@@ -353,6 +353,51 @@ pub trait SoundGenerateProvider: Send + Sync {
 - [x] Tests: buckets and import matching (Rust, mock Partner API), lane mix and pan/fade unit tests, Playwright for the three Round 2 areas
 - [x] Docs: `docs/design/round2-screens.md` (the spec files are read-only here); D40–D43
 
+### M10: Take rescue, scoped re-analysis and the dev panel (Rob, 2026-11-02)
+Why: Parakeet mishears real takes; the matcher only compares text, so misheard reads end up unmatched. Claude gets the clean context to rescue them, and Rob gets a look under the hood with a way to point at what was missed.
+
+Rules that hold throughout:
+- Takes come only from a character's **session mic**. The **director mic** is notes, cues and context only, never a take (checked in the answer validation and again where takes are created).
+- The normal UI gets no new markers. A take's origin (`matcher`, `rescue`, `manual`) is stored and shown only in the dev panel.
+- Every change is a command (one undo step); UI, CLI and MCP share the methods.
+- A re-analysis replaces results only inside its scope. User favorites survive.
+
+**10.1 Sentences and the scene timeline** (`apc-analysis::sentences`, `::timeline`)
+- [ ] Merge Parakeet fragments per mic into sentences (pause ≤ 0.7 s, no sentence end; caps 40 words / 15 s). Each sentence keeps its word range, so every word keeps its exact timing.
+- [ ] Per scene and actor session: the actor's session-mic sentences in the scene's stretch, interleaved by time with the session's director-mic sentences. IDs `s…` (session mic) and `d…` (director mic).
+- [ ] Doubles: the same speech on both mics is kept once. Actor speech always from the session mic, director speech always from the director mic (level relative to each mic's median decides which it is).
+- [ ] Scene stretch on a mic: from the matcher's takes for that scene (−30 s … +15 s), or the gap between the neighbouring scenes' takes when the scene has none.
+
+**10.2 Take rescue** (`AiTask::TakeRescue`, prompt v1)
+- [ ] Plain-text input: the scene script (`L1 SARA: …`, all characters) and the recording (`s43 SARA [= L3]: …`, `s45 SARA [?]: …`, `d44 DIRECTOR: …`, `— 12 s —` for long pauses). Optional marks from Rob ("s45–s47: take of L3, misheard").
+- [ ] Output by ID: `{"rescues": [{"id", "line", "read_as", "confidence", "from"?, "to"?}]}`. Timecodes never come from Claude: ID → sentence → words → word timings → edges snapped to the audio.
+- [ ] Hard checks: only `s` IDs marked `[?]`, only the mic owner's lines in this scene, not bleed, no overlap with a take, confidence high or medium.
+- [ ] Mock provider: looser fuzzy match of `[?]` sentences against the owner's lines (tests stay offline).
+- [ ] Runs inside `analyze` after the matcher's takes, so notes and picks see rescued takes.
+
+**10.3 Scoped re-analysis** (dev switch)
+- [ ] `AnalysisScope { characters, line_ids, ranges }`: the deterministic part runs as before (cheap, transcripts cached); AI calls, takes, notes and unmatched are limited to the scope.
+- [ ] `AnalysisPayload.source_scope`: notes and unmatched are replaced only for those sources.
+- [ ] Methods: `analyze_scope` (sync) / `start_analysis` with a scope (job). CLI: `cutaway align --character SARA`, `--line ID`.
+
+**10.4 Dev panel: under the hood** (new `dev` page behind the dev switch)
+- [ ] `dev_transcript` view: per actor session, every sentence with mic, speaker, time, text and what it became (matcher take of L…, rescued take of L…, near miss, unmatched, bleed, director note/cue).
+- [ ] Three columns, scrolling together: full transcript · rescued by Claude · script position. Search, scene/character filter, click to play.
+- [ ] Rerun buttons: this character, this line's takes.
+
+**10.5 Marks: link to the script and send to Claude**
+- [ ] `DevMark` entity (source, t0..t1, kind: missed take / wrong line / not a take / edges / other, optional line, note, status, proposal). Commands `add_mark`, `update_mark`, `delete_mark`.
+- [ ] Select sentences, link them to a script line, add a note. "Send" runs the rescue for that stretch only, with the mark as a hint; the proposal shows before/after; Apply is one command (`apply_mark`), Discard keeps the mark.
+
+**10.6 Learning section**
+- [ ] Pick a dialogue-heavy scene; Rob marks everything wrong or missing, then marks the scene reviewed. Reviewed scenes are the reference set.
+- [ ] `cutaway eval` / `dev_eval`: runs variants (merge pause, bleed margin, match threshold, rescue on/off, Rob's examples in the prompt) on the reference scene and a held-out scene; found / wrong / minutes per variant.
+- [ ] What it learns: settings (adopted by Rob), up to 5 worked examples from his marks in the rescue prompt, and a show glossary of misheard words (heard → script) used by the matcher and Claude. Changes go into DECISIONS.md.
+
+**10.7 Verification**
+- [ ] Unit tests (merge, mapping back, doubles, director never a take, validation), mock rescue on the fixture, scoped apply keeps out-of-scope data, Playwright smoke test of the dev panel.
+- [ ] Copy of Tarmac-EP02 with Claude: rescue numbers in the progress log.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)

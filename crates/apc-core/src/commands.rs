@@ -31,6 +31,9 @@ pub struct AnalysisPayload {
     /// Only these lines' takes are replaced (all when empty).
     #[serde(default)]
     pub line_scope: Vec<String>,
+    /// With a line scope: notes and unmatched speech are replaced only for these sources.
+    #[serde(default)]
+    pub source_scope: Vec<String>,
     /// Characters' vocal sounds cut from the recordings, and their vocal buckets.
     #[serde(default)]
     pub assets: Vec<Asset>,
@@ -258,6 +261,17 @@ pub enum Command {
         #[serde(default)]
         at: Option<String>,
     },
+    /// Adds or replaces a dev-panel mark (a stretch Rob pointed at).
+    PutMark {
+        mark: DevMark,
+    },
+    DeleteMark {
+        mark_id: String,
+    },
+    /// Applies a mark's proposal: adds and removes takes, renumbers the lines involved.
+    ApplyMark {
+        mark_id: String,
+    },
 }
 
 fn yes() -> bool {
@@ -316,6 +330,9 @@ impl Command {
             Command::BucketDismiss { .. } => "bucket_dismiss",
             Command::SetLaneMix { .. } => "set_lane_mix",
             Command::ApplyMatch { .. } => "apply_match",
+            Command::PutMark { .. } => "put_mark",
+            Command::DeleteMark { .. } => "delete_mark",
+            Command::ApplyMark { .. } => "apply_mark",
         }
     }
 
@@ -925,6 +942,18 @@ impl Command {
                 tx.put(&b)?;
                 Ok(Value::Null)
             }
+            Command::PutMark { mark } => {
+                if !tx.doc().sources.contains_key(&mark.source_id) {
+                    return Err(CoreError::not_found("source", &mark.source_id));
+                }
+                tx.put(mark)?;
+                Ok(json!({ "mark_id": mark.id }))
+            }
+            Command::DeleteMark { mark_id } => {
+                tx.delete::<DevMark>(mark_id)?;
+                Ok(Value::Null)
+            }
+            Command::ApplyMark { mark_id } => apply_mark(tx, mark_id),
             Command::SetLaneMix { mix } => {
                 let mut m = mix.clone();
                 m.volume_db = m.volume_db.clamp(-60.0, 12.0);
@@ -1230,6 +1259,8 @@ fn use_unmatched(
         confidence: 1.0,
         needs_rematch: false,
         ai_flag: None,
+        origin: TakeOrigin::Manual,
+        read_as: None,
     })?;
     tx.put(&BoxState {
         id: line_id.clone(),
@@ -1242,6 +1273,97 @@ fn use_unmatched(
     um.used_as = Some(line_id.clone());
     tx.put(&um)?;
     Ok(json!({ "line_id": line_id }))
+}
+
+/// Boxes keep a valid selection, otherwise get the default take. Returns how many were set.
+fn refresh_boxes(tx: &mut Tx) -> Result<usize> {
+    let after = tx.doc().clone();
+    let mut by_line: HashMap<&str, Vec<&Take>> = HashMap::new();
+    for t in after.takes.values() {
+        by_line.entry(t.line_id.as_str()).or_default().push(t);
+    }
+    let mut defaults = 0;
+    for line in after
+        .lines
+        .values()
+        .filter(|l| l.kind == LineKind::Dialogue)
+    {
+        let mut b = after.boxes.get(&line.id).cloned().unwrap_or(BoxState {
+            id: line.id.clone(),
+            ..Default::default()
+        });
+        let valid = b
+            .take_id
+            .as_ref()
+            .map(|id| after.takes.contains_key(id))
+            .unwrap_or(false);
+        if !valid {
+            let mut takes = by_line.get(line.id.as_str()).cloned().unwrap_or_default();
+            takes.sort_by_key(|t| t.take_no);
+            b.take_id = default_take(&takes).map(|t| t.id.clone());
+            b.comp.clear();
+            b.edits = WordEdits::default();
+            if b.take_id.is_some() {
+                defaults += 1;
+            }
+        }
+        b.comp.retain(|s| after.takes.contains_key(&s.take_id));
+        if after.boxes.get(&line.id) != Some(&b) {
+            tx.put(&b)?;
+        }
+    }
+    Ok(defaults)
+}
+
+fn apply_mark(tx: &mut Tx, mark_id: &str) -> Result<Value> {
+    let mut mark = tx
+        .doc()
+        .marks
+        .get(mark_id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("mark", mark_id))?;
+    let proposal = mark
+        .proposal
+        .clone()
+        .ok_or_else(|| CoreError::invalid("the mark has no proposal to apply"))?;
+    let mut lines: HashSet<String> = HashSet::new();
+    for id in &proposal.remove {
+        if let Some(t) = tx.doc().takes.get(id).cloned() {
+            lines.insert(t.line_id.clone());
+            tx.delete::<Take>(id)?;
+        }
+    }
+    for t in &proposal.add {
+        // the director mic is never a take, whatever proposed it
+        match tx.doc().sources.get(&t.source_id) {
+            Some(s) if s.role == Role::Character => {}
+            _ => {
+                return Err(CoreError::invalid(format!(
+                    "take {} is not on a character's session mic",
+                    t.id
+                )))
+            }
+        }
+        if !tx.doc().lines.contains_key(&t.line_id) {
+            return Err(CoreError::not_found("line", &t.line_id));
+        }
+        lines.insert(t.line_id.clone());
+        tx.put(t)?;
+    }
+    for lid in &lines {
+        let mut takes: Vec<Take> = tx.doc().takes_of_line(lid).into_iter().cloned().collect();
+        takes.sort_by(|a, b| a.t0.total_cmp(&b.t0));
+        for (n, t) in takes.iter_mut().enumerate() {
+            if t.take_no != (n + 1) as u32 {
+                t.take_no = (n + 1) as u32;
+                tx.put(t)?;
+            }
+        }
+    }
+    refresh_boxes(tx)?;
+    mark.status = MarkStatus::Applied;
+    tx.put(&mark)?;
+    Ok(json!({ "added": proposal.add.len(), "removed": proposal.remove.len() }))
 }
 
 /// Default take: strongest director pick, else the last complete take, else the best score.
@@ -1296,12 +1418,16 @@ fn apply_analysis(tx: &mut Tx, payload: &AnalysisPayload) -> Result<Value> {
         tx.put(&t)?;
     }
 
-    if scope.is_empty() {
+    let sources: HashSet<&str> = payload.source_scope.iter().map(String::as_str).collect();
+    let replace_from = |source_id: &str| scope.is_empty() || sources.contains(source_id);
+    if scope.is_empty() || !sources.is_empty() {
         for n in doc.notes.values() {
-            tx.delete::<Note>(&n.id)?;
+            if replace_from(&n.source_id) {
+                tx.delete::<Note>(&n.id)?;
+            }
         }
         for u in doc.unmatched.values() {
-            if u.origin == "analysis" && u.used_as.is_none() {
+            if u.origin == "analysis" && u.used_as.is_none() && replace_from(&u.source_id) {
                 tx.delete::<Unmatched>(&u.id)?;
             }
         }
@@ -1313,40 +1439,7 @@ fn apply_analysis(tx: &mut Tx, payload: &AnalysisPayload) -> Result<Value> {
         tx.put(u)?;
     }
 
-    // Boxes: keep a valid selection, otherwise use the default take.
-    let after = tx.doc().clone();
-    let mut by_line: HashMap<&str, Vec<&Take>> = HashMap::new();
-    for t in after.takes.values() {
-        by_line.entry(t.line_id.as_str()).or_default().push(t);
-    }
-    let mut defaults = 0;
-    for line in after
-        .lines
-        .values()
-        .filter(|l| l.kind == LineKind::Dialogue)
-    {
-        let mut b = after.boxes.get(&line.id).cloned().unwrap_or(BoxState {
-            id: line.id.clone(),
-            ..Default::default()
-        });
-        let valid = b
-            .take_id
-            .as_ref()
-            .map(|id| after.takes.contains_key(id))
-            .unwrap_or(false);
-        if !valid {
-            let mut takes = by_line.get(line.id.as_str()).cloned().unwrap_or_default();
-            takes.sort_by_key(|t| t.take_no);
-            b.take_id = default_take(&takes).map(|t| t.id.clone());
-            b.comp.clear();
-            b.edits = WordEdits::default();
-            if b.take_id.is_some() {
-                defaults += 1;
-            }
-        }
-        b.comp.retain(|s| after.takes.contains_key(&s.take_id));
-        tx.put(&b)?;
-    }
+    let defaults = refresh_boxes(tx)?;
     Ok(json!({ "takes": payload.takes.len(), "defaults_set": defaults }))
 }
 
@@ -1381,6 +1474,125 @@ mod tests {
         })
         .unwrap();
         (dir, bus)
+    }
+
+    fn source(id: &str, role: &str) -> SourceFile {
+        serde_json::from_value(json!({
+            "id": id, "path": format!("{id}.wav"), "original_name": format!("{id}.wav"),
+            "stored": "copied", "hash": id, "size": 1, "role": role,
+        }))
+        .unwrap()
+    }
+
+    fn mark_with(add: Vec<Take>, remove: Vec<String>, src: &str) -> DevMark {
+        DevMark {
+            id: "mk1".into(),
+            source_id: src.into(),
+            t0: 50.0,
+            t1: 52.0,
+            kind: MarkKind::MissedTake,
+            line_id: Some("b".into()),
+            note: "misheard".into(),
+            text: String::new(),
+            status: MarkStatus::Proposed,
+            proposal: Some(MarkProposal {
+                add,
+                remove,
+                summary: vec![],
+            }),
+            created_at: String::new(),
+        }
+    }
+
+    #[test]
+    fn applying_a_mark_adds_removes_and_renumbers() {
+        let (_d, mut bus) = setup();
+        add_second_take(&mut bus);
+        bus.execute(&Command::AddSources {
+            sources: vec![source("src", "character"), source("dir", "room")],
+        })
+        .unwrap();
+        // a rescued take of line b between its two takes, and take a1 goes
+        let mut t = crate::timeline::tests::take("tr", "b", 30.0, 31.0, vec![]);
+        t.origin = TakeOrigin::Rescue;
+        let a_take = bus.doc().takes_of_line("a")[0].id.clone();
+        bus.execute(&Command::PutMark {
+            mark: mark_with(vec![t], vec![a_take.clone()], "src"),
+        })
+        .unwrap();
+        bus.execute(&Command::ApplyMark {
+            mark_id: "mk1".into(),
+        })
+        .unwrap();
+        let doc = bus.doc();
+        let b: Vec<(&str, u32)> = doc
+            .takes_of_line("b")
+            .iter()
+            .map(|t| (t.id.as_str(), t.take_no))
+            .collect();
+        assert!(b.contains(&("tr", 2)), "{b:?}");
+        assert!(b.contains(&("tb2", 3)), "{b:?}");
+        assert!(!doc.takes.contains_key(&a_take));
+        assert_eq!(doc.marks["mk1"].status, MarkStatus::Applied);
+        // one undo step takes it all back
+        bus.undo().unwrap();
+        assert!(bus.doc().takes.contains_key(&a_take));
+        assert!(!bus.doc().takes.contains_key("tr"));
+    }
+
+    #[test]
+    fn a_take_on_the_director_mic_is_refused() {
+        let (_d, mut bus) = setup();
+        bus.execute(&Command::AddSources {
+            sources: vec![source("dir", "room")],
+        })
+        .unwrap();
+        let mut t = crate::timeline::tests::take("td", "b", 30.0, 31.0, vec![]);
+        t.source_id = "dir".into();
+        bus.execute(&Command::PutMark {
+            mark: mark_with(vec![t], vec![], "dir"),
+        })
+        .unwrap();
+        let r = bus.execute(&Command::ApplyMark {
+            mark_id: "mk1".into(),
+        });
+        assert!(r.is_err());
+        assert!(!bus.doc().takes.contains_key("td"));
+    }
+
+    #[test]
+    fn scoped_analysis_keeps_other_sources_notes() {
+        let (_d, mut bus) = setup();
+        let note = |id: &str, src: &str| Note {
+            id: id.into(),
+            source_id: src.into(),
+            t0: 0.0,
+            t1: 1.0,
+            text: "again".into(),
+            class: NoteClass::Direction,
+            take_ids: vec![],
+            line_id: None,
+            summary: String::new(),
+            tags: vec![],
+        };
+        bus.execute(&Command::ApplyAnalysis {
+            payload: AnalysisPayload {
+                notes: vec![note("n_sara", "dir_sara"), note("n_paul", "dir_paul")],
+                ..Default::default()
+            },
+        })
+        .unwrap();
+        bus.execute(&Command::ApplyAnalysis {
+            payload: AnalysisPayload {
+                notes: vec![note("n_sara2", "dir_sara")],
+                line_scope: vec!["b".into()],
+                source_scope: vec!["dir_sara".into()],
+                ..Default::default()
+            },
+        })
+        .unwrap();
+        let ids: Vec<&str> = bus.doc().notes.keys().map(String::as_str).collect();
+        assert_eq!(ids, ["n_paul", "n_sara2"]);
     }
 
     fn add_second_take(bus: &mut CommandBus) {

@@ -647,6 +647,8 @@ pub fn analyze(
                 confidence: (r.score / 100.0).min(1.0),
                 needs_rematch: false,
                 ai_flag: None,
+                origin: Default::default(),
+                read_as: None,
             });
         }
     }
@@ -1044,6 +1046,7 @@ pub fn analyze(
             notes,
             unmatched,
             line_scope: vec![],
+            source_scope: vec![],
             assets: vec![],
             buckets: vec![],
         },

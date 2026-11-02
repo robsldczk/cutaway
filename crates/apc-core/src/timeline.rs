@@ -590,6 +590,8 @@ pub(crate) mod tests {
             confidence: 1.0,
             needs_rematch: false,
             ai_flag: None,
+            origin: Default::default(),
+            read_as: None,
         }
     }
 

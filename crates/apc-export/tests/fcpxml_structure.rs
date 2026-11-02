@@ -45,6 +45,8 @@ fn take(id: &str, line: &str, src: &str, no: u32, t0: f64, t1: f64, words: Vec<T
         confidence: 1.0,
         needs_rematch: false,
         ai_flag: None,
+        origin: Default::default(),
+        read_as: None,
     }
 }
 

@@ -264,6 +264,8 @@ mod tests {
             confidence: 1.0,
             needs_rematch: false,
             ai_flag: None,
+            origin: Default::default(),
+            read_as: None,
         };
         d.takes
             .insert("ta".into(), take("ta", "a", 10.0, 11.0, -20.0));
