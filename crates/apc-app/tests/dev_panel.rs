@@ -162,11 +162,21 @@ fn eval_scores_settings_variants_against_the_marks() {
     let dir = tempfile::tempdir().unwrap();
     let mut svc = demo::create(dir.path(), "test", true).unwrap();
     let doc = svc.doc().clone();
-    // a take Rob says is not a take: the current settings must count it as wrong
+    // a take Rob says is not a take: the current settings must count it as wrong. It needs
+    // a sibling take on the same mic in its scene, or nothing is left to count as found
+    // (take ids are random, so "any take" made this test flaky).
+    let scene_of = |t: &apc_core::Take| doc.lines[&t.line_id].scene_id.clone();
     let t = doc
         .takes
         .values()
-        .find(|t| doc.lines[&t.line_id].character.is_some())
+        .filter(|t| doc.lines[&t.line_id].character.is_some())
+        .find(|t| {
+            doc.takes
+                .values()
+                .filter(|o| o.source_id == t.source_id && scene_of(o) == scene_of(t))
+                .count()
+                >= 2
+        })
         .unwrap()
         .clone();
     let scene = doc.lines[&t.line_id].scene_id.clone();
