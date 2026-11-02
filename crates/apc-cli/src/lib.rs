@@ -46,6 +46,10 @@ pub enum Cmd {
         #[arg(long)]
         name: Option<String>,
     },
+    /// Take only the story context (character bios, settings) from a Throughline .thrl file.
+    ImportStory {
+        file: PathBuf,
+    },
     /// Import audio (files or folders) and assign roles.
     ImportAudio {
         paths: Vec<PathBuf>,
@@ -262,6 +266,9 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                     "import_script",
                     json!({ "path": s(file), "name": name }),
                 ),
+                Cmd::ImportStory { file } => {
+                    call(&mut sess, "import_story", json!({ "path": s(file) }))
+                }
                 Cmd::ImportAudio {
                     paths, reference, ..
                 } => call(

@@ -193,7 +193,7 @@ impl ServerHandler for CutawayMcp {
                     .values()
                     .find(|v| v.number == n)
                     .ok_or("no such version")?;
-                return std::fs::read_to_string(svc.paths.resolve(&v.file))
+                return apc_core::script::script_text(&svc.paths.resolve(&v.file))
                     .map_err(|e| e.to_string());
             }
             if let Some(sc) = rest.strip_prefix("bucket/") {

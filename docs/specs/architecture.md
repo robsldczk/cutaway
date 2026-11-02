@@ -125,7 +125,7 @@ TARMAC/                              show
 
 ## Importer
 
-**Step 1: script.** Import the Throughline/Fountain file. The app parses scenes, locations, characters and lines.
+**Step 1: script.** Import the Throughline/Fountain file. The app parses scenes, locations, characters and lines. *(Changed in implementation, D54: `.thrl` is read natively, not as Fountain; its story context is kept with the episode.)*
 
 **Step 2: audio.** Drop a folder or files. Each file is assigned a role automatically:
 

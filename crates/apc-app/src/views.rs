@@ -107,7 +107,7 @@ pub struct ItemView {
     pub spacer_duration_s: Option<f64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct SceneSummary {
     pub id: String,
     pub number: u32,
@@ -117,6 +117,10 @@ pub struct SceneSummary {
     pub lines: usize,
     pub lines_with_takes: usize,
     pub flagged: usize,
+    /// Beat title from the writers (empty for plain Fountain).
+    pub title: String,
+    pub act: String,
+    pub synopsis: String,
 }
 
 #[derive(Serialize)]
@@ -124,6 +128,24 @@ pub struct CharacterView {
     pub id: String,
     pub label: String,
     pub color_index: usize,
+    /// The writers' notes in one line (empty without a bio).
+    pub profile: String,
+}
+
+/// Story context of the open scene (Inspector).
+#[derive(Serialize)]
+pub struct SceneStoryView {
+    pub title: String,
+    pub act: String,
+    pub synopsis: String,
+    /// Characters present, by label.
+    pub cast: Vec<String>,
+    pub tone: Option<f64>,
+    pub setting: String,
+    pub setting_description: String,
+    /// Name of the setting this one belongs to.
+    pub setting_parent: Option<String>,
+    pub parent_description: String,
 }
 
 #[derive(Serialize)]
@@ -149,6 +171,7 @@ pub struct SceneView {
     pub unmatched: Vec<UnmatchedView>,
     pub scenes: Vec<SceneSummary>,
     pub characters: Vec<CharacterView>,
+    pub story: SceneStoryView,
     pub rev: i64,
     pub can_undo: bool,
     pub can_redo: bool,
@@ -188,6 +211,9 @@ pub fn scene_summaries(doc: &Document) -> Vec<SceneSummary> {
                     .filter(|l| !doc.takes_of_line(&l.id).is_empty())
                     .count(),
                 flagged: flagged_in(doc, &s.id),
+                title: s.story.title.clone(),
+                act: s.story.act.clone(),
+                synopsis: s.story.synopsis.clone(),
             }
         })
         .collect()
@@ -360,6 +386,7 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
             id: c.id.clone(),
             label: c.label.clone(),
             color_index: c.color_index,
+            profile: c.profile.one_line(),
         })
         .collect();
     chars.sort_by_key(|c| c.color_index);
@@ -367,18 +394,35 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
     let this = summaries
         .iter()
         .find(|s| s.id == scene.id)
-        .map(|s| SceneSummary {
-            id: s.id.clone(),
-            number: s.number,
-            heading: s.heading.clone(),
-            place: s.place.clone(),
-            time_of_day: s.time_of_day.clone(),
-            lines: s.lines,
-            lines_with_takes: s.lines_with_takes,
-            flagged: s.flagged,
-        })
+        .cloned()
         .ok_or_else(|| AppError::Other("scene vanished".into()))?;
+    let loc = doc.locations.get(&loc_id);
+    let parent = loc
+        .and_then(|l| l.parent.as_deref())
+        .and_then(|p| doc.locations.get(p));
+    let story = SceneStoryView {
+        title: scene.story.title.clone(),
+        act: scene.story.act.clone(),
+        synopsis: scene.story.synopsis.clone(),
+        cast: scene
+            .story
+            .cast
+            .iter()
+            .map(|c| {
+                apc_core::story::character_for(&doc, c)
+                    .and_then(|id| doc.characters.get(&id))
+                    .map(|ch| ch.label.clone())
+                    .unwrap_or_else(|| apc_core::script::title_case(c))
+            })
+            .collect(),
+        tone: scene.story.tone,
+        setting: scene.location.clone(),
+        setting_description: loc.map(|l| l.description.clone()).unwrap_or_default(),
+        setting_parent: parent.map(|p| p.name.clone()),
+        parent_description: parent.map(|p| p.description.clone()).unwrap_or_default(),
+    };
     Ok(SceneView {
+        story,
         episode: svc.name(),
         scene: this,
         location_id: loc_id.clone(),
@@ -550,9 +594,7 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
     }
     placements.sort_by(|a, b| a.start_s.total_cmp(&b.start_s));
     let room_tone = doc
-        .locations
-        .get(&apc_core::script::location_id(&scene.location))
-        .map(|l| &l.room_tone)
+        .room_tone_of(&apc_core::script::location_id(&scene.location))
         .filter(|t| t.enabled && t.t1 > t.t0 + 0.05)
         .map(|t| {
             let period = t.t1 - t.t0;

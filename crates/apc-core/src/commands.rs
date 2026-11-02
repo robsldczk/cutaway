@@ -53,6 +53,10 @@ pub enum Command {
         version: ScriptVersion,
         parsed: ParsedScript,
     },
+    /// Story context only (character bios, settings) from another writers' file.
+    ImportStoryContext {
+        story: crate::story::StoryContext,
+    },
     AddSources {
         sources: Vec<SourceFile>,
     },
@@ -283,6 +287,7 @@ impl Command {
         match self {
             Command::SetConfig { .. } => "set_config",
             Command::ImportScriptVersion { .. } => "import_script_version",
+            Command::ImportStoryContext { .. } => "import_story",
             Command::AddSources { .. } => "import_media",
             Command::SetRole { .. } => "set_role",
             Command::RelinkMedia { .. } => "relink_media",
@@ -375,6 +380,9 @@ impl Command {
             Command::ImportScriptVersion { version, parsed } => {
                 let summary = crate::script::apply_version(tx, version, parsed)?;
                 Ok(serde_json::to_value(summary)?)
+            }
+            Command::ImportStoryContext { story } => {
+                Ok(serde_json::to_value(crate::story::merge(tx, story)?)?)
             }
             Command::AddSources { sources } => {
                 for s in sources {

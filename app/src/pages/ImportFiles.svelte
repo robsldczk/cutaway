@@ -13,7 +13,18 @@
   import type { CastCard, Fix, ImportView, Job } from '../lib/types';
 
   interface LineChange { line_id: string; character: string | null; old_text: string | null; new_text: string | null }
-  interface ScriptSummary { version: number; unchanged: number; changed: LineChange[]; inserted: LineChange[]; deleted: LineChange[]; scenes_added: string[]; scenes_removed: string[]; takes_to_rematch: number; takes_to_unmatched: number }
+  interface StorySummary { characters_updated: string[]; locations_updated: string[]; unknown_characters: string[] }
+  interface ScriptSummary { version: number; unchanged: number; changed: LineChange[]; inserted: LineChange[]; deleted: LineChange[]; scenes_added: string[]; scenes_removed: string[]; takes_to_rematch: number; takes_to_unmatched: number; story?: StorySummary }
+  const SCRIPT_FILTER = [{ name: 'Script', extensions: ['fountain', 'thrl', 'txt'] }];
+  function storyText(s: StorySummary | undefined): string {
+    if (!s) return '';
+    const parts = [];
+    if (s.characters_updated.length) parts.push(`notes on ${s.characters_updated.length} character${s.characters_updated.length === 1 ? '' : 's'}`);
+    if (s.locations_updated.length) parts.push(`${s.locations_updated.length} setting${s.locations_updated.length === 1 ? '' : 's'}`);
+    let t = parts.length ? `Story context: ${parts.join(', ')}` : '';
+    if (s.unknown_characters.length) t += `${t ? '. ' : ''}No script character for ${s.unknown_characters.join(', ')}`;
+    return t;
+  }
 
   let v = $state<ImportView | null>(null);
   let remember = $state(true);
@@ -48,7 +59,7 @@
   async function chooseScript() {
     let p = pathScript.trim();
     if (!p && inTauri) {
-      const r = await pickPath({ title: 'Script (Fountain)', filters: [{ name: 'Script', extensions: ['fountain', 'txt'] }] });
+      const r = await pickPath({ title: 'Script (Fountain or Throughline)', filters: SCRIPT_FILTER });
       if (!r?.length) return;
       p = r[0];
     }
@@ -56,8 +67,26 @@
     const r = await app.method<ScriptSummary>('import_script', { path: p });
     pathScript = '';
     if (r && (r.version > 1 || r.changed.length || r.deleted.length)) diff = r;
+    else if (storyText(r?.story)) app.say(storyText(r?.story));
     await app.boot();
     await load();
+  }
+
+  // character bios and settings from another Throughline file (e.g. the pilot's)
+  async function addStory() {
+    let p = pathScript.trim();
+    if (!p && inTauri) {
+      const r = await pickPath({ title: 'Story notes from a Throughline project', filters: [{ name: 'Throughline', extensions: ['thrl'] }] });
+      if (!r?.length) return;
+      p = r[0];
+    }
+    if (!p) {
+      app.say('Type the path of a .thrl file first');
+      return;
+    }
+    const r = await app.method<StorySummary>('import_story', { path: p });
+    pathScript = '';
+    if (r) app.say(storyText(r) || 'Nothing new in that file');
   }
 
   async function addAudio(forCharacter?: string) {
@@ -165,10 +194,11 @@
           <div class="muted sub">Script · {v.script.characters} characters</div>
         {:else}
           <div class="big">Drop the script</div>
-          <div class="muted sub">A Fountain file</div>
+          <div class="muted sub">A Fountain file or a Throughline project</div>
         {/if}
-        {#if !inTauri}<input class="field path" placeholder="Path to the .fountain file" bind:value={pathScript} />{/if}
+        {#if !inTauri}<input class="field path" placeholder="Path to the .fountain or .thrl file" bind:value={pathScript} />{/if}
       </div>
+      {#if v?.script}<button class="btn" onclick={addStory} title="Character bios and settings from another Throughline project, e.g. the pilot">Story notes</button>{/if}
       <button class="btn" onclick={chooseScript}>{v?.script ? 'Replace' : 'Choose'}</button>
     </div>
     <div class="drop" aria-label="Audio drop zone">
@@ -297,6 +327,7 @@
 {#if diff}
   <Sheet title="Script v{String(diff.version).padStart(3, '0')}" width={620} onclose={() => (diff = null)}>
     <p class="muted">{diff.unchanged} lines unchanged · {diff.changed.length} changed · {diff.inserted.length} new · {diff.deleted.length} deleted{diff.takes_to_rematch ? ` · ${diff.takes_to_rematch} takes to re-match` : ''}{diff.takes_to_unmatched ? ` · ${diff.takes_to_unmatched} takes to the unmatched bin` : ''}</p>
+    {#if storyText(diff.story)}<p class="muted">{storyText(diff.story)}</p>{/if}
     <div class="diff">
       {#each diff.changed as c (c.line_id)}
         <div class="dl"><span class="nm">{label(c.character)}</span><span class="old script">{c.old_text}</span><span class="new script">{c.new_text}</span></div>

@@ -768,6 +768,7 @@ mod tests {
                     text: "Paul sets down a STEAMING, aluminum-wrapped BURRITO.".into(),
                 }],
             },
+            context: None,
         };
         let out = spot(&input);
         assert_eq!(out.cues[0].cue_type, SpotCueType::Ambience);

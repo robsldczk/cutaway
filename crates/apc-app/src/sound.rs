@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use apc_ai::task::{ScriptItem, SoundSpotInput, SoundTagInput, SpotCueType, SpotScene};
+use apc_ai::task::{
+    CastNote, ScriptItem, SoundSpotInput, SoundTagInput, SpotContext, SpotCueType, SpotScene,
+};
 use apc_core::ids::new_id;
 use apc_core::*;
 use apc_sound::epidemic::EpidemicProvider;
@@ -23,6 +25,47 @@ fn scene_of(svc: &Service, key: &str) -> Result<Scene> {
         .ok_or_else(|| AppError::Params(format!("no scene '{key}'")))
 }
 
+/// What the writers know about a scene, for the spotting prompt.
+pub fn spot_context(doc: &Document, scene: &Scene) -> SpotContext {
+    let st = &scene.story;
+    let loc = doc
+        .locations
+        .get(&apc_core::script::location_id(&scene.location));
+    let with_desc = |name: &str, desc: &str| {
+        if desc.trim().is_empty() {
+            name.to_string()
+        } else {
+            format!("{name}: {}", desc.trim())
+        }
+    };
+    SpotContext {
+        title: st.title.clone(),
+        act: st.act.clone(),
+        synopsis: st.synopsis.clone(),
+        tone: st.tone,
+        cast: st
+            .cast
+            .iter()
+            .map(|name| {
+                let c = apc_core::story::character_for(doc, name)
+                    .and_then(|id| doc.characters.get(&id));
+                CastNote {
+                    name: name.clone(),
+                    note: c.map(|c| c.profile.summary.clone()).unwrap_or_default(),
+                }
+            })
+            .collect(),
+        setting: loc
+            .filter(|l| !l.description.trim().is_empty())
+            .map(|l| with_desc(&l.name, &l.description))
+            .unwrap_or_default(),
+        part_of: loc
+            .and_then(|l| l.parent.as_deref())
+            .and_then(|p| doc.locations.get(p))
+            .map(|p| with_desc(&p.name, &p.description)),
+    }
+}
+
 /// AI sound spotting for one scene → anchored cues in the bucket.
 pub fn spot(svc: &mut Service, scene_key: &str) -> Result<Value> {
     let scene = scene_of(svc, scene_key)?;
@@ -37,6 +80,11 @@ pub fn spot(svc: &mut Service, scene_key: &str) -> Result<Value> {
             text: l.text.clone(),
         })
         .collect();
+    let context = if svc.config().ai.story_context {
+        Some(spot_context(doc, &scene)).filter(|c| !c.is_empty())
+    } else {
+        None
+    };
     let input = SoundSpotInput {
         scene: SpotScene {
             id: scene.id.clone(),
@@ -44,6 +92,7 @@ pub fn spot(svc: &mut Service, scene_key: &str) -> Result<Value> {
             location: scene.location.clone(),
             items,
         },
+        context,
     };
     let (runner, warn) = svc.ai_runner();
     let out = runner.run(&input)?;

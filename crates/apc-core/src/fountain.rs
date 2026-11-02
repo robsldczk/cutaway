@@ -4,14 +4,17 @@
 //! character cues with extensions (`SARA (O.S.)`), parentheticals that split a
 //! dialogue block into sub-lines, `…`/`...` lines that split too, forced action `!`,
 //! transitions (`>` and `CUT TO:`), centered text `>…<`, `--` action lines, lyrics `~`,
-//! and keeps notes `[[ ]]`, sections `#` and synopses `=` as metadata.
+//! and keeps notes `[[ ]]`, sections `#` and synopses `=` as metadata. Synopses become the
+//! scene's story synopsis; a top-level section (`# ACT 2`) is the act of the scenes after it.
+//! Throughline's native `.thrl` files are read by [`crate::thrl`] into the same types.
 
 use std::collections::BTreeMap;
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::model::LineKind;
+use crate::model::{LineKind, SceneStory};
+use crate::story::StoryContext;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, schemars::JsonSchema)]
 pub struct ParsedUnit {
@@ -34,9 +37,12 @@ pub struct ParsedScene {
     /// Forced scene number (`#12#`) if present.
     pub number: Option<String>,
     pub units: Vec<ParsedUnit>,
+    /// Sections (`#`) written before this scene.
     pub sections: Vec<String>,
     pub synopses: Vec<String>,
     pub notes: Vec<String>,
+    #[serde(default)]
+    pub story: SceneStory,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, schemars::JsonSchema)]
@@ -45,6 +51,9 @@ pub struct ParsedScript {
     /// Units before the first scene heading (kept, but not part of any scene).
     pub preamble: Vec<ParsedUnit>,
     pub scenes: Vec<ParsedScene>,
+    /// Character bios and settings (Throughline); empty for Fountain.
+    #[serde(default)]
+    pub story: StoryContext,
 }
 
 impl ParsedScript {
@@ -177,6 +186,8 @@ pub fn parse(source: &str) -> ParsedScript {
     }
 
     let mut scene: Option<ParsedScene> = None;
+    let mut pending_sections: Vec<String> = Vec::new();
+    let mut act = String::new();
     for (line_no, block) in blocks {
         let mut lines: Vec<String> = block;
         // metadata lines: notes, sections, synopses, page breaks
@@ -188,9 +199,10 @@ pub fn parse(source: &str) -> ParsedScript {
             }
             if t.starts_with('#') {
                 let s = t.trim_start_matches('#').trim().to_string();
-                if let Some(sc) = scene.as_mut() {
-                    sc.sections.push(s);
+                if t.chars().take_while(|c| *c == '#').count() == 1 {
+                    act = s.clone();
                 }
+                pending_sections.push(s);
                 continue;
             }
             if t.starts_with('=') && !t.starts_with("==") {
@@ -246,6 +258,11 @@ pub fn parse(source: &str) -> ParsedScript {
                 location,
                 time_of_day,
                 number,
+                sections: std::mem::take(&mut pending_sections),
+                story: SceneStory {
+                    act: act.clone(),
+                    ..Default::default()
+                },
                 ..Default::default()
             });
             kept.remove(0);
@@ -263,17 +280,40 @@ pub fn parse(source: &str) -> ParsedScript {
     if let Some(sc) = scene.take() {
         script.scenes.push(sc);
     }
+    for sc in &mut script.scenes {
+        sc.story.synopsis = sc.synopses.join("\n");
+    }
     script
 }
 
-fn split_heading(heading: &str) -> (String, String, String) {
+/// Splits a scene heading into INT/EXT, location and time of day.
+pub(crate) fn split_heading(heading: &str) -> (String, String, String) {
     let h = heading.trim();
-    let (int_ext, rest) = match h.find(['.', ' ']) {
-        Some(i) => {
+    let upper = h.to_uppercase();
+    let both = [
+        "INT./EXT.",
+        "INT/EXT.",
+        "INT./EXT",
+        "INT/EXT",
+        "I/E.",
+        "I/E",
+    ]
+    .iter()
+    .find(|p| upper.starts_with(*p) && h.get(p.len()..).is_some_and(|r| r.starts_with([' ', '.'])));
+    let (int_ext, rest) = match (both, h.find(['.', ' '])) {
+        (Some(p), _) => (
+            "INT/EXT".to_string(),
+            h.get(p.len()..)
+                .unwrap_or_default()
+                .trim_start_matches('.')
+                .trim()
+                .to_string(),
+        ),
+        (None, Some(i)) => {
             let ie = h[..i].trim_end_matches('.').to_string();
             (ie, h[i + 1..].trim_start_matches('.').trim().to_string())
         }
-        None => (String::new(), h.to_string()),
+        (None, None) => (String::new(), h.to_string()),
     };
     // split on " - " or " – "
     let parts: Vec<String> = rest
@@ -315,7 +355,7 @@ fn is_character_cue(first: &str, block_len: usize) -> bool {
         && !name.ends_with(':')
 }
 
-fn strip_extension(cue: &str) -> (String, Option<String>) {
+pub(crate) fn strip_extension(cue: &str) -> (String, Option<String>) {
     let c = cue.trim().trim_end_matches('^').trim();
     if let Some(open) = c.find('(') {
         if c.ends_with(')') {
@@ -403,7 +443,12 @@ fn parse_block(first: &str, lines: &[String], line_no: usize) -> Vec<ParsedUnit>
             });
             return out;
         }
-        if t == t.to_uppercase() && t.ends_with("TO:") && t.chars().any(|c| c.is_alphabetic()) {
+        // `!` forces action (`!CUT TO:` is an action line, not a transition)
+        if !t.starts_with('!')
+            && t == t.to_uppercase()
+            && t.ends_with("TO:")
+            && t.chars().any(|c| c.is_alphabetic())
+        {
             out.push(ParsedUnit {
                 kind: LineKind::Transition,
                 character: None,
@@ -460,6 +505,103 @@ fn parse_block(first: &str, lines: &[String], line_no: usize) -> Vec<ParsedUnit>
         });
     }
     out
+}
+
+/// Writes a parsed script back as Fountain (used to show a `.thrl` version as text).
+/// Sub-lines of one speech go back into one block: a parenthetical before its sub-line,
+/// `…` between sub-lines without one, so [`parse`] reads the same units again.
+pub fn render(script: &ParsedScript) -> String {
+    let mut out = String::new();
+    // the usual title page order first, then anything else
+    const ORDER: [&str; 6] = [
+        "Title",
+        "Credit",
+        "Author",
+        "Source",
+        "Draft date",
+        "Contact",
+    ];
+    let mut keys: Vec<&String> = script.title.keys().collect();
+    keys.sort_by_key(|k| ORDER.iter().position(|o| o == k).unwrap_or(ORDER.len()));
+    for (k, v) in keys.into_iter().map(|k| (k, &script.title[k])) {
+        let mut lines = v.lines();
+        out.push_str(&format!("{k}: {}\n", lines.next().unwrap_or_default()));
+        for l in lines {
+            out.push_str(&format!("    {l}\n"));
+        }
+    }
+    if !script.title.is_empty() {
+        out.push_str("\n===\n\n");
+    }
+    let mut act = String::new();
+    for sc in &script.scenes {
+        if !sc.story.act.is_empty() && sc.story.act != act {
+            act = sc.story.act.clone();
+            out.push_str(&format!("# {act}\n\n"));
+        }
+        let heading = if p_scene_like(&sc.heading) {
+            sc.heading.clone()
+        } else {
+            format!(".{}", sc.heading)
+        };
+        match &sc.number {
+            Some(n) => out.push_str(&format!("{heading} #{n}#\n\n")),
+            None => out.push_str(&format!("{heading}\n\n")),
+        }
+        for s in sc.story.synopsis.lines().filter(|s| !s.trim().is_empty()) {
+            out.push_str(&format!("= {}\n", s.trim()));
+        }
+        if !sc.story.synopsis.trim().is_empty() {
+            out.push('\n');
+        }
+        let mut i = 0;
+        while i < sc.units.len() {
+            let u = &sc.units[i];
+            match u.kind {
+                LineKind::Dialogue => {
+                    let name = u.character.clone().unwrap_or_default();
+                    match &u.extension {
+                        Some(e) => out.push_str(&format!("{name} ({e})\n")),
+                        None => out.push_str(&format!("{name}\n")),
+                    }
+                    let mut first = true;
+                    while i < sc.units.len() {
+                        let d = &sc.units[i];
+                        if d.kind != LineKind::Dialogue
+                            || d.character != u.character
+                            || d.extension != u.extension
+                        {
+                            break;
+                        }
+                        match &d.paren {
+                            Some(p) => out.push_str(&format!("({p})\n")),
+                            None if !first => out.push_str("\u{2026}\n"),
+                            None => {}
+                        }
+                        out.push_str(&format!("{}\n", d.text));
+                        first = false;
+                        i += 1;
+                    }
+                    out.push('\n');
+                    continue;
+                }
+                LineKind::Action if u.forced => out.push_str(&format!("!{}\n\n", u.text)),
+                LineKind::Action => out.push_str(&format!("{}\n\n", u.text)),
+                LineKind::Transition if u.text.ends_with("TO:") && !u.forced => {
+                    out.push_str(&format!("{}\n\n", u.text))
+                }
+                LineKind::Transition => out.push_str(&format!("> {}\n\n", u.text)),
+                LineKind::Centered => out.push_str(&format!("> {} <\n\n", u.text)),
+                LineKind::Lyric => out.push_str(&format!("~{}\n\n", u.text)),
+            }
+            i += 1;
+        }
+    }
+    out
+}
+
+fn p_scene_like(heading: &str) -> bool {
+    patterns().scene.is_match(heading.trim())
 }
 
 #[cfg(test)]
@@ -519,7 +661,65 @@ mod tests {
         assert_eq!(s3.time_of_day, "EVENING");
         assert_eq!(s3.units[0].kind, LineKind::Transition);
         assert_eq!(s3.notes, vec!["a note".to_string()]);
+        let forced = parse("INT. LAB\n\n!CUT TO:\n");
+        assert_eq!(forced.scenes[0].units[0].kind, LineKind::Action);
+        assert_eq!(forced.scenes[0].units[0].text, "CUT TO:");
         assert_eq!(s3.synopses, vec!["a synopsis".to_string()]);
+    }
+
+    #[test]
+    fn sections_are_acts_of_the_following_scenes() {
+        let s = parse("# ACT ONE\n\n## Cold open\n\nINT. LAB - DAY\n\n= Paul sweats.\n= A bell.\n\nPAUL\nHi.\n\nEXT. FIELD - NIGHT\n\nWind.\n\n# ACT TWO\n\nINT. LAB - DAY\n\nQuiet.\n");
+        assert_eq!(s.scenes[0].sections, vec!["ACT ONE", "Cold open"]);
+        assert_eq!(s.scenes[0].story.act, "ACT ONE");
+        assert_eq!(s.scenes[0].story.synopsis, "Paul sweats.\nA bell.");
+        assert_eq!(s.scenes[1].story.act, "ACT ONE");
+        assert!(s.scenes[1].sections.is_empty());
+        assert_eq!(s.scenes[2].story.act, "ACT TWO");
+    }
+
+    #[test]
+    fn int_ext_headings() {
+        let (ie, loc, t) = split_heading("INT./EXT. RANCH - NIGHT");
+        assert_eq!(
+            (ie.as_str(), loc.as_str(), t.as_str()),
+            ("INT/EXT", "RANCH", "NIGHT")
+        );
+        let (ie, loc, _) = split_heading("I/E RANCH");
+        assert_eq!((ie.as_str(), loc.as_str()), ("INT/EXT", "RANCH"));
+        let (ie, loc, _) = split_heading("INT. INTERNATIONAL HALL");
+        assert_eq!((ie.as_str(), loc.as_str()), ("INT", "INTERNATIONAL HALL"));
+    }
+
+    #[test]
+    fn render_reads_back_the_same_units() {
+        let a = parse(SAMPLE);
+        let b = parse(&render(&a));
+        let units = |s: &ParsedScript| {
+            s.scenes
+                .iter()
+                .flat_map(|sc| sc.units.iter())
+                .map(|u| {
+                    (
+                        u.kind,
+                        u.character.clone(),
+                        u.extension.clone(),
+                        u.paren.clone(),
+                        u.text.clone(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(units(&a), units(&b));
+        assert_eq!(a.title, b.title);
+        let headings = |s: &ParsedScript| {
+            s.scenes
+                .iter()
+                .map(|sc| sc.heading.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(headings(&a), headings(&b));
+        assert_eq!(b.scenes[2].story.synopsis, "a synopsis");
     }
 
     #[test]

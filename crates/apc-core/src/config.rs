@@ -21,6 +21,9 @@ pub struct AiConfig {
     pub rescue: bool,
     /// Worked examples from the editor's corrections, added to the rescue prompt.
     pub rescue_examples: Vec<String>,
+    /// Send the writers' story context (scene summaries, bios, settings) with spotting and
+    /// file-name matching.
+    pub story_context: bool,
 }
 
 impl Default for AiConfig {
@@ -33,6 +36,7 @@ impl Default for AiConfig {
             timeout_s: 300,
             rescue: true,
             rescue_examples: vec![],
+            story_context: true,
         }
     }
 }

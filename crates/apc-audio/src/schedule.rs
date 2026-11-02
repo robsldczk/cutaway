@@ -164,7 +164,7 @@ impl PlaySchedule {
         }
         if settings.room_tone {
             let loc = apc_core::script::location_id(&scene.location);
-            if let Some(tone) = doc.locations.get(&loc).map(|l| &l.room_tone) {
+            if let Some(tone) = doc.room_tone_of(&loc) {
                 if tone.enabled && tone.t1 > tone.t0 + 0.2 {
                     let source_id = match (&tone.source_id, &tone.asset_id) {
                         (Some(s), _) => Some(s.clone()),
@@ -292,6 +292,7 @@ mod tests {
             time_of_day: String::new(),
             order: vec!["a".into(), "b".into()],
             tightness: 1.0,
+            story: Default::default(),
         };
         (d, s)
     }
@@ -416,6 +417,8 @@ mod tests {
                     asset_id: None,
                     gain_db: -6.0,
                 },
+                description: String::new(),
+                parent: None,
             },
         );
         let p = Pacing::default();

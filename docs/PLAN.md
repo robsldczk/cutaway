@@ -398,6 +398,48 @@ Rules that hold throughout:
 - [x] Unit tests (merge, mapping back, doubles, director never a take, validation), mock rescue on the fixture, scoped apply keeps out-of-scope data, Playwright smoke test of the dev panel.
 - [x] Copy of Tarmac-EP02 with Claude (Sara): rescue numbers in the progress log. Full episode with Claude: not run yet (about 15–25 min).
 
+### M11: Throughline import and story context (Rob, 2026-11-02, branch `throughline`)
+Why: Rob writes in Throughline. Its `.thrl` export is the script plus what the writers know about it (beat titles and summaries, acts, who is in a scene, setting groups and descriptions, character bios, the emotional arc). Cutaway should import it directly and use that knowledge where it helps: in the AI calls and on screen. Decisions in D54.
+
+Rules that hold throughout:
+- A `.thrl` file becomes the same `ParsedScript` a Fountain file does: versioning, the ID-keeping diff, alignment and export don't change. Fountain and `.thrl` versions can follow each other.
+- Story context is per episode (Rob). The newest import wins: its non-empty fields replace the old ones, empty fields don't erase.
+- Context is read-only in Cutaway; it's edited in Throughline and re-imported. Sparks, relationships, recycled cards, writer assignment and author contact details are ignored.
+- Every change is a command (one undo step); UI, CLI and MCP share the methods.
+
+**11.1 `.thrl` import** (`apc-core::thrl`)
+- [x] Detect by content (gzip magic or JSON with `version`), decompress (`flate2`), refuse a `minVersion` newer than the reader knows (1.12).
+- [x] Story order from `storyOrder` (older files: computed from `sequence`/`stackedOn`/`stackOrder` as the format guide says). Act cards are skipped; each beat is a scene.
+- [x] Heading `INT. SETTING - TIME` from `intExt`, the beat's setting and `timeOfDay`, split like a Fountain heading. `beat.sceneNumber` as the forced number.
+- [x] TipTap blocks as Throughline's own Fountain export writes them: action (a blank line starts a new unit), cue with extension, dialogue (blank lines dropped, a `…` line splits), parenthetical (splits), transition, `paragraph` by `screenplayType` else action; `versionBlock` → only the active children. Underline/italic/bold become Fountain emphasis, as in the export.
+- [x] Title page: title, credit, authors, draft date (no contact details).
+- [x] `script::read_script_file(path)` picks the parser; `store_version_file` keeps the real extension (`Script/v002 Name.thrl`); the MCP `script/N` resource renders a `.thrl` version as Fountain text.
+- [x] `split_heading` handles `INT./EXT.`.
+- [x] Import page and the script file picker accept `.thrl`.
+
+**11.2 Story context in the document**
+- [x] `ParsedScene` gains `title`, `act`, `cast`, `tone`, `beat_id`; `ParsedScript` gains `story` (characters with summary/want/need/flaw/notes, settings with description and parent).
+- [x] Fountain fills the same fields: synopses (`=`) → synopsis, top-level sections (`#`) → act, carried to the following scenes.
+- [x] `Scene` gains `title`, `synopsis`, `act`, `cast`, `tone`, `beat_id`; `Character` gains `profile`; `Location` gains `description` and `parent`.
+- [x] `apply_version` writes scene context from the script, merges `story` newest-wins (names matched to cues exactly, without a leading "THE", or by alias), and reports it in the change summary (`story.characters_updated`, `locations_updated`, `unknown_characters`).
+- [x] Scene identity across versions: kept lines first, then the Throughline beat ID, then the heading.
+- [x] `import_story` (command `ImportStoryContext`): takes only the context from a `.thrl` (e.g. the pilot's character bios into EP02), no script change.
+
+**11.3 On screen**
+- [x] Scene list: the beat title under the scene number, act dividers, the synopsis as tooltip.
+- [x] Inspector: a Scene section (title, act, synopsis, cast, setting with its description and parent) and the current line's character profile.
+- [x] Room tone: a setting without its own room tone uses its parent's (Canteen → TARMAC).
+
+**11.4 In the AI calls** (behind `ai.story_context`, on by default)
+- [x] `sound_spot` v2: the scene's title, act, synopsis, tone, cast (with one-line profiles) and setting description and parent. The prompt treats context as background: no cues the scene text doesn't support.
+- [x] `name_match` v2: one-line character profiles, so full names and nicknames in file names match.
+- [x] Mock provider accepts the new inputs; context stays small (no per-take calls get it, see D53).
+
+**11.5 Verification**
+- [x] Unit tests: synthetic `.thrl` (gzip and plain), story order fallback, version blocks, splitting rules, newest-wins merge, context-only import, beat-ID scene identity, parent room tone, Fountain synopses/sections.
+- [x] Fixture test (skips without the files): EP02 `.thrl` gives the same lines as Throughline's Fountain export of the same draft; in the app, importing the `.thrl` over the Fountain export changes 0 lines.
+- [ ] (Rob) Manual: import the EP02 `.thrl` in the app, then the pilot's context; check the scene list, inspector and a spotting run.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -441,3 +483,4 @@ Rules that hold throughout:
 - 2026-10-31 M9 done (second run): the four Round 2 screens implemented and wired (Import › Files, Import › Sounds, Edit docked and full screen) on a new bucket/match/lane-mix backend. Download-on-drop checked end to end against a local mock of the Epidemic API; light theme checked on all four screens. Playwright 5/5, check.sh green.
 - 2026-11-02 Fixes from Rob's first real session pushed (mixer sample-exact, bleed relative to the mic, short-line roles, Claude CLI lookup, CLI replies over 64 KiB, loudness matching off for playback). M10 done: sentences and scene timeline, take rescue (plain-text scene input, ids back to words), scoped re-analysis (character, line) in app/CLI/MCP, dev marks with proposals, Dev page (under the hood, link and send, learn with dry-run variants, examples, glossary). Sara on a copy of Ep2 with Claude: 6 rescue calls of 5–14 s, 6 takes rescued, 72 takes (was 42 before the bleed fix). check.sh green, Playwright 7/7.
 - 2026-11-02 Push of the M10 commits (206dda8..fe853e5) was refused by the session's permission check; they are committed on local dev. Rob pushes, or allows the push.
+- 2026-11-02 M11 done on branch `throughline` (worktree `../cutaway-throughline`, because another session works in the main folder on `dev`): native `.thrl` reader (gzip JSON, format up to 1.12) giving the same parsed script as Fountain, story context per episode (scene title/summary/act/cast/arc, character bios, setting descriptions and groups) merged newest-wins, `import_story` for bios from another file (the pilot's), scene list titles and act dividers, inspector story section, parent room tone, story context in spotting and file-name matching (prompts v2, `ai.story_context`). EP02: the `.thrl` matches Throughline's Fountain export line for line. Fixed on the way: `!CUT TO:` parsed as a transition, a flaky dev-panel eval test. check.sh green.

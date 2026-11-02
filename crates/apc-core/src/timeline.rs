@@ -671,6 +671,7 @@ pub(crate) mod tests {
             time_of_day: String::new(),
             order: vec!["a".into(), "x".into(), "b".into()],
             tightness: 1.0,
+            story: Default::default(),
         };
         (d, sc)
     }

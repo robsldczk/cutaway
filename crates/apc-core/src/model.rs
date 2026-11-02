@@ -195,6 +195,33 @@ pub struct Scene {
     /// Scales every gap and spacer of the scene (1.0 = as set).
     #[serde(default = "one")]
     pub tightness: f64,
+    /// What the writers know about the scene (Throughline beat, Fountain synopsis).
+    #[serde(default)]
+    pub story: SceneStory,
+}
+
+/// Story context of a scene, replaced by each script version. Read-only in the app.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, schemars::JsonSchema)]
+#[serde(default)]
+pub struct SceneStory {
+    /// Beat title, e.g. "Cold Open – Burrito".
+    pub title: String,
+    /// The writers' summary of the scene.
+    pub synopsis: String,
+    /// Act or top-level section, e.g. "Act 1: Setup".
+    pub act: String,
+    /// Characters present, speaking or not (upper case, like cues).
+    pub cast: Vec<String>,
+    /// Emotional charge from the story arc, -1 (bad fortune) … +1 (good fortune).
+    pub tone: Option<f64>,
+    /// Throughline beat id: keeps the scene's identity when its heading changes.
+    pub beat_id: Option<String>,
+}
+
+impl SceneStory {
+    pub fn is_empty(&self) -> bool {
+        self == &SceneStory::default()
+    }
 }
 
 fn one() -> f64 {
@@ -263,8 +290,51 @@ pub struct Character {
     #[serde(default)]
     pub aliases: Vec<String>,
     pub color_index: usize,
+    /// The writers' notes on the character (Throughline), newest import wins.
+    #[serde(default)]
+    pub profile: CharacterProfile,
 }
 entity!(Character, Character);
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, schemars::JsonSchema)]
+#[serde(default)]
+pub struct CharacterProfile {
+    pub summary: String,
+    pub want: String,
+    pub need: String,
+    pub flaw: String,
+    pub notes: String,
+}
+
+impl CharacterProfile {
+    pub fn is_empty(&self) -> bool {
+        self == &CharacterProfile::default()
+    }
+
+    /// One line for prompts and tooltips: "Soldier, lazy … Wants to chill. Flaw: too trusting."
+    pub fn one_line(&self) -> String {
+        let flat = |s: &str| {
+            s.split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .trim_end_matches('.')
+                .to_string()
+        };
+        let mut parts: Vec<String> = Vec::new();
+        for (label, v) in [
+            ("", &self.summary),
+            ("Wants ", &self.want),
+            ("Needs ", &self.need),
+            ("Flaw: ", &self.flaw),
+        ] {
+            let v = flat(v);
+            if !v.is_empty() {
+                parts.push(format!("{label}{v}"));
+            }
+        }
+        parts.join(". ")
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, schemars::JsonSchema)]
 pub struct RoomTone {
@@ -292,6 +362,12 @@ pub struct Location {
     pub name: String,
     #[serde(default)]
     pub room_tone: RoomTone,
+    /// The writers' description of the setting (Throughline), newest import wins.
+    #[serde(default)]
+    pub description: String,
+    /// The setting this one belongs to (location id), e.g. Canteen → TARMAC.
+    #[serde(default)]
+    pub parent: Option<String>,
 }
 entity!(Location, Location);
 
@@ -986,6 +1062,24 @@ dispatch!(
 );
 
 impl Document {
+    /// The room tone a location plays: its own when enabled, else the nearest parent's
+    /// that is (Canteen → TARMAC), else its own (disabled) one.
+    pub fn room_tone_of(&self, location_id: &str) -> Option<&RoomTone> {
+        let own = self.locations.get(location_id)?;
+        let mut cur = own;
+        // settings stack one level deep in Throughline; the bound guards against loops
+        for _ in 0..8 {
+            if cur.room_tone.enabled {
+                return Some(&cur.room_tone);
+            }
+            match cur.parent.as_deref().and_then(|p| self.locations.get(p)) {
+                Some(p) => cur = p,
+                None => break,
+            }
+        }
+        Some(&own.room_tone)
+    }
+
     /// Scenes in script order.
     pub fn scenes_in_order(&self) -> Vec<&Scene> {
         let mut v: Vec<&Scene> = self.scenes.values().collect();
