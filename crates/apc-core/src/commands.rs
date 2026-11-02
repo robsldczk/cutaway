@@ -619,10 +619,19 @@ impl Command {
                     .iter()
                     .position(|x| x == item_id)
                     .ok_or_else(|| CoreError::not_found("item", item_id))?;
+                let first_before = first_locked(tx.doc(), &sc, &pacing);
                 let item = sc.order.remove(from);
                 let to = (*to_index).min(sc.order.len());
                 sc.order.insert(to, item);
                 tx.put(&sc)?;
+                // a pause belongs between two lines: the line that now opens the scene drops it
+                let first = first_locked(tx.doc(), &sc, &pacing);
+                if let Some(id) = first.filter(|f| Some(f) != first_before.as_ref()) {
+                    let mut b = boxed(tx, &id)?;
+                    if b.gap_s.take().is_some() {
+                        tx.put(&b)?;
+                    }
+                }
                 Ok(json!({ "index": to }))
             }
             Command::SetSceneTightness {
@@ -1258,6 +1267,15 @@ fn move_clip(
         hold_next(tx, &scene, line_id, &layout, pacing)?;
     }
     Ok(Value::Null)
+}
+
+/// The line that opens a scene's chain (the first locked line on the timeline).
+fn first_locked(doc: &Document, scene: &Scene, pacing: &crate::timeline::Pacing) -> Option<String> {
+    layout_scene(doc, scene, pacing)
+        .items
+        .into_iter()
+        .find(|i| i.kind == ItemKind::Box && !i.pieces.is_empty() && !i.pinned)
+        .map(|i| i.item_id)
 }
 
 /// Rounds to whole milliseconds (stored timing values).
@@ -2407,6 +2425,25 @@ mod tests {
         assert!((l.item("b").unwrap().pieces[0].fade_in_s - 0.2).abs() < 1e-9);
         bus.undo().unwrap();
         assert_eq!(lay(&bus), before);
+    }
+
+    #[test]
+    fn a_line_moved_to_the_top_drops_its_pause() {
+        let (_d, mut bus) = setup();
+        bus.execute(&Command::SetGap {
+            line_id: "b".into(),
+            gap_s: Some(1.2),
+        })
+        .unwrap();
+        bus.execute(&Command::MoveItem {
+            scene_id: "sc".into(),
+            item_id: "b".into(),
+            to_index: 0,
+        })
+        .unwrap();
+        let l = lay(&bus);
+        assert!(l.item("b").unwrap().start_s.abs() < 1e-9);
+        assert!(bus.doc().boxes["b"].gap_s.is_none());
     }
 
     #[test]
