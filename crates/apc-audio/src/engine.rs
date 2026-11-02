@@ -1,5 +1,6 @@
 //! Real-time playback (cpal). A feeder thread renders ahead into a ring buffer through the
 //! shared mixer; the device callback only copies samples. Playhead events at ~60 Hz.
+//! The feeder can run the output through the safety limiter (playback leveling).
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -10,6 +11,7 @@ use std::time::Duration;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 
 use crate::error::{AudioError, Result};
+use crate::level::Limiter;
 use crate::mixer::{Mixer, SourceSet};
 use crate::schedule::PlaySchedule;
 
@@ -32,6 +34,8 @@ struct Shared {
     stop_at: Mutex<Option<f64>>,
     /// Output peak (f32 bits), reset when read.
     peak: AtomicU32,
+    /// Safety limiter on the output.
+    limit: AtomicBool,
     content: Mutex<Option<(Arc<PlaySchedule>, Arc<SourceSet>)>>,
 }
 
@@ -62,6 +66,7 @@ impl Engine {
             generation: AtomicU64::new(0),
             stop_at: Mutex::new(None),
             peak: AtomicU32::new(0),
+            limit: AtomicBool::new(false),
             content: Mutex::new(None),
         });
         let (tx, rx) = unbounded::<Cmd>();
@@ -160,6 +165,7 @@ impl Engine {
 
     fn spawn_feeder(&self) {
         let sh = self.shared.clone();
+        let mut limiter = Limiter::new(self.rate);
         thread::spawn(move || loop {
             if Arc::strong_count(&sh) == 1 {
                 break;
@@ -183,6 +189,9 @@ impl Engine {
             let written = sh.played.load(Ordering::Relaxed) + queued as u64;
             let mut block = vec![0.0f32; BLOCK * 2];
             Mixer::render(&sched, &sources, start + written, &mut block);
+            if sh.limit.load(Ordering::Relaxed) {
+                limiter.process(&mut block);
+            }
             if sh.generation.load(Ordering::Relaxed) == gen {
                 if let Ok(mut r) = sh.ring.lock() {
                     r.extend(block);
@@ -276,6 +285,11 @@ impl Engine {
                 .store((to_s.max(0.0) * self.rate as f64) as u64, Ordering::Relaxed);
             self.shared.played.store(0, Ordering::Relaxed);
         }
+    }
+
+    /// Turns the output safety limiter on or off.
+    pub fn set_limiter(&self, on: bool) {
+        self.shared.limit.store(on, Ordering::Relaxed);
     }
 
     /// Output peak since the last call (0..1).

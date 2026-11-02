@@ -47,8 +47,9 @@ impl ScheduledClip {
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct MixSettings {
-    /// Match take loudness to this target (playback offset only).
-    pub loudness_match: bool,
+    /// Level each recording to `target_lufs` by its typical speech loudness (playback only:
+    /// bounces and exports keep this off, so nothing is burned in).
+    pub level: bool,
     pub target_lufs: f64,
     pub room_tone: bool,
     pub include_sound: bool,
@@ -57,7 +58,7 @@ pub struct MixSettings {
 impl Default for MixSettings {
     fn default() -> Self {
         MixSettings {
-            loudness_match: false,
+            level: false,
             target_lufs: -23.0,
             room_tone: true,
             include_sound: true,
@@ -109,21 +110,28 @@ impl PlaySchedule {
         layout: &SceneLayout,
         settings: &MixSettings,
     ) -> Self {
+        let levels = if settings.level {
+            crate::level::source_lufs(doc)
+        } else {
+            Default::default()
+        };
+        // a source without measured takes (sound assets, a bare room mic) stays as it is
+        let level = |source_id: &str| {
+            levels
+                .get(source_id)
+                .map(|l| apc_media::loudness::match_gain_db(Some(*l), settings.target_lufs))
+                .unwrap_or(0.0)
+        };
         let mut clips = Vec::new();
         for item in &layout.items {
             // muted parts keep their time but are not heard
             for p in item.pieces.iter().filter(|p| !p.muted) {
-                let mut gain = p.gain_db;
-                if settings.loudness_match {
-                    let lufs = doc.takes.get(&p.take_id).and_then(|t| t.lufs);
-                    gain += apc_media::loudness::match_gain_db(lufs, settings.target_lufs);
-                }
                 clips.push(ScheduledClip {
                     source_id: p.source_id.clone(),
                     src_in: p.src_in,
                     src_out: p.src_out,
                     start_s: p.start_s,
-                    gain_db: gain,
+                    gain_db: p.gain_db + level(&p.source_id),
                     fade_in_s: p.fade_in_s,
                     fade_out_s: p.fade_out_s,
                     lane: item.character.clone().unwrap_or_else(|| "dialogue".into()),
@@ -177,12 +185,13 @@ impl PlaySchedule {
                         _ => None,
                     };
                     if let Some(source_id) = source_id {
+                        let gain_db = tone.gain_db + level(&source_id);
                         clips.push(ScheduledClip {
                             source_id,
                             src_in: tone.t0,
                             src_out: tone.t1,
                             start_s: 0.0,
-                            gain_db: tone.gain_db,
+                            gain_db,
                             fade_in_s: 0.2,
                             fade_out_s: 0.2,
                             lane: "roomtone".into(),
@@ -303,22 +312,32 @@ mod tests {
     }
 
     #[test]
-    fn gaps_ripple_and_loudness_offsets() {
+    fn gaps_ripple_and_leveling_offsets() {
         let (mut doc, scene) = sample_doc();
         let p = Pacing::default();
-        let matched = MixSettings {
-            loudness_match: true,
+        let leveled = MixSettings {
+            level: true,
             ..MixSettings::default()
         };
-        let s = PlaySchedule::from_scene(&doc, &scene, &p, &matched);
+        assert!(!MixSettings::default().level, "bounces never level");
+        let s = PlaySchedule::from_scene(&doc, &scene, &p, &leveled);
         assert_eq!(s.clips.len(), 2);
         assert!((s.clips[1].start_s - 1.8).abs() < 1e-9);
-        assert!(
-            (s.clips[0].gain_db - -3.0).abs() < 1e-9,
-            "-20 LUFS take is turned down to -23"
-        );
-        assert!((s.clips[1].gain_db - 3.0).abs() < 1e-9);
+        // the source's takes measure -20 and -26: median -23, so both play as recorded,
+        // keeping the difference between the two performances
+        assert!(s.clips.iter().all(|c| c.gain_db.abs() < 1e-9));
         assert!((s.duration_s - 3.8).abs() < 1e-9);
+        // a source recorded 10 dB hot plays 10 dB down, every take alike
+        for t in doc.takes.values_mut() {
+            t.lufs = t.lufs.map(|l| l + 10.0);
+        }
+        let s = PlaySchedule::from_scene(&doc, &scene, &p, &leveled);
+        assert!(s.clips.iter().all(|c| (c.gain_db - -10.0).abs() < 1e-9));
+        let raw = PlaySchedule::from_scene(&doc, &scene, &p, &MixSettings::default());
+        assert!(
+            raw.clips.iter().all(|c| c.gain_db == 0.0),
+            "off: as recorded"
+        );
         // ripple: a longer gap moves b and the end
         doc.boxes.get_mut("b").unwrap().gap_s = Some(1.5);
         let s2 = PlaySchedule::from_scene(&doc, &scene, &p, &MixSettings::default());
@@ -353,14 +372,15 @@ mod tests {
         };
         doc.lane_mix
             .insert("PAUL".into(), mix("PAUL", -6.0, 0.5, false, false));
-        let matched = MixSettings {
-            loudness_match: true,
+        doc.takes.get_mut("tb").unwrap().lufs = Some(-20.0);
+        let leveled = MixSettings {
+            level: true,
             ..MixSettings::default()
         };
-        let s = PlaySchedule::from_scene(&doc, &scene, &p, &matched);
+        let s = PlaySchedule::from_scene(&doc, &scene, &p, &leveled);
         assert!(
             (s.clips[0].gain_db - -9.0).abs() < 1e-9,
-            "-3 loudness, -6 lane"
+            "-3 leveling, -6 lane"
         );
         assert_eq!(s.clips[0].pan, 0.5);
         doc.lane_mix
@@ -445,6 +465,18 @@ mod tests {
         assert!((sfx.start_s - 1.6).abs() < 1e-9);
         let tone = s.clips.iter().find(|c| c.lane == "roomtone").unwrap();
         assert_eq!(tone.loop_len_s, Some(s.duration_s));
+        // leveling moves the room tone with its source, and leaves library sounds alone
+        doc.takes.get_mut("ta").unwrap().lufs = Some(-17.0);
+        doc.takes.get_mut("tb").unwrap().lufs = Some(-17.0);
+        let lv = MixSettings {
+            level: true,
+            ..MixSettings::default()
+        };
+        let s = PlaySchedule::from_scene(&doc, &scene, &p, &lv);
+        let tone = s.clips.iter().find(|c| c.lane == "roomtone").unwrap();
+        assert!((tone.gain_db - -12.0).abs() < 1e-9, "-6 tone, -6 leveling");
+        let sfx = s.clips.iter().find(|c| c.lane == "sfx1").unwrap();
+        assert_eq!(sfx.gain_db, 0.0);
         doc.boxes.get_mut("b").unwrap().gap_s = Some(2.0);
         let s2 = PlaySchedule::from_scene(&doc, &scene, &p, &MixSettings::default());
         let sfx2 = s2.clips.iter().find(|c| c.lane == "sfx1").unwrap();

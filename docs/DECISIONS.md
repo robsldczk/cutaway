@@ -311,3 +311,15 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - Arrange keeps the clip's start in place: lengthening the head moves the words later and ripples the lines after it, the mirror of trimming. On the Edit page, which has a time scale, the words stay where they are.
   - Comps keep the take-only strip, because a comp's head and tail belong to different takes.
 - **Options not taken:** a strip that rescales live while dragging past its edge (moving handles under the cursor); a fixed handle length (too short for a cut deep in the next word, too wide for short lines).
+
+### D64 Playback leveling, on by default (Rob, 2026-11-02)
+- **Rob:** recordings come in at very different levels; playback should even them out so a badly levelled one doesn't blast, on by default, without burning anything in.
+- **Found:** take loudness was measured at ingest (`Take.lufs`) and `MixSettings` had a per-take `loudness_match`, but nothing turned it on: scenes, take auditions and sound auditions all played as recorded.
+- **Choice:**
+  - `[playback] level = true`, `target_lufs = -23` in the project config (a missing section reads as on, so existing episodes get it). Toggle in Settings, also `set_config playback.level` from the CLI and MCP.
+  - **Scenes level per recording, not per take.** A source's loudness is the median LUFS of the takes on it (the role's own lines, so silence and bleed don't count), and every clip from that source gets the same offset to the target (±12 dB, as `match_gain_db`). A hot mic comes down and a quiet one comes up, while a whisper stays quieter than a shout. The room tone moves with its source. Library sounds (SFX, ambience, music) keep the editor's gains.
+  - **Auditions match per item,** as the spec asks: a take alone to the target from its own LUFS, a bucket sound from its first 30 s (measured once per file and cached for the session). The dev panel's source play uses the source offset.
+  - **Safety limiter** on the device output while leveling is on: instant attack, 150 ms release, ceiling −1 dBFS. It runs in the engine's feeder, after the shared mixer.
+  - Nothing is stored or exported: only the gains handed to the engine change. `MixSettings::default()` keeps leveling off, which is what bounces use, and FCPXML never sees it.
+- **Trade-off:** with leveling on, dialogue sits at the target while placed sounds don't move, so the dialogue-to-sound balance heard in the app can differ from an export of the same mix (by the source offset, up to ±12 dB). Turn leveling off to hear the export as it will be.
+- **Options not taken:** per-take matching on the timeline (flattens the performance); measuring whole source files (session WAVs carry bleed, director talk and long silences); a master-bus AGC (keeps the roles unbalanced and pumps); storing the toggle in local UI state (the shared command path keeps UI, CLI and MCP alike, as with room tone).

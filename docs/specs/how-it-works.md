@@ -107,6 +107,7 @@ Rules:
 - **Crossfades:** applied automatically on every splice, short and equal power.
 - **Splice warnings:** flag a splice that lands mid-phrase with little pause or a large pitch jump.
 - **Audition loudness:** integrated LUFS is measured per utterance at ingest and used as a playback offset only, so takes are compared at equal loudness.
+  - *Changed in implementation (D64):* scene playback levels per recording (the median take LUFS of each source), not per take, so performances keep their dynamics; take and sound auditions match per item. Leveling and an output safety limiter are on by default (`playback.level`) and never reach bounces or exports.
 - **Format:** export keeps the source sample rate and bit depth.
 
 ## Export

@@ -217,6 +217,8 @@ export interface Status {
   ai_provider: string;
   ai_warning: string | null;
   room_tone: boolean;
+  /** Recordings play leveled and limited (never exported). */
+  playback_level: boolean;
   breath_gap_s: number;
   jobs: Job[];
 }

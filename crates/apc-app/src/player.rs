@@ -1,6 +1,11 @@
 //! Playback for the UI: the cpal engine when an output device exists, otherwise a virtual
 //! clock (CI, the browser dev bridge) so the transport still behaves.
+//!
+//! With `playback.level` on (the default) recordings play leveled and the output runs
+//! through a safety limiter. Only the gains sent to the engine change; nothing is stored.
 
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -8,7 +13,9 @@ use serde_json::{json, Value};
 
 use apc_audio::engine::Engine;
 use apc_audio::{MixSettings, PlaySchedule};
+use apc_core::config::PlaybackConfig;
 use apc_export::bounce::source_set;
+use apc_media::loudness::{integrated_lufs, match_gain_db};
 
 use crate::error::Result;
 use crate::service::Service;
@@ -26,6 +33,30 @@ pub struct Player {
     scene_id: Option<String>,
     rev: i64,
     until: Option<f64>,
+    /// Measured loudness of auditioned sound files.
+    file_lufs: HashMap<PathBuf, Option<f64>>,
+}
+
+/// Leveling gain (dB) for a whole source: its typical take loudness to the target.
+fn source_gain(svc: &Service, cfg: &PlaybackConfig, source_id: &str) -> f64 {
+    if !cfg.level {
+        return 0.0;
+    }
+    let lufs = apc_audio::level::source_lufs(svc.doc())
+        .get(source_id)
+        .copied();
+    match_gain_db(lufs, cfg.target_lufs)
+}
+
+/// Loudness of a sound file from its first 30 s (enough for a preview, quick for a long
+/// music track). `None` when it can't be read or is silent.
+fn measure_file(path: &Path) -> Option<f64> {
+    let mut r = apc_media::AudioReader::open(path).ok()?;
+    let info = r.info();
+    let raw = r.read_range(0.0, 30.0).ok()?;
+    integrated_lufs(&raw, info.sample_rate, info.channels)
+        .ok()
+        .flatten()
 }
 
 fn schedule(svc: &Service, scene_id: &str) -> Option<PlaySchedule> {
@@ -33,6 +64,8 @@ fn schedule(svc: &Service, scene_id: &str) -> Option<PlaySchedule> {
     let cfg = svc.config();
     let settings = MixSettings {
         room_tone: cfg.pacing.room_tone,
+        level: cfg.playback.level,
+        target_lufs: cfg.playback.target_lufs,
         ..MixSettings::default()
     };
     Some(PlaySchedule::from_scene(
@@ -66,12 +99,19 @@ pub fn play_take(svc: &mut Service, take_id: &str, from_s: f64) -> Result<Value>
         .get(&t.line_id)
         .map(|l| l.scene_id.clone())
         .unwrap_or_default();
+    // takes are compared at equal loudness, each take to the target on its own
+    let cfg = svc.config().playback;
+    let gain_db = if cfg.level {
+        match_gain_db(t.lufs, cfg.target_lufs)
+    } else {
+        0.0
+    };
     let clip = apc_audio::ScheduledClip {
         source_id: t.source_id.clone(),
         src_in: t.t0,
         src_out: t.t1,
         start_s: 0.0,
-        gain_db: 0.0,
+        gain_db,
         fade_in_s: 0.005,
         fade_out_s: 0.005,
         lane: "audition".into(),
@@ -96,8 +136,8 @@ pub fn play_take(svc: &mut Service, take_id: &str, from_s: f64) -> Result<Value>
     Ok(r)
 }
 
-/// Plays a stretch of a source file alone, as recorded (dev panel). The playhead then
-/// reports seconds into the stretch.
+/// Plays a stretch of a source file alone, as recorded apart from leveling (dev panel). The
+/// playhead then reports seconds into the stretch.
 pub fn play_source(svc: &mut Service, source_id: &str, t0: f64, t1: f64) -> Result<Value> {
     if !svc.doc().sources.contains_key(source_id) {
         return Err(crate::AppError::Params(format!(
@@ -105,12 +145,13 @@ pub fn play_source(svc: &mut Service, source_id: &str, t0: f64, t1: f64) -> Resu
         )));
     }
     let (t0, t1) = (t0.max(0.0), t1.max(t0));
+    let gain_db = source_gain(svc, &svc.config().playback, source_id);
     let clip = apc_audio::ScheduledClip {
         source_id: source_id.to_string(),
         src_in: t0,
         src_out: t1,
         start_s: 0.0,
-        gain_db: 0.0,
+        gain_db,
         fade_in_s: 0.005,
         fade_out_s: 0.005,
         lane: "audition".into(),
@@ -145,12 +186,24 @@ pub fn play_file(
         apc_media::AudioAnalysis::compute(path)?.info.duration_s
     };
     let id = format!("file:{label}");
+    // sounds audition loudness-matched, like takes
+    let cfg = svc.config().playback;
+    let gain_db = if cfg.level {
+        let lufs = *svc
+            .player
+            .file_lufs
+            .entry(path.to_path_buf())
+            .or_insert_with(|| measure_file(path));
+        match_gain_db(lufs, cfg.target_lufs)
+    } else {
+        0.0
+    };
     let clip = apc_audio::ScheduledClip {
         source_id: id.clone(),
         src_in: 0.0,
         src_out: duration,
         start_s: 0.0,
-        gain_db: 0.0,
+        gain_db,
         fade_in_s: 0.003,
         fade_out_s: 0.01,
         lane: "audition".into(),
@@ -197,6 +250,7 @@ fn start(
         for (id, p) in extra {
             set.add(id, p);
         }
+        e.set_limiter(svc.config().playback.level);
         e.load(sched, Arc::new(set));
         e.play(from_s, Some(until));
     } else {
@@ -251,6 +305,7 @@ pub fn playhead(svc: &mut Service) -> Result<Value> {
     {
         if let (Some(sid), Some(e)) = (svc.player.scene_id.clone(), &svc.player.engine) {
             if let Some(s) = schedule(svc, &sid) {
+                e.set_limiter(svc.config().playback.level);
                 e.load(
                     s,
                     Arc::new(source_set(svc.doc(), &svc.paths, e.sample_rate())),
