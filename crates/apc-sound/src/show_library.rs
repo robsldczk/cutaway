@@ -122,6 +122,7 @@ pub fn folder_slug(name: &str) -> String {
     let mut out = String::new();
     for w in name
         .to_lowercase()
+        .replace(['\'', '’'], "")
         .split(|c: char| !c.is_alphanumeric())
         .filter(|w| !w.is_empty())
     {
@@ -503,7 +504,13 @@ impl ShowLibrary {
     /// The folder (`sfx/<slug>` or `music/<slug>`) a new bucket gets.
     pub fn folder_for(&self, name: &str, music: bool) -> String {
         let top = if music { &self.music } else { &self.sfx };
-        format!("{top}/{}", folder_slug(name))
+        let slug = folder_slug(name);
+        // a bucket named after the top folder ("Music") is that folder
+        if slug == folder_slug(top) {
+            top.clone()
+        } else {
+            format!("{top}/{slug}")
+        }
     }
 
     /// Loose files of a kind go straight into `sfx/` or `music/`.
@@ -717,6 +724,7 @@ mod tests {
             remote_id: Some("42".into()),
             ..Default::default()
         };
+        assert_eq!(lib.folder_for("Music", true), "music");
         let folder = lib.folder_for("Doors and hatches", false);
         assert_eq!(folder, "sfx/doors-and-hatches");
         let (a, existed) = lib.import(&src, &folder, meta.clone()).unwrap();
@@ -787,5 +795,9 @@ mod tests {
         assert_eq!(folder_slug("Doors and hatches"), "doors-and-hatches");
         assert_eq!(folder_slug("Kitchenette ambience"), "kitchenette-ambience");
         assert_eq!(folder_slug("!!"), "sounds");
+        assert_eq!(
+            folder_slug("Colonel’s Office ambience"),
+            "colonels-office-ambience"
+        );
     }
 }

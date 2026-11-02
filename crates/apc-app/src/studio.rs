@@ -143,18 +143,11 @@ fn words(s: &str) -> Vec<String> {
         .collect()
 }
 
-/// The library folder a bucket named `name` (with `keywords`) belongs in: the folder whose
-/// words all appear in them, the most specific first ("Doors and hatches" → `doors`).
-pub fn match_folder(
-    folders: &[BucketFolder],
-    name: &str,
-    keywords: &[String],
-    music: bool,
-) -> Option<String> {
-    let have: BTreeSet<String> = words(name)
-        .into_iter()
-        .chain(keywords.iter().flat_map(|k| words(k)))
-        .collect();
+/// The library folder a bucket named `name` belongs in: the folder whose words all appear in
+/// the name, the most specific first ("Doors and hatches" → `doors`). Only the name counts:
+/// one cue's keyword ("chair") would pull a catch-all bucket ("Props") into a folder.
+pub fn match_folder(folders: &[BucketFolder], name: &str, music: bool) -> Option<String> {
+    let have: BTreeSet<String> = words(name).into_iter().collect();
     folders
         .iter()
         .filter(|f| f.music == music)
@@ -203,7 +196,7 @@ pub fn link_folders(svc: &mut Service) -> Result<usize> {
         open.sort_by_key(|b| b.order);
         for b in open {
             let music = is_music(doc, b);
-            let f = match_folder(&folders, &b.name, &b.keywords, music)
+            let f = match_folder(&folders, &b.name, music)
                 .filter(|f| !taken.contains(f))
                 .unwrap_or_else(|| l.folder_for(&b.name, music));
             taken.insert(f.clone());
@@ -373,22 +366,15 @@ mod tests {
             f("sfx/time-spring", false),
             f("music/Stings", true),
         ];
-        let m = |n: &str, k: &[&str]| {
-            match_folder(
-                &folders,
-                n,
-                &k.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-                false,
-            )
-        };
-        assert_eq!(m("Doors and hatches", &[]).as_deref(), Some("sfx/doors"));
-        assert_eq!(m("Footsteps", &[]).as_deref(), Some("sfx/footsteps"));
-        assert_eq!(m("Props", &["room tone"]).as_deref(), Some("sfx/room-tone"));
+        let m = |n: &str| match_folder(&folders, n, false);
+        assert_eq!(m("Doors and hatches").as_deref(), Some("sfx/doors"));
+        assert_eq!(m("Footsteps").as_deref(), Some("sfx/footsteps"));
         assert_eq!(
-            m("Machines", &["time spring hum"]).as_deref(),
+            m("Time Spring Command ambience").as_deref(),
             Some("sfx/time-spring")
         );
-        assert_eq!(m("Sci-fi", &["beam"]), None);
-        assert_eq!(m("Stings", &[]), None, "music folders only for music");
+        assert_eq!(m("Props"), None, "a catch-all keeps its own folder");
+        assert_eq!(m("Sci-fi"), None);
+        assert_eq!(m("Stings"), None, "music folders only for music");
     }
 }

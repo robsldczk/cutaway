@@ -296,8 +296,7 @@ pub fn spot(
         for (name, cs) in &groups {
             // in a show, a group that names a library folder goes into that folder's bucket
             let music = name.eq_ignore_ascii_case("music");
-            let keywords: Vec<String> = cs.iter().map(|c| keyword_of(&c.description)).collect();
-            let folder = crate::studio::match_folder(&folders, name, &keywords, music);
+            let folder = crate::studio::match_folder(&folders, name, music);
             let existing = svc
                 .doc()
                 .buckets
@@ -511,11 +510,10 @@ pub fn create(
             let l = lib
                 .lock()
                 .map_err(|_| AppError::Other("library lock poisoned".into()))?;
-            let existing =
-                crate::studio::match_folder(&l.folders(), name, &[], music).filter(|f| {
-                    apc_sound::show_library::folder_slug(f.rsplit('/').next().unwrap_or(""))
-                        == apc_sound::show_library::folder_slug(name)
-                });
+            let existing = crate::studio::match_folder(&l.folders(), name, music).filter(|f| {
+                apc_sound::show_library::folder_slug(f.rsplit('/').next().unwrap_or(""))
+                    == apc_sound::show_library::folder_slug(name)
+            });
             let f = existing.unwrap_or_else(|| l.folder_for(name, music));
             if let Some(b) = svc
                 .doc()

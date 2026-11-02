@@ -100,6 +100,16 @@ TARMAC/                              show
 │        └ ai-calls.jsonl
 ```
 
+*Changed in implementation (studio mode, D64–D68, Rob 2026-11-02):*
+- **A show is the production's own folder** (e.g. the Syncthing share `tm-2610/`). Cutaway adds one JSON show file at its root (`tm-2610.cutawayshow`, next to the pipeline's `*.jetplane.json`) and takes the layout from it.
+- **Defaults:**
+  - episodes in `Episodes/<Episode>/Sound/<Episode>.cutaway` (with `Audio/`, `Script/`, `Backups/`, `Exports/`, `Cache/`, `Logs/`);
+  - the show's library in `Sound/sfx/` and `Sound/music/`, whose first-level folders are the buckets;
+  - Cutaway's own files in `Sound/Cutaway/`: `backdrop.jpg`, and `library.json` with licences and provider ids.
+- **Library index:** the library is scanned, not registered, and the hash index is a local cache.
+- **Vocals** stay in the episode's own `Library/Vocals/`.
+- The SQLite show file and the `Library/{SFX,Ambience,Music}` show layout above are gone.
+
 - **Standalone episode:** an episode can also exist on its own without a show. It then keeps a local library in the same structure.
 - **Opening:** double-click the `.cutaway` file to open an episode, or the `.cutawayshow` file to open the show overview (episodes, library).
 

@@ -165,6 +165,8 @@ Entity kinds and their JSON (`parent` in brackets):
 
 ### 2.2 Show file `<name>.cutawayshow` (SQLite, WAL)
 
+*Changed in implementation (D64):* the show file is JSON (`ShowFile` in `apc-core::show`: name, id, layout, theme, aliases); the library is the show's `Sound/` folders with a local hash index and `Sound/Cutaway/library.json` (D65). The schema below is no longer used.
+
 ```sql
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE asset (id TEXT PRIMARY KEY, file TEXT NOT NULL, hash TEXT NOT NULL UNIQUE, category TEXT,
@@ -510,39 +512,41 @@ tm-2610/                       show root (picked in "New show…")
 ```
 
 S1 Show file and layout (core)
-- [ ] `apc-core::show`: JSON show file (`ShowFile`, `ShowLayout`, theme, aliases), create in an existing root, open, find from an episode by walking up.
-- [ ] Episode list: `Episodes/*/`, enriched read-only from `episode.jetplane.json` (number, title); has-project flag; sync-conflict and hidden entries skipped.
-- [ ] `EpisodePaths` for an episode inside a show (`Episodes/<ep>/Sound/`), `asset_path` for `show:` paths; the old SQLite show file and `Library/` show layout go (never used outside tests).
-- [ ] Tests on a temp tree shaped like tm-2610.
+- [x] `apc-core::show`: JSON show file (`ShowFile`, `ShowLayout`, theme, aliases), create in an existing root, open, find from an episode by walking up.
+- [x] Episode list: `Episodes/*/`, enriched read-only from `episode.jetplane.json` (number, title); has-project flag; sync-conflict and hidden entries skipped.
+- [x] `EpisodePaths` for an episode inside a show (`Episodes/<ep>/Sound/`), `asset_path` for `show:` paths; the old SQLite show file and `Library/` show layout go (never used outside tests).
+- [x] Tests on a temp tree shaped like tm-2610.
 
 S2 Show library and folder buckets
-- [ ] `apc-sound::show_library`: scan `sfx/` and `music/` (audio only, no zips, no Syncthing temp or conflict files), hash + duration cached locally by path/size/mtime, ids from the hash, tags from folder and file names, durable metadata from `Sound/Cutaway/library.json` (merged with sync-conflict copies).
-- [ ] `Library` routes: show assets (`show:sfx/doors/x.wav`) into the show, vocals into the episode's own `Library/`; a moved file is found again by hash.
-- [ ] Buckets are folders: `SoundBucket.folder`; first-level folders of `sfx/` and `music/` become buckets (track stem folders don't); a bucket's sounds are its folder's files plus what it keeps; new buckets made by hand create their folder, AI buckets create it with their first sound; downloads, generated sounds and drops into a bucket land in its folder; removing a folder sound hides it in this episode only; renames never move folders.
-- [ ] Spotting reuses an existing folder bucket when the group or its keywords name it (doors, footsteps …).
-- [ ] Rescan (method, CLI) after Syncthing brings new files.
+- [x] `apc-sound::show_library`: scan `sfx/` and `music/` (audio only, no zips, no Syncthing temp or conflict files), hash + duration cached locally by path/size/mtime, ids from the hash, tags from folder and file names, durable metadata from `Sound/Cutaway/library.json` (merged with sync-conflict copies).
+- [x] `Library` routes: show assets (`show:sfx/doors/x.wav`) into the show, vocals into the episode's own `Library/`; a moved file is found again by hash.
+- [x] Buckets are folders: `SoundBucket.folder`; first-level folders of `sfx/` and `music/` become buckets (track stem folders don't); a bucket's sounds are its folder's files plus what it keeps; new buckets made by hand create their folder, AI buckets create it with their first sound; downloads, generated sounds and drops into a bucket land in its folder; removing a folder sound hides it in this episode only; renames never move folders.
+- [x] Spotting reuses an existing folder bucket when the group or its keywords name it (doors, footsteps …).
+- [x] Rescan (method, CLI) after Syncthing brings new files.
 
 S3 Sync safety
-- [ ] WAL folded into the episode file on close and after each autosave snapshot.
-- [ ] Lock file next to the episode file (host, user, time): opening an episode open elsewhere warns.
-- [ ] Sync-conflict copies of the episode file are reported on open.
-- [ ] Imports into a show episode are always copied (no paths outside the pipeline).
+- [x] WAL folded into the episode file on close and after each autosave snapshot.
+- [x] Lock file next to the episode file (host, user, time): opening an episode open elsewhere warns.
+- [x] Sync-conflict copies of the episode file are reported on open.
+- [x] Imports into a show episode are always copied (no paths outside the pipeline).
 
 S4 Methods, CLI, MCP
-- [ ] `create_show` (make a root a show), `open_show`, `show_view`, `show_backdrop`, `set_show_backdrop`, `open_episode` (creates the project when missing), `close_show`, `rescan_library`, `migrate_episode` (dry run first).
-- [ ] CLI `cutaway show init|episodes|open|rescan|backdrop|migrate`.
-- [ ] Tests: show flow end to end on the demo session; migration copy and verify.
+- [x] `create_show` (make a root a show), `open_show`, `show_view`, `show_backdrop`, `set_show_backdrop`, `open_episode` (creates the project when missing), `close_show`, `rescan_library`, `migrate_episode` (dry run first).
+- [x] CLI `cutaway show init|episodes|open|rescan|backdrop|migrate`.
+- [x] Tests: show flow end to end on the demo session; migration copy and verify.
 
 S5 UI
-- [ ] Start screen: Show (open, new) and Standalone (open, new, demo); recent shows and episodes.
-- [ ] Show home: the backdrop full bleed, show name, episode dropdown (number, title, has project), Open / Create, set backdrop, rescan, migrate a standalone episode.
-- [ ] Theme: colours taken from the backdrop tint the stage inside the show's episodes.
-- [ ] Header: show name and episode switcher; back to the show home.
-- [ ] Native File menu (New Show…, Open Show…, Open Episode…, Close).
-- [ ] Playwright: open a show, pick an episode, see the folder buckets.
+- [x] Start screen: Show (open, new) and Standalone (open, new, demo); recent shows and episodes.
+- [x] Show home: the backdrop full bleed, show name, episode dropdown (number, title, has project), Open / Create, set backdrop, rescan, migrate a standalone episode.
+- [x] Theme: colours taken from the backdrop tint the stage inside the show's episodes.
+- [x] Header: show name and episode switcher; back to the show home.
+- [x] Native Show menu (Open Show…, New Show from a Folder…, Open Standalone Episode…, Show Home, Close).
+- [x] Playwright: open a show, pick an episode, see the folder buckets.
 
 S6 Migration of Tarmac-EP02
-- [ ] Show file in `tm-2610/`, dry run, then copy `~/Documents/Cutaway/Tarmac-EP02` → `Episodes/Episode 2/Sound/` (source untouched); verify sources and sounds resolve.
+- [x] Show file in `tm-2610/`, dry run, then copy `~/Documents/Cutaway/Tarmac-EP02` → `Episodes/Episode 2/Sound/` (source untouched); verify sources and sounds resolve.
+- [ ] (Rob) Manual: set the backdrop, open Episode 2 in the app, drag an Epidemic result into a folder bucket and check the file lands in `Sound/sfx/<bucket>/`; open the show on a second machine after Syncthing has synced.
+- [ ] (Rob) `.stignore` on each device: `*.cutaway-wal`, `*.cutaway-shm` (and `Cache/media` if the sync volume matters).
 
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
@@ -592,3 +596,4 @@ S6 Migration of Tarmac-EP02
 - 2026-11-02 `editor` (M11, D54–D59) and `epidemic` (D60) merged into `dev`; the epidemic hand-off fixes (spotting per scene makes buckets, bucket edits on the latest document, exact "more", re-spot tidies) and the toast moved off the top bars. check.sh green, Playwright 14/14; pushed to origin/dev.
 - 2026-11-02 M12 done (D61) on branch `throughline` (worktree `../cutaway-throughline`, because another session works in the main folder on `dev`): native `.thrl` reader (gzip JSON, format up to 1.12) giving the same parsed script as Fountain, story context per episode (scene title/summary/act/cast/arc, character bios, setting descriptions and groups) merged newest-wins, `import_story` for bios from another file (the pilot's), scene list titles and act dividers, inspector story section, parent room tone, story context in spotting and file-name matching (prompts v2, `ai.story_context`). EP02: the `.thrl` matches Throughline's Fountain export line for line. Fixed on the way: `!CUT TO:` parsed as a transition, a flaky dev-panel eval test. check.sh green.
 - 2026-11-02 Pacing (D62): breath gap down to −500 ms (overlap), tightness slider right = tighter up to ×10. M13 done (D63): Arrange lengthens clips into handle audio from the source, `set_trim` clamps to the file. check.sh green, Playwright green.
+- 2026-11-02 M14 done (D64–D68): studio mode. A show is the production folder (tm-2610) with a JSON show file at its root; episodes in `Episodes/<Episode>/Sound/`, the show library is `Sound/{sfx,music}` with its folders as buckets (scan + local hash index, `Sound/Cutaway/library.json`), new bucket sounds saved into the folder, vocals stay with the episode. Sync safety (WAL checkpoint, advisory lock, conflict warnings), backdrop + theme colours, show home with episode dropdown, native Show menu, CLI `cutaway show …`, migration with dry run. Tarmac-EP02 copied into `tm-2610/Episodes/Episode 2/Sound/` (561 files, 4.9 GB, 0 missing; source untouched). check.sh green, Playwright 16/16 (2 of 7 full runs had timing failures in editor/smoke specs under load, unrelated to this work).
