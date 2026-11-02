@@ -634,6 +634,11 @@ pub struct BoxState {
     /// The first part is left out and the time closes up (ripple delete).
     #[serde(default)]
     pub dropped: bool,
+    /// Fades at the start and end of the line (the edge fade is the minimum).
+    #[serde(default)]
+    pub fade_in_s: f64,
+    #[serde(default)]
+    pub fade_out_s: f64,
     /// Old pick kept as a suggestion after a script change.
     #[serde(default)]
     pub suggested_take: Option<String>,

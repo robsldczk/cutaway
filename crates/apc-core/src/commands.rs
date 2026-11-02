@@ -217,6 +217,16 @@ pub enum Command {
         edge: ClipEdge,
         delta_s: f64,
     },
+    /// Fades at the start and end of a dialogue line (at least the short edge fade).
+    SetClipFades {
+        line_id: String,
+        fade_in_s: f64,
+        fade_out_s: f64,
+    },
+    /// Several commands as one step (one undo), applied in order.
+    Batch {
+        commands: Vec<Command>,
+    },
     UseUnmatched {
         unmatched_id: String,
         scene_id: String,
@@ -362,6 +372,8 @@ impl Command {
             Command::SetClipDropped { .. } => "set_clip_dropped",
             Command::TrimClip { .. } => "trim_clip",
             Command::TrimPlacement { .. } => "trim_placement",
+            Command::SetClipFades { .. } => "set_clip_fades",
+            Command::Batch { .. } => "batch",
             Command::UseUnmatched { .. } => "use_unmatched",
             Command::SetRoomTone { .. } => "set_room_tone",
             Command::AddCue { .. } => "add_cue",
@@ -409,6 +421,9 @@ impl Command {
             }),
             Command::AddSources { sources } => json!({
                 "files": sources.iter().map(|s| s.original_name.clone()).collect::<Vec<_>>()
+            }),
+            Command::Batch { commands } => json!({
+                "commands": commands.iter().map(|c| c.log_params()).collect::<Vec<_>>()
             }),
             other => serde_json::to_value(other).unwrap_or(Value::Null),
         }
@@ -744,6 +759,24 @@ impl Command {
                 edge,
                 delta_s,
             } => trim_placement(tx, placement_id, *edge, *delta_s, &pacing),
+            Command::SetClipFades {
+                line_id,
+                fade_in_s,
+                fade_out_s,
+            } => {
+                let mut b = boxed(tx, line_id)?;
+                b.fade_in_s = ms(fade_in_s.max(0.0));
+                b.fade_out_s = ms(fade_out_s.max(0.0));
+                tx.put(&b)?;
+                Ok(Value::Null)
+            }
+            Command::Batch { commands } => {
+                let mut out = Vec::with_capacity(commands.len());
+                for c in commands {
+                    out.push(c.apply(tx)?);
+                }
+                Ok(Value::Array(out))
+            }
             Command::UseUnmatched {
                 unmatched_id,
                 scene_id,
@@ -2343,6 +2376,37 @@ mod tests {
         })
         .unwrap();
         assert!((bus.doc().placements["p"].len_s - 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_batch_is_one_undo_step() {
+        let (_d, mut bus) = setup();
+        let before = lay(&bus);
+        bus.execute(&Command::Batch {
+            commands: vec![
+                Command::SetClipMuted {
+                    line_id: "a".into(),
+                    part: None,
+                    muted: true,
+                },
+                Command::MoveClip {
+                    line_id: "b".into(),
+                    delta_s: 0.5,
+                    ripple: true,
+                },
+                Command::SetClipFades {
+                    line_id: "b".into(),
+                    fade_in_s: 0.2,
+                    fade_out_s: 0.0,
+                },
+            ],
+        })
+        .unwrap();
+        let l = lay(&bus);
+        assert!(l.item("a").unwrap().muted);
+        assert!((l.item("b").unwrap().pieces[0].fade_in_s - 0.2).abs() < 1e-9);
+        bus.undo().unwrap();
+        assert_eq!(lay(&bus), before);
     }
 
     #[test]

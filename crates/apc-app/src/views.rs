@@ -105,6 +105,8 @@ pub struct ItemView {
     /// Every part muted / every part ripple-deleted.
     pub muted: bool,
     pub dropped: bool,
+    pub fade_in_s: f64,
+    pub fade_out_s: f64,
     pub head_s: f64,
     pub tail_s: f64,
     pub comp: Vec<CompSegment>,
@@ -360,6 +362,8 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
             parts: li.parts.clone(),
             muted: li.muted,
             dropped: li.dropped,
+            fade_in_s: b.fade_in_s,
+            fade_out_s: b.fade_out_s,
             head_s: b.head_s,
             tail_s: b.tail_s,
             comp: b.comp.clone(),

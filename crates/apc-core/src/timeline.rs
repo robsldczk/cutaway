@@ -539,6 +539,13 @@ fn build_box(doc: &Document, b: &BoxState, pacing: &Pacing) -> BuiltBox {
         kept[i].fade_out_s = f;
         kept[i + 1].fade_in_s = f;
     }
+    // The line's own fades at its first and last piece.
+    if let Some(f) = kept.first_mut() {
+        f.fade_in_s = f.fade_in_s.max(b.fade_in_s.min(f.len() / 2.0));
+    }
+    if let Some(l) = kept.last_mut() {
+        l.fade_out_s = l.fade_out_s.max(b.fade_out_s.min(l.len() / 2.0));
+    }
     let dur = kept.iter().map(|p| p.end_s()).fold(0.0_f64, f64::max);
 
     // Place words in box time.
