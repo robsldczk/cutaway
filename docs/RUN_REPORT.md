@@ -23,6 +23,50 @@ Details: `docs/design/round2-screens.md` (the spec files are read-only in this c
 - Import › Files on TARMAC: drop the fixture folder, check the cards, switch a file's type, link a room file by hand, Redo match, Start analysis.
 - Edit: drag a preview onto SFX 1 near an action line and watch it download and snap; try Split, Fade and Gain on a clip; mute and solo lanes while playing; set a cycle range by dragging in the ruler and press C.
 
+## Studio mode (M14, 2026-11-02)
+
+**Built** (D64–D68):
+- **Shows** live in the production's own folder:
+  - `tm-2610/tm-2610.cutawayshow` is a JSON file next to the Jetplane files;
+  - episodes are in `Episodes/<Episode>/Sound/`;
+  - the show library is `Sound/sfx` and `Sound/music`, and each first-level folder is a bucket.
+- **New sounds** go into their bucket's folder: downloads, generated sounds, and drops onto a bucket.
+  - A bucket made by hand creates its folder at once.
+  - AI buckets create theirs with their first sound.
+- **Vocals** stay with the episode.
+- **Sync safety:**
+  - the log is folded into the episode file;
+  - a lock warns when an episode is open on another machine;
+  - sync-conflict copies are reported.
+- **Show home:**
+  - the show's backdrop full bleed, with stage colours taken from it;
+  - an episode dropdown with Jetplane titles;
+  - a native Show menu, and a header episode switcher.
+- **CLI:** `cutaway show init|episodes|rescan|backdrop|migrate`.
+
+**Done on the real pipeline:**
+- `tm-2610` is a show.
+- Tarmac-EP02 is copied into `Episodes/Episode 2/Sound/Episode 2.cutaway`: 561 files, 4.9 GB, 0 missing sources or sounds, 415 takes.
+- The original in `~/Documents/Cutaway/Tarmac-EP02` is unchanged.
+- The 14 `sfx/` folders and `music/Stings` are buckets. The spotted buckets map onto them where the names say so: Doors and hatches → `doors`, Time Spring Command ambience → `time-spring`, Airfield ambience → `airfield`, Footsteps → `footsteps`.
+
+**Verify:**
+- `cargo test -p apc-app --test studio_mode` (pipeline-shaped temp folder, lock and conflicts, migration).
+- `cd app && npx playwright test tests/studio.spec.ts`.
+
+**Rob:**
+1. In the app: Show › Open Show… → `tm-2610`.
+2. Set backdrop… (once).
+3. Open Episode 2.
+4. In Import › Sounds, check the folder buckets. Drop or download a sound into one; it should land in `Sound/sfx/<bucket>/`.
+5. On a second machine after Syncthing has synced, open the show and the episode; expect no lock warning once the first machine has closed it.
+6. Add `*.cutaway-wal` and `*.cutaway-shm` to `.stignore` on each device.
+
+**Known:**
+- The first bucket view in a show computes waveforms for every folder sound: about 10 s on Episode 2, cached after that.
+- The "Music" bucket is the whole `music/` folder, stems included.
+- 2 of 7 full Playwright runs had timing failures in editor and smoke specs under machine load. They are unrelated to this work and passed on rerun.
+
 ## What was built
 
 | Milestone | State | Notes |
