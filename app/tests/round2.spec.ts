@@ -29,6 +29,8 @@ test('import › sounds: spot script, a new bucket and its panel; ⇧B goes to t
   await page.getByRole('button', { name: 'Import', exact: true }).click();
   await page.getByRole('tab', { name: 'Sounds' }).click();
   await page.getByRole('button', { name: 'Spot script' }).click();
+  // spotting runs in the background; once every scene is read the button offers a re-spot
+  await expect(page.getByRole('button', { name: 'Re-spot script' })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('bucket-card').first()).toBeVisible();
   const spotted = await page.getByTestId('bucket-card').count();
 

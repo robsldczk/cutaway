@@ -2,7 +2,7 @@
   // The Round 2 icon set (stroke icons on a 24 grid, as drawn in the design files).
   export type IconName =
     | 'mic' | 'speaker' | 'sparkle' | 'chevron' | 'chevron-left' | 'chevron-right' | 'play' | 'check' | 'x' | 'download'
-    | 'plus' | 'pointer' | 'split' | 'fade' | 'gain' | 'marquee' | 'start' | 'cycle' | 'inspector' | 'mixer' | 'back' | 'grip' | 'stop';
+    | 'plus' | 'pointer' | 'split' | 'fade' | 'gain' | 'marquee' | 'start' | 'cycle' | 'inspector' | 'mixer' | 'back' | 'grip' | 'stop' | 'search';
   let { name, size = 15, stroke = 2 }: { name: IconName; size?: number; stroke?: number } = $props();
 </script>
 
@@ -27,6 +27,7 @@
     {:else if name === 'check'}<polyline points="5 12 10 17 19 7" />
     {:else if name === 'x'}<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
     {:else if name === 'download'}<path d="M12 4v11" /><polyline points="7 10 12 15 17 10" /><path d="M5 19h14" />
+    {:else if name === 'search'}<circle cx="11" cy="11" r="6" /><line x1="15.5" y1="15.5" x2="20" y2="20" />
     {:else if name === 'plus'}<line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
     {:else if name === 'split'}<circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><line x1="20" y1="4" x2="8.1" y2="15.9" /><line x1="14.5" y1="14.5" x2="20" y2="20" />
     {:else if name === 'fade'}<path d="M3 20 Q10 4 21 4" />
