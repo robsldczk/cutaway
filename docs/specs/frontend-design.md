@@ -208,6 +208,7 @@ Opened with ⌘I or a long press on a box. A right-hand glass drawer that shows 
 A glass sheet with:
 - **Global breath gap:** default 300 ms.
 - **Per-scene tightness slider:** scales all gaps and spacers of the scene at once.
+  - *Changed in implementation (D62):* the breath gap goes down to −500 ms (overlap), and the tightness slider reads right = tighter (up to ×10, i.e. a tenth of the pauses); tighter also deepens overlaps.
 - **Local overrides:** individual gaps and spacers are marked and kept when the slider moves.
 - **Room tone:** on/off and the tone per location.
 - **AI:** provider and model (privacy note: only text leaves the machine).

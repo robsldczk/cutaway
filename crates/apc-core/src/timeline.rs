@@ -597,6 +597,8 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
     let mut cursor = 0.0;
     let mut pending_spacers = 0.0;
     let mut first_box = true;
+    // start of the last chained box: a default overlap never reaches back past it
+    let mut prev_start = 0.0;
     for item_id in &scene.order {
         let Some(line) = doc.lines.get(item_id) else {
             continue;
@@ -674,10 +676,13 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
         } else {
             match b.gap_s {
                 Some(g) => (g, true),
-                None => (
-                    (pacing.breath_gap_s + pending_spacers) * scene.tightness,
-                    false,
-                ),
+                None => {
+                    // tighter = shorter pauses and, below zero, deeper overlaps
+                    let base = pacing.breath_gap_s + pending_spacers;
+                    let t = scene.tightness.max(0.1);
+                    let g = if base >= 0.0 { base * t } else { base / t };
+                    (g.max(prev_start - cursor), false)
+                }
             }
         };
         let start = match b.pinned_s {
@@ -715,6 +720,7 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
         // Pinned (unlocked) boxes are out of the chain: the next box follows the last
         // locked one, and spacers before a pinned box still count for it.
         if b.pinned_s.is_none() {
+            prev_start = start;
             cursor = end;
             pending_spacers = 0.0;
             first_box = false;
@@ -940,6 +946,24 @@ pub(crate) mod tests {
         d.boxes.get_mut("b").unwrap().gap_s = Some(-0.25);
         let l = layout_scene(&d, &sc, &Pacing::default());
         assert!((l.item("b").unwrap().start_s - 0.75).abs() < 1e-9);
+    }
+
+    #[test]
+    fn negative_breath_gap_overlaps_more_when_tighter() {
+        let (mut d, mut sc) = doc2();
+        sc.order = vec!["a".into(), "b".into()];
+        d.spacers.clear();
+        let p = Pacing {
+            breath_gap_s: -0.2,
+            ..Pacing::default()
+        };
+        let gap = |sc: &Scene| layout_scene(&d, sc, &p).item("b").unwrap().gap_before_s;
+        assert!((gap(&sc) + 0.2).abs() < 1e-9);
+        sc.tightness = 0.5;
+        assert!((gap(&sc) + 0.4).abs() < 1e-9);
+        // never back past the start of the line before ("a" is 1 s long)
+        sc.tightness = 0.1;
+        assert!((gap(&sc) + 1.0).abs() < 1e-9);
     }
 
     #[test]

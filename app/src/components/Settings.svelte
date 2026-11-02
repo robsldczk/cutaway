@@ -5,7 +5,9 @@
 
   const v = $derived(app.view);
   let breath = $state(app.view?.breath_gap_s ?? 0.3);
-  let tight = $state(app.view?.tightness ?? 1);
+  // The scene stores a pause multiplier; the slider shows its inverse on a log scale,
+  // so right is tighter (×2 = half the pauses, twice the overlap).
+  let tight = $state(Math.log2(1 / (app.view?.tightness ?? 1)));
   let model = $state('');
 
   async function setBreath() {
@@ -13,7 +15,7 @@
   }
   async function setTight() {
     if (!v) return;
-    await app.cmd({ cmd: 'set_scene_tightness', scene_id: v.scene.id, tightness: +tight });
+    await app.cmd({ cmd: 'set_scene_tightness', scene_id: v.scene.id, tightness: 2 ** -tight });
   }
   async function roomTone(on: boolean) {
     await app.method('set_config', { key: 'pacing.room_tone', value: on });
@@ -37,10 +39,11 @@
 <Sheet title="Settings">
   <div class="grid">
     <label for="breath">Breath gap</label>
-    <div class="ctl"><input id="breath" type="range" min="0" max="1.5" step="0.05" bind:value={breath} onchange={setBreath} /><span>{(+breath * 1000).toFixed(0)} ms</span></div>
+    <div class="ctl"><input id="breath" type="range" min="-0.5" max="1.5" step="0.05" bind:value={breath} onchange={setBreath} /><span class="val">{+breath < 0 ? `${(-breath * 1000).toFixed(0)} ms overlap` : `${(+breath * 1000).toFixed(0)} ms`}</span></div>
+    <span class="hint2">Below zero the next line comes in before the last one ends: first into its silent tail, then over the words.</span>
     <label for="tight">Scene tightness</label>
-    <div class="ctl"><input id="tight" type="range" min="0.3" max="2" step="0.05" bind:value={tight} onchange={setTight} /><span>×{(+tight).toFixed(2)}</span></div>
-    <span class="hint2">Scales every default pause and spacer of this scene. Pauses you set by hand are kept.</span>
+    <div class="ctl"><input id="tight" type="range" min="-1.5" max="3.3" step="0.05" bind:value={tight} onchange={setTight} /><span class="val">×{(2 ** +tight).toFixed(2)}</span></div>
+    <span class="hint2">Right is punchier: divides every default pause and spacer of this scene and deepens overlaps. Pauses you set by hand are kept.</span>
     <span class="lab">Room tone</span>
     <div class="ctl">
       <label class="chk"><input type="checkbox" checked={app.status?.room_tone ?? true} onchange={(e) => roomTone((e.currentTarget as HTMLInputElement).checked)} /> play room tone under scenes</label>
@@ -98,6 +101,9 @@
   .ctl span {
     font-variant-numeric: tabular-nums;
     color: var(--text-2);
+  }
+  .val {
+    min-width: 108px;
   }
   .hint2 {
     grid-column: 2;

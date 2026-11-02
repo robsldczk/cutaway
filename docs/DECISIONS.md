@@ -290,3 +290,12 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **AI use:** context goes to sound spotting and file-name matching only. Notes, picks, line matching and rescue are per take and high volume (D53); bios add tokens there with little gain.
 - **Fountain parser changes found through the parity test:** `!CUT TO:` is now a forced action (it was read as a transition with the `!` in its text); a section (`#`) belongs to the scene after it (it was attached to the scene before); synopses (`=`) and the top-level section fill the scene's story synopsis and act. Emphasis stays in the line text as Fountain writes it (`_EDIBLE_`); the `.thrl` reader writes underline/italic/bold the same way so both formats diff as equal.
 - **Room tone:** a setting without its own room tone plays its parent's (`Document::room_tone_of`); the Options/Arrange room tone editor still edits the setting's own.
+
+### D62 Punchier pacing: overlap and a right-is-tighter slider (Rob, 2026-11-02)
+- **Rob:** the breath gap stops at 0 and the tightness slider at 2×; he wants dialogue punchier than that.
+- **Found:** the tightness value multiplies the pauses, so the slider's "×2" doubled them (looser), the opposite of how it reads. And every clip carries ~230 ms of near-silence (80 ms pre-roll, 150 ms tail from `edges::refine`), so a 0 ms breath gap still sounds like a pause.
+- **Choice:**
+  - Breath gap slider −500 ms … 1.5 s (config accepts −1 s … 5 s). Below zero the next line starts before the last one ends: first into its silent tail, then over the words (cue bites, crosstalk).
+  - The tightness slider shows the inverse of the stored multiplier on a log scale, ×0.35 … ×10, right = tighter. The stored value and its 0.1–3 clamp are unchanged, so no migration; a scene set to "×2" before now shows as ×0.50, which is what it was doing.
+  - A negative default gap is divided by the multiplier instead of multiplied, so tighter always means an earlier entry. A default overlap never reaches back past the start of the line before. Pauses set by hand stay as they are (they could already overlap, down to −5 s).
+- **Options not taken:** trimming the pre-roll and tail per clip when tight (changes the clip edges, which are per take and user-editable); a separate per-scene overlap setting (a third control for the same feel).

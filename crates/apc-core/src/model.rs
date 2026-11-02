@@ -192,7 +192,8 @@ pub struct Scene {
     /// Timeline items in order: line ids (dialogue boxes and action spacers).
     #[serde(default)]
     pub order: Vec<String>,
-    /// Scales every gap and spacer of the scene (1.0 = as set).
+    /// Multiplies the scene's default pauses and spacers (1.0 = as set, 0.5 = tighter);
+    /// a negative default gap (overlap) is divided by it instead, so tighter overlaps more.
     #[serde(default = "one")]
     pub tightness: f64,
     /// What the writers know about the scene (Throughline beat, Fountain synopsis).

@@ -81,6 +81,7 @@ pub struct SoundConfig {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(default)]
 pub struct PacingConfig {
+    /// Default pause between lines; negative overlaps them (−1 s … 5 s).
     pub breath_gap_s: f64,
     pub splice_fade_ms: f64,
     pub room_tone: bool,
@@ -185,7 +186,7 @@ impl ProjectConfig {
 
     pub fn pacing(&self) -> Pacing {
         Pacing {
-            breath_gap_s: self.pacing.breath_gap_s,
+            breath_gap_s: self.pacing.breath_gap_s.clamp(-1.0, 5.0),
             splice_fade_s: self.pacing.splice_fade_ms / 1000.0,
             ..Pacing::default()
         }

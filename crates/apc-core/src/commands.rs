@@ -125,6 +125,7 @@ pub enum Command {
         item_id: String,
         to_index: usize,
     },
+    /// Multiplies the scene's default pauses (0.1–3; lower is tighter, see `Scene::tightness`).
     SetSceneTightness {
         scene_id: String,
         tightness: f64,
