@@ -18,6 +18,8 @@
   let busy = $state<string | null>(null);
   let cursor = $state(0);
   let tagFilter = $state<string | null>(null);
+  /** The provider has no more results for these keywords ("Load more" hides). */
+  let exhausted = $state(false);
   /** A character's vocal bucket: the actor's own recordings, nothing to search or generate. */
   const vocal = $derived(!!bucket.character);
   const col = $derived(bucket.character ? solid(colorOf(bucket.color_index ?? 0).rgb) : null);
@@ -34,6 +36,7 @@
     library = [];
     cursor = 0;
     tagFilter = null;
+    exhausted = false;
   });
 
   async function search(more = false) {
@@ -42,7 +45,8 @@
       const r = await app.run(() => call<{ library: BucketSound[] }>('bucket_search', { bucket_id: bucket.id, provider: 'library', keywords }));
       library = r?.library ?? [];
     } else {
-      const r = await app.run(() => call<{ added: number }>('bucket_search', { bucket_id: bucket.id, more, keywords }));
+      const r = await app.run(() => call<{ added: number; more: boolean }>('bucket_search', { bucket_id: bucket.id, more, keywords }));
+      if (r) exhausted = !r.more;
       if (more && r && !r.added) app.say('No more results for these keywords');
     }
     busy = null;
@@ -203,7 +207,7 @@
       {:else}
         {#if connected.epidemic}<p class="muted note">Search to fill the bucket with previews.</p>{/if}
       {/each}
-      {#if bucket.previews.length}<button class="btn more" onclick={() => search(true)} disabled={!!busy}>{busy === 'more' ? 'Loading…' : 'Load more'}</button>{/if}
+      {#if bucket.previews.length && !exhausted}<button class="btn more" onclick={() => search(true)} disabled={!!busy}>{busy === 'more' ? 'Loading…' : 'Load more'}</button>{/if}
     {/if}
   </div>
 </aside>

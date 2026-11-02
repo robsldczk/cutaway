@@ -4,6 +4,8 @@ For the agent testing and integrating this work. Merged into `dev` as `5a5ec5b`,
 
 State at merge: `scripts/check.sh` green, Playwright 14/14.
 
+**Update (same day):** issues 3, 5, 6, 7 and 10 are fixed on `dev` (see the end of D60). The list below marks them.
+
 ## What Rob asked for
 
 1. Sound spotting (Claude reading the script for SFX) never runs by itself. There is a button to start it and an option to re-spot.
@@ -73,19 +75,19 @@ cd app && npx playwright test                             # 14 specs, incl. test
 
 1. **Never run against the real Epidemic API.** Endpoints, headers and response shapes match Epidemic's OpenAPI spec (`partner-content-api.epidemicsound.com/docs/spec.json`, checked 2026-11-02), but no real key has been used. The mocks assume `length` is in seconds; the spec says seconds for tracks, and sound effects are only typed as a number.
 2. **Licensing.** A free Developer Portal key allows 50 downloads and carries **no commercial licence**. Downloads made under Rob's own Epidemic subscription would need Epidemic Connect (OAuth/PKCE), which is not implemented. This is Rob's decision; it is not a bug.
-3. **Bug: the old per-scene spotting hides scenes from Spot script.** The B-key drawer (`app/src/components/Bucket.svelte`, `App.svelte:114`) and `cutaway sfx spot` call `spot_sound_effects`. That runs `ApplySpotting`, which now records the scene hash, but it does **not** group cues into buckets. Afterwards Spot script treats the scene as spotted and creates no buckets for it; only "Re-spot all" recovers. Two possible fixes:
+3. **FIXED: the old per-scene spotting hid scenes from Spot script.** `spot_sound_effects` now goes through `buckets::spot` for its one scene, so it makes buckets too. Test: `spotting_one_scene_makes_its_buckets_and_counts_as_spotted`. Original report: The B-key drawer (`app/src/components/Bucket.svelte`, `App.svelte:114`) and `cutaway sfx spot` call `spot_sound_effects`. That runs `ApplySpotting`, which now records the scene hash, but it does **not** group cues into buckets. Afterwards Spot script treats the scene as spotted and creates no buckets for it; only "Re-spot all" recovers. Two possible fixes:
    - record the hash only from `buckets::spot` (a flag on `ApplySpotting`, or a separate `Setting` write in the same command);
    - or have `spot_sound_effects` group into buckets too.
    Not fixed yet.
 4. **Drag-and-drop in Tauri is untested.** `app/src-tauri/tauri.conf.json` has `dragDropEnabled: true`, which lets the window take Finder file drops. On Windows that setting is known to block HTML5 drag-and-drop inside the webview; macOS should be fine. The existing bucket-to-timeline drag on the Edit page has the same exposure. If drops don't fire, consider a pointer-event drag instead of HTML5.
-5. **Possible lost update during a spotting job.** The job runs on its own connection (`Service::open(file, "pipeline")`). Each bucket goes through a read-modify-write `PutBucket`, which replaces the whole bucket. If the user drops a sound into a bucket, or edits its keywords, while the job is rewriting the same bucket, one change can overwrite the other. This depends on whether the worker re-reads the document before each `exec`; not verified. The download job and `bucket_search` already used the same pattern.
-6. **"Load more" can be empty.** In the free search, `more` is a guess (`results.len() >= 10`), so a last page of exactly 10 shows "Load more" and it returns nothing. In the bucket panel the button shows whenever previews exist and ignores the `more` flag; it says "No more results…" when nothing was added.
-7. **Re-spot leaves old state.** AI buckets that lose all their cues are kept, and old keywords stay (at most 6 per bucket).
+5. **FIXED (confirmed real): lost update during a spotting job.** `bus.execute_fn` re-reads the document, but `PutBucket` carried a copy read earlier; `bucket_search` holds that copy through its network calls. Bucket changes now run on the latest document inside the transaction (`edit_bucket` in `buckets.rs`). Test: `a_search_keeps_what_changed_in_the_bucket_while_it_waited`, in which the stand-in writes to the bucket from a second session in the middle of the search. Original report: The job runs on its own connection (`Service::open(file, "pipeline")`). Each bucket goes through a read-modify-write `PutBucket`, which replaces the whole bucket. If the user drops a sound into a bucket, or edits its keywords, while the job is rewriting the same bucket, one change can overwrite the other. This depends on whether the worker re-reads the document before each `exec`; not verified. The download job and `bucket_search` already used the same pattern.
+6. **FIXED: "Load more" could be empty.** The free search now asks for 11 results to know whether a next page exists. The bucket panel hides "Load more" once a search returns `more: false`, and the Edit dock's "More like these" says when nothing new was found. Original report: In the free search, `more` is a guess (`results.len() >= 10`), so a last page of exactly 10 shows "Load more" and it returns nothing. In the bucket panel the button shows whenever previews exist and ignores the `more` flag; it says "No more results…" when nothing was added.
+7. **FIXED: re-spot left old state.** Keywords that only came from replaced cues are dropped, and keywords typed by hand stay. AI buckets the scene no longer fills let go of the scene, and are deleted if nothing is left in them (no cues, kept sounds or pinned previews). Test: `re_spotting_a_changed_script_tidies_the_buckets`. Original report: AI buckets that lose all their cues are kept, and old keywords stay (at most 6 per bucket).
 8. **Script re-import.** If a re-import ever gives unchanged lines new ids, every scene counts as changed. On the demo, unchanged lines keep their ids (covered by the test).
 9. **Cosmetic issues:**
    - the global toast (`App.svelte`, `top: 84px`, centred) covers the Spot button area of the Sounds top bar while it shows;
    - previews still use made-up waveforms, although the API returns a `waveformUrl` that could be used.
-10. **Stale docs.** `docs/RUN_REPORT.md` still calls Epidemic a stub (D28). D37 and D60 supersede that.
+10. **FIXED: stale docs** (RUN_REPORT now notes the change). Original report: `docs/RUN_REPORT.md` still calls Epidemic a stub (D28). D37 and D60 supersede that.
 
 ## Integration notes
 

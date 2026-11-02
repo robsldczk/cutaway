@@ -40,7 +40,8 @@
 
   async function more(id: string) {
     busy = id;
-    await app.run(() => call('bucket_search', { bucket_id: id, more: true }));
+    const r = await app.run(() => call<{ added: number }>('bucket_search', { bucket_id: id, more: true }));
+    if (r && !r.added) app.say('No more results for these keywords');
     busy = null;
     await load();
   }

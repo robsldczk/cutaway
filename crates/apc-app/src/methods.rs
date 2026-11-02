@@ -653,7 +653,7 @@ registry! {
     "set_config", ConfigP, Write, true, "Set a project setting by dotted key (ai.model, pacing.breath_gap_s, export.handles_s …).";
     "scene_view", SceneP, Read, false, "Everything the Options/Arrange pages show for a scene.";
     "edit_view", SceneP, Read, false, "Sound placements and cues of a scene for the Edit page.";
-    "spot_sound_effects", SpotP, Write, true, "AI sound spotting for a scene: adds anchored cues to the bucket.";
+    "spot_sound_effects", SpotP, Write, true, "AI sound spotting for a scene: adds anchored cues to the bucket and groups them into sound buckets.";
     "list_bucket", SceneP, Read, true, "Sound cues (wish list) of a scene, or of the whole episode.";
     "add_cue", AddCueP, Write, true, "Add a sound cue by hand.";
     "update_cue", UpdateCueP, Write, true, "Change fields of a cue (description, tags, priority, accepted …).";
@@ -1097,8 +1097,9 @@ impl Service {
                 Ok(serde_json::to_value(crate::views::edit_view(self, &sid)?)?)
             }
             "spot_sound_effects" => {
+                // one scene, grouped into buckets like Spot script (so it counts as spotted)
                 let p: SpotP = parse(params)?;
-                crate::sound::spot(self, &p.scene)
+                crate::buckets::spot(self, Some(&p.scene), false, &|_, _| {})
             }
             "list_bucket" => {
                 let p: SceneP = parse(params)?;

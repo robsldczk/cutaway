@@ -45,7 +45,7 @@ Details: `docs/design/round2-screens.md` (the spec files are read-only in this c
 - **Parakeet acceptance:** the pipeline works with Parakeet, but recognition on this session gives 26 of the 35+ takes (missed repeats of "Lunch.", most "Whoa"s, some takes near chunk edges). Likely causes, in order: speech overlapped by bleed, the 25 s chunking, and the short-line rule depending on segment boundaries. Next step: run Parakeet with VAD-based chunks and compare its word stream against the MacWhisper transcript line by line.
 - **Windows CI:** written, never run.
 - **Separate analysis process:** analysis runs on a worker thread with its own DB connection (D29); the CLI is the process-separated path.
-- **Epidemic Sound and MCP-client sound providers:** interfaces only (D28).
+- **Epidemic Sound and MCP-client sound providers:** interfaces only (D28). *Changed later:* Epidemic Sound was built after this run (D37, D60); only the MCP-client provider is still a stub.
 - **Auditioning one take lane alone** in the box editor: it plays the comp (D33).
 - **Light theme:** tokens prepared, not tuned.
 - **Out of scope by the brief:** web version, AAF, waveform-precise cutting, modifier-key cut modes, cue-reading template.
