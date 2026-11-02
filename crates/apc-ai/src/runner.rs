@@ -127,6 +127,7 @@ impl AiRunner {
                 "provider": self.provider.id(), "model": self.provider.model(),
                 "prompt_version": p.version, "input_hash": key, "duration_ms": ms,
                 "ok": parsed.is_ok(), "attempt": attempt, "output": raw,
+                "input_chars": req.render().len(), "usage": self.provider.take_usage(),
             }));
             match parsed {
                 Ok(out) => {

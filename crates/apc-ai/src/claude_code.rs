@@ -8,6 +8,10 @@ use serde_json::Value;
 
 use crate::provider::{AiError, AiProvider, AiRequest};
 
+/// Replaces Claude Code's own system prompt: the task text comes in the message.
+const SYSTEM_PROMPT: &str =
+    "You help edit an audio play. Follow the task in the message and answer with exactly one JSON object, no prose.";
+
 pub struct ClaudeCodeProvider {
     pub binary: String,
     pub model: String,
@@ -15,6 +19,8 @@ pub struct ClaudeCodeProvider {
     pub timeout: Duration,
     /// Extra CLI arguments (from `CUTAWAY_CLAUDE_ARGS`, space separated).
     pub extra_args: Vec<String>,
+    /// Tokens and cost of the last call (from the CLI's JSON envelope).
+    last_usage: std::sync::Mutex<Option<Value>>,
 }
 
 fn starts(binary: &std::path::Path) -> bool {
@@ -104,6 +110,7 @@ impl ClaudeCodeProvider {
             extra_args: std::env::var("CUTAWAY_CLAUDE_ARGS")
                 .map(|s| s.split_whitespace().map(String::from).collect())
                 .unwrap_or_default(),
+            last_usage: std::sync::Mutex::new(None),
         }
     }
 
@@ -157,19 +164,32 @@ impl AiProvider for ClaudeCodeProvider {
         &self.model
     }
 
+    fn take_usage(&self) -> Option<Value> {
+        self.last_usage.lock().ok().and_then(|mut u| u.take())
+    }
+
     fn run(&self, req: &AiRequest) -> Result<Value, AiError> {
         let mut cmd = Command::new(&self.binary);
+        // Lean call (D53): no tools, a one-line system prompt instead of Claude Code's own
+        // (~34k tokens), no MCP servers, skills or saved session. One turn, text in, JSON out.
         cmd.arg("-p")
             .arg("--output-format")
             .arg("json")
             .arg("--model")
             .arg(&self.model)
+            .arg("--effort")
+            .arg(&self.effort)
+            .arg("--tools")
+            .arg("")
+            .arg("--system-prompt")
+            .arg(SYSTEM_PROMPT)
+            .arg("--strict-mcp-config")
+            .arg("--disable-slash-commands")
+            .arg("--no-session-persistence")
             .args(&self.extra_args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        // Effort is passed through the environment; see DECISIONS.md D24.
-        cmd.env("CUTAWAY_AI_EFFORT", &self.effort);
         let mut child = cmd
             .spawn()
             .map_err(|e| AiError::Unavailable(format!("cannot start '{}': {e}", self.binary)))?;
@@ -218,6 +238,14 @@ impl AiProvider for ClaudeCodeProvider {
         }
         let envelope: Value = serde_json::from_str(out.trim())
             .map_err(|e| AiError::InvalidOutput(format!("CLI output is not JSON: {e}")))?;
+        if let Ok(mut u) = self.last_usage.lock() {
+            *u = Some(serde_json::json!({
+                "cost_usd": envelope.get("total_cost_usd"),
+                "usage": envelope.get("usage"),
+                "api_ms": envelope.get("duration_api_ms"),
+                "turns": envelope.get("num_turns"),
+            }));
+        }
         if envelope.get("is_error").and_then(Value::as_bool) == Some(true) {
             return Err(AiError::Failed(
                 envelope

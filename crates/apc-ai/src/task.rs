@@ -213,10 +213,15 @@ pub struct NoteCondenseOutput {
 
 impl Validate for NoteCondenseOutput {
     fn validate(&self) -> Result<(), String> {
+        // short notes are asked for; longer ones are fine (Rob), only a copied
+        // transcript is refused
         for n in &self.notes {
             for (k, v) in [("direction", &n.direction), ("feedback", &n.feedback)] {
-                if v.split_whitespace().count() > 12 {
-                    return Err(format!("{k} of {} is longer than a few words", n.take_id));
+                if v.split_whitespace().count() > 40 {
+                    return Err(format!(
+                        "{k} of {} reads like a transcript, not a note",
+                        n.take_id
+                    ));
                 }
             }
         }

@@ -51,4 +51,8 @@ pub trait AiProvider: Send + Sync {
     fn id(&self) -> &str;
     fn model(&self) -> &str;
     fn run(&self, req: &AiRequest) -> Result<Value, AiError>;
+    /// Tokens and cost of the last call, when the provider reports them.
+    fn take_usage(&self) -> Option<Value> {
+        None
+    }
 }

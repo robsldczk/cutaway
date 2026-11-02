@@ -1085,20 +1085,34 @@ pub fn analyze_scoped(
             }
         }
 
-        // Room classification.
-        let (lo, hi) = idx.iter().fold((f64::MAX, f64::MIN), |(lo, hi), &i| {
-            let off = sources
+        // Room classification: only the director mic of each take's own session, and
+        // only around the takes (where notes can attach). Every session clock starts at
+        // zero, so a plain time window would pull in every other session too.
+        let around: Vec<(Option<String>, f64, f64)> = idx
+            .iter()
+            .filter_map(|&i| {
+                let d = sources.iter().find(|d| d.src.id == takes[i].source_id)?;
+                let off = d.src.offset_s;
+                Some((
+                    d.src.session_id.clone(),
+                    takes[i].t0 - off - DIRECTION_WINDOW_S,
+                    takes[i].t1 - off + FEEDBACK_WINDOW_S,
+                ))
+            })
+            .collect();
+        let session_of_source = |id: &str| {
+            sources
                 .iter()
-                .find(|d| d.src.id == takes[i].source_id)
-                .map(|d| d.src.offset_s)
-                .unwrap_or(0.0);
-            (lo.min(takes[i].t0 - off), hi.max(takes[i].t1 - off))
-        });
+                .find(|d| d.src.id == id)
+                .and_then(|d| d.src.session_id.clone())
+        };
         let segs: Vec<usize> = (0..room.len())
             .filter(|&r| {
+                let ses = session_of_source(&room[r].source_id);
                 room[r].class != NoteClass::CueReading
-                    && room[r].t0 >= lo - DIRECTION_WINDOW_S
-                    && room[r].t0 <= hi + FEEDBACK_WINDOW_S
+                    && around
+                        .iter()
+                        .any(|(s, a, b)| *s == ses && room[r].t0 >= *a && room[r].t0 <= *b)
             })
             .collect();
         if !segs.is_empty() {
