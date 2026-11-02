@@ -4,7 +4,8 @@
 use std::sync::Mutex;
 
 use serde_json::Value;
-use tauri::{Manager, State};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use apc_app::error::ErrorBody;
 use apc_app::Session;
@@ -39,9 +40,40 @@ fn initial_session() -> Session {
     }
 }
 
+/// The app menu plus a Show menu (studio mode); its items go to the UI as `menu` events.
+fn app_menu(h: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let menu = Menu::default(h)?;
+    let item =
+        |id: &str, label: &str, key: Option<&str>| MenuItem::with_id(h, id, label, true, key);
+    let show = Submenu::with_items(
+        h,
+        "Show",
+        true,
+        &[
+            &item("open_show", "Open Show…", Some("CmdOrCtrl+Shift+O"))?,
+            &item("new_show", "New Show from a Folder…", None)?,
+            &PredefinedMenuItem::separator(h)?,
+            &item("open_episode", "Open Standalone Episode…", None)?,
+            &PredefinedMenuItem::separator(h)?,
+            &item("show_home", "Show Home", None)?,
+            &item("close", "Close", None)?,
+        ],
+    )?;
+    menu.insert(&show, 1)?;
+    Ok(menu)
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            let menu = app_menu(app.handle())?;
+            app.set_menu(menu)?;
+            Ok(())
+        })
+        .on_menu_event(|app, e| {
+            let _ = app.emit("menu", e.id().0.clone());
+        })
         .manage(AppSession(Mutex::new(initial_session())))
         .invoke_handler(tauri::generate_handler![rpc])
         .build(tauri::generate_context!());

@@ -6,7 +6,23 @@
   let path = $state('');
   let name = $state('Ep01');
   let folder = $state('');
+  let showPath = $state('');
   const recent = recentEpisodes();
+
+  /** A show is a production folder (tm-2610): open it, or make it a show once. */
+  async function show(create: boolean) {
+    let target = showPath;
+    if (inTauri) {
+      const r = await pickPath({
+        directory: true,
+        title: create ? 'The production folder to make a show (e.g. tm-2610)' : 'A show folder',
+      });
+      if (!r || !r.length) return;
+      target = r[0];
+    }
+    if (!target) return app.say('Give the show folder');
+    await app.openShow(target, create);
+  }
 
   async function open(p?: string) {
     let target = p ?? path;
@@ -56,20 +72,28 @@
         <div class="label">Recent</div>
         <div class="recent">
           {#each recent as r (r.path)}
-            <button class="rc" onclick={() => open(r.path)} title={r.path}><span class="rn">{r.name}</span><span class="muted ellip rp">{r.path}</span></button>
+            <button class="rc" onclick={() => (r.show ? app.openShow(r.path) : open(r.path))} title={r.path}>{#if r.show}<span class="tag">Show</span>{/if}<span class="rn">{r.name}</span><span class="muted ellip rp">{r.path}</span></button>
           {/each}
         </div>
       </div>
     {/if}
     <div class="grp">
-      <div class="label">Open</div>
+      <div class="label">Show</div>
+      <p class="muted small">A series in its production folder: episodes in Episodes/…/Sound, one sound library in Sound/ for every episode.</p>
       <div class="row">
-        {#if !inTauri}<input class="field" placeholder="Path to an episode (.{brand.episodeExt}) or its folder" bind:value={path} />{/if}
-        <button class="btn primary" onclick={() => open()}>Open episode…</button>
+        {#if !inTauri}<input class="field" placeholder="Show folder (e.g. …/tm-2610)" bind:value={showPath} />{/if}
+        <button class="btn primary" onclick={() => show(false)}>Open show…</button>
+        <button class="btn" onclick={() => show(true)}>New show from a folder…</button>
       </div>
     </div>
     <div class="grp">
-      <div class="label">New</div>
+      <div class="label">Standalone episode</div>
+      <div class="row">
+        {#if !inTauri}<input class="field" placeholder="Path to an episode (.{brand.episodeExt}) or its folder" bind:value={path} />{/if}
+        <button class="btn" onclick={() => open()}>Open episode…</button>
+      </div>
+    </div>
+    <div class="grp">
       <div class="row">
         <input class="field" style="width: 120px" bind:value={name} aria-label="Episode name" />
         {#if !inTauri}<input class="field" placeholder="Parent folder" bind:value={folder} />{/if}
@@ -136,6 +160,21 @@
   .rp {
     font-size: 11.5px;
     min-width: 0;
+  }
+  .small {
+    font-size: 12px;
+    margin: 6px 0 0;
+  }
+  .tag {
+    flex: none;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: var(--glass-fill-4);
+    color: var(--text-3);
   }
   .row .field {
     flex: 1;

@@ -219,6 +219,32 @@ export interface Status {
   room_tone: boolean;
   breath_gap_s: number;
   jobs: Job[];
+  /** The show the episode lives in (studio mode), or null for a standalone episode. */
+  show: { name: string; root: string; episode: string | null; colors: string[] } | null;
+  /** Said once when the episode opens (open on another machine, sync conflicts). */
+  warnings: string[];
+}
+
+/** An episode folder of a show. */
+export interface ShowEpisode {
+  folder: string;
+  number: number | null;
+  title: string | null;
+  label: string;
+  dir: string;
+  /** The episode file, when the episode has a Cutaway project. */
+  file: string | null;
+  open: boolean;
+}
+
+/** The show home (studio mode). */
+export interface ShowView {
+  name: string;
+  root: string;
+  file: string;
+  sound: string;
+  episodes: ShowEpisode[];
+  theme: { colors: string[]; backdrop: string | null };
 }
 
 export interface Job {
@@ -417,6 +443,8 @@ export interface SearchPage {
 export interface Bucket {
   id: string;
   name: string;
+  /** In a show: the bucket's folder in the show's library (`sfx/doors`). */
+  folder?: string | null;
   keywords: string[];
   scenes: string[];
   scene_ids: string[];

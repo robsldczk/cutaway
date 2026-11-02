@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { app } from './lib/app.svelte';
-  import { call, inTauri } from './lib/bridge';
+  import { call, inTauri, pickPath } from './lib/bridge';
+  import { brand } from './lib/brand';
   import { onKey } from './lib/keys';
   import Header from './components/Header.svelte';
   import SceneRail from './components/SceneRail.svelte';
@@ -14,6 +15,7 @@
   import History from './components/History.svelte';
   import ExportPanel from './components/ExportPanel.svelte';
   import Welcome from './components/Welcome.svelte';
+  import ShowHome from './components/ShowHome.svelte';
   import Bucket from './components/Bucket.svelte';
   import Options from './pages/Options.svelte';
   import Arrange from './pages/Arrange.svelte';
@@ -41,6 +43,37 @@
   }
 
   const AUDIO = /\.(wav|bwf|aif|aiff|mp3|flac|m4a)$/i;
+
+  /** Inside a show (its home or one of its episodes) the stage glows in the show's colours. */
+  const tint = $derived.by(() => {
+    const c = app.status?.show?.colors ?? (app.noProject ? app.show?.theme.colors : undefined) ?? [];
+    if (!c.length) return '';
+    const rgba = (h: string, a: number) => {
+      const n = parseInt(h.slice(1), 16);
+      return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+    };
+    return `--stage-glow-1: ${rgba(c[0], 0.34)}; --stage-glow-2: ${rgba(c[1] ?? c[0], 0.12)}; --stage-glow-3: ${rgba(c[2] ?? c[0], 0.1)};`;
+  });
+
+  /** The native menu (File › Open Show… and friends). */
+  async function menu(id: string) {
+    if (id === 'open_show' || id === 'new_show') {
+      const r = await pickPath({ directory: true, title: id === 'new_show' ? 'The production folder to make a show' : 'A show folder' });
+      if (r && r.length) await app.openShow(r[0], id === 'new_show');
+    } else if (id === 'open_episode') {
+      const r = await pickPath({ title: 'Open an episode', filters: [{ name: `${brand.displayName} episode`, extensions: [brand.episodeExt] }] });
+      if (r && r.length) {
+        if (!app.noProject) await app.closeProject();
+        await app.run(() => call('open_project', { path: r[0] }));
+        await app.boot();
+      }
+    } else if (id === 'show_home' && app.status?.show) {
+      await app.showHome();
+    } else if (id === 'close') {
+      if (app.show) await app.closeShow();
+      else if (!app.noProject) await app.closeProject();
+    }
+  }
 
   async function dropped(paths: string[]) {
     const scripts = paths.filter((p) => /\.(fountain|thrl|txt)$/i.test(p));
@@ -70,7 +103,11 @@
     const el = root;
     el?.addEventListener('wheel', onWheel, { passive: false });
     let unlisten: (() => void) | undefined;
+    let unmenu: (() => void) | undefined;
     if (inTauri) {
+      void import('@tauri-apps/api/event').then(async ({ listen }) => {
+        unmenu = await listen<string>('menu', (e) => void menu(e.payload));
+      });
       void import('@tauri-apps/api/webview').then(async ({ getCurrentWebview }) => {
         unlisten = await getCurrentWebview().onDragDropEvent((ev) => {
           if (ev.payload.type === 'drop') void dropped(ev.payload.paths);
@@ -81,16 +118,19 @@
       window.removeEventListener('keydown', onKey);
       el?.removeEventListener('wheel', onWheel);
       unlisten?.();
+      unmenu?.();
       void call('stop').catch(() => {});
     };
   });
 </script>
 
-<div class="ui stage" bind:this={root}>
+<div class="ui stage" bind:this={root} style={tint}>
   <div class="paper" aria-hidden="true"></div>
   {#if app.page === 'options' || app.page === 'arrange'}<div class="hairline" aria-hidden="true"></div>{/if}
 
-  {#if app.noProject}
+  {#if app.noProject && app.show}
+    <ShowHome />
+  {:else if app.noProject}
     <Welcome />
   {:else if app.page === 'import' && app.status}
     <Import />

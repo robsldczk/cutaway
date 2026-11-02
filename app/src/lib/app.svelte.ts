@@ -1,7 +1,7 @@
 // UI state. Document state comes only from the core (view models); every change is a
 // command sent through the bridge. Local state here is selection, page, playhead, overlays.
 import { call, BridgeError } from './bridge';
-import type { EditView, ItemView, Job, SceneView, Status } from './types';
+import type { EditView, ItemView, Job, SceneView, ShowView, Status } from './types';
 
 export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'dev';
 export type ImportTab = 'files' | 'sounds';
@@ -21,6 +21,8 @@ export interface EditSel {
 export interface RecentEpisode {
   name: string;
   path: string;
+  /** A show (opened by its folder), not an episode. */
+  show?: boolean;
 }
 
 /** Recently opened episodes (this viewer only), newest first. */
@@ -109,6 +111,12 @@ class AppState {
   openBucket = $state<string | null>(null);
   /** Sound being auditioned from a bucket (asset id or remote id). */
   sound = $state<string | null>(null);
+  /** The open show (studio mode): its home shows when no episode is open. */
+  show = $state<ShowView | null>(null);
+  /** The show's backdrop (a data URL), loaded once per show. */
+  backdrop = $state<string | null>(null);
+  private backdropOf = '';
+  private warned = '';
   private lastRev = -1;
   private playTimer: ReturnType<typeof setInterval> | null = null;
   private revTimer: ReturnType<typeof setInterval> | null = null;
@@ -165,10 +173,17 @@ class AppState {
     try {
       this.status = await call<Status>('project_status');
       this.noProject = false;
-      if (this.status.path) remember({ name: this.status.name, path: this.status.path });
+      if (this.status.path) remember({ name: this.status.show ? `${this.status.show.name} · ${this.status.name}` : this.status.name, path: this.status.path });
+      if (this.status.show) await this.loadShow();
+      else this.show = null;
+      if (this.status.warnings.length && this.warned !== this.status.path) {
+        this.warned = this.status.path;
+        this.say(this.status.warnings.join(' '));
+      }
     } catch (e) {
       if (e instanceof BridgeError && e.code === 'no_project') {
         this.noProject = true;
+        await this.loadShow();
         return;
       }
       this.say(String(e));
@@ -189,6 +204,11 @@ class AppState {
     if (this.playing) await this.stop();
     const r = await this.run(() => call<{ snapshot: string | null }>('close_project'));
     if (!r) return;
+    this.resetEpisode();
+  }
+
+  /** Forgets the open episode's view state (the core has closed or replaced it). */
+  private resetEpisode() {
     if (this.revTimer) clearInterval(this.revTimer);
     this.revTimer = null;
     this.lastRev = -1;
@@ -208,6 +228,67 @@ class AppState {
     this.page = 'options';
     this.importTab = 'files';
     this.noProject = true;
+  }
+
+  /** The open show's home (null when no show is open), and its backdrop once. */
+  async loadShow() {
+    try {
+      this.show = await call<ShowView>('show_view');
+    } catch {
+      this.show = null;
+      this.backdrop = null;
+      this.backdropOf = '';
+      return;
+    }
+    const key = `${this.show.file}|${this.show.theme.backdrop ?? ''}`;
+    if (key !== this.backdropOf) {
+      this.backdropOf = key;
+      const b = await this.run(() => call<{ url: string | null }>('show_backdrop'));
+      this.backdrop = b?.url ?? null;
+    }
+  }
+
+  /** Opens a show by its folder (or makes a production folder a show with `create`). */
+  async openShow(path: string, create = false) {
+    if (!this.noProject) await this.closeProject();
+    const v = await this.run(() => call<ShowView>(create ? 'create_show' : 'open_show', create ? { root: path } : { path }));
+    if (!v) return;
+    remember({ name: v.name, path: v.root, show: true });
+    await this.loadShow();
+  }
+
+  /** Opens an episode of the open show (its project is made when it has none). */
+  async openEpisode(folder: string) {
+    if (!this.noProject && this.status?.show?.episode === folder) return;
+    if (this.playing) await this.stop();
+    this.busy = true;
+    const r = await this.run(() => call<{ created: boolean }>('open_episode', { episode: folder }));
+    this.busy = false;
+    if (!r) return;
+    this.resetEpisode();
+    await this.boot();
+    if (r.created) this.say(`${folder}: a new project in its Sound folder`);
+  }
+
+  /** Back to the show's home: the episode closes, the show stays open. */
+  async showHome() {
+    await this.closeProject();
+    await this.loadShow();
+  }
+
+  async closeShow() {
+    if (this.playing) await this.stop();
+    await this.run(() => call('close_show'));
+    this.resetEpisode();
+    this.show = null;
+    this.backdrop = null;
+    this.backdropOf = '';
+    this.noProject = true;
+  }
+
+  async setBackdrop(path: string) {
+    const r = await this.run(() => call('set_show_backdrop', { path }));
+    if (r) await this.loadShow();
   }
 
   /** Picks up changes made elsewhere (CLI, MCP, a background job). */

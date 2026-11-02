@@ -16,18 +16,28 @@
   const wide = $derived(app.page === 'import' || app.page === 'edit' || app.page === 'dev');
   const ready = $derived(!!app.view);
   let menu = $state(false);
+  /** The show the open episode lives in (studio mode). */
+  const show = $derived(app.status?.show ?? null);
 </script>
 
 <header class="hdr" class:wide>
   <div class="title">
     <div class="epm">
-      <button class="ep" aria-haspopup="menu" aria-expanded={menu} title={app.status?.path ?? brand.displayName} onclick={() => (menu = !menu)}>{app.view?.episode ?? app.status?.name ?? brand.displayName}<Icon name="chevron" size={10} stroke={2.4} /></button>
+      <button class="ep" aria-haspopup="menu" aria-expanded={menu} title={app.status?.path ?? brand.displayName} onclick={() => (menu = !menu)}>{#if show}<span class="showname">{show.name}</span>{/if}{app.view?.episode ?? app.status?.name ?? brand.displayName}<Icon name="chevron" size={10} stroke={2.4} /></button>
       {#if menu}
         <div class="scrim0" role="presentation" onclick={() => (menu = false)}></div>
         <div class="glass pop" role="menu" aria-label="Episode">
           <div class="muted ellip pth">{app.status?.path ?? ''}</div>
+          {#if show && app.show}
+            <div class="muted sec">{show.name}</div>
+            {#each app.show.episodes as e (e.folder)}
+              <button role="menuitemradio" aria-checked={e.folder === show.episode} class:cur={e.folder === show.episode} onclick={() => { menu = false; void app.openEpisode(e.folder); }}>{e.label}{#if !e.file}<span class="muted"> · new</span>{/if}</button>
+            {/each}
+            <div class="sep"></div>
+            <button role="menuitem" onclick={() => { menu = false; void app.showHome(); }}>Show home</button>
+          {/if}
           <button role="menuitem" onclick={() => { menu = false; app.overlay = 'history'; }}>Versions and history…</button>
-          <button role="menuitem" onclick={() => { menu = false; void app.closeProject(); }}>Back to start screen</button>
+          <button role="menuitem" onclick={() => { menu = false; void (show ? app.closeShow() : app.closeProject()); }}>Back to start screen</button>
         </div>
       {/if}
     </div>
@@ -146,6 +156,26 @@
   .pth {
     font-size: 11px;
     padding: 6px 10px 4px;
+  }
+  .sec {
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 8px 10px 2px;
+  }
+  .pop button.cur {
+    background: var(--glass-active);
+    font-weight: 600;
+  }
+  .sep {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--glass-outline);
+  }
+  .showname {
+    color: var(--text-3);
+    font-weight: 600;
+    margin-right: 8px;
   }
   .muted2 {
     color: var(--text-3);

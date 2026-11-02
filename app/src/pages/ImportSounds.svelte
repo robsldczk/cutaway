@@ -222,6 +222,7 @@
         {:else}<span class="ellip nm2">{b.name}</span>{#each b.scenes as s (s)}<span class="chip outline tn">{s}</span>{/each}{/if}
       </div>
       <div class="kws">{#each b.keywords as k (k)}<span class="chip kw">{k}</span>{/each}</div>
+      {#if b.folder}<div class="fld muted ellip" title="Saved in the show's library: Sound/{b.folder}">Sound/{b.folder}</div>{/if}
       <div class="tiles">
         {#each tiles(b) as t (t.key)}
           <span class="tl" class:kept={t.kept} style={col && t.kept ? `background: color-mix(in srgb, ${col} 18%, transparent)` : ''}><span class="w"><Waveform peaks={t.peaks} fill={col ?? (t.kept ? 'var(--sfx)' : 'rgb(var(--ink-rgb) / 0.3)')} /></span></span>
@@ -464,6 +465,9 @@
     text-transform: uppercase;
     color: #16110d;
     flex: none;
+  }
+  .fld {
+    font-size: 11px;
   }
   .kws {
     display: flex;
