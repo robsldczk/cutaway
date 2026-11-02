@@ -44,6 +44,8 @@ export interface LayoutWord {
   end_s: number;
   deleted: boolean;
   script_idx: number | null;
+  part: number;
+  muted: boolean;
 }
 
 export interface CompSegment {
@@ -61,10 +63,24 @@ export interface WordEdits {
 
 export interface PieceView {
   take_id: string;
+  source_id: string;
   src_in: number;
   src_out: number;
   start_s: number;
   len_s: number;
+  part: number;
+  muted: boolean;
+}
+
+/** A part of a line between splits (the whole line without splits), in scene time. */
+export interface LayoutPart {
+  index: number;
+  split: number | null;
+  start_s: number;
+  end_s: number;
+  muted: boolean;
+  /** Ripple-deleted: no length, sits where it was cut out. */
+  dropped: boolean;
 }
 
 export interface ItemView {
@@ -88,6 +104,12 @@ export interface ItemView {
   takes: TakeView[];
   words: LayoutWord[];
   pieces: PieceView[];
+  parts: LayoutPart[];
+  /** Every part muted / every part ripple-deleted. */
+  muted: boolean;
+  dropped: boolean;
+  fade_in_s: number;
+  fade_out_s: number;
   head_s: number;
   tail_s: number;
   comp: CompSegment[];
@@ -211,6 +233,10 @@ export interface PlacementView {
   fade_out_s: number;
   fade_curve: 'equal_power' | 'linear';
   gain_db: number;
+  muted: boolean;
+  /** Asset in point and the asset's length (trim limits). */
+  in_s: number;
+  asset_len_s: number;
   peaks: number[];
   origin: string;
 }

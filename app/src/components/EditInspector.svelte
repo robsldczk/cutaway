@@ -10,6 +10,13 @@
   const sound = $derived(sel?.kind === 'sound' ? app.edit?.placements.find((p) => p.id === sel.id) : undefined);
   const line = $derived(sel?.kind === 'line' ? app.lines.find((l) => l.line_id === sel.id) : undefined);
   const tone = $derived(sel?.kind === 'roomtone' ? app.edit?.room_tone : null);
+  const part = $derived(sel?.kind === 'line' ? (sel.part ?? 0) : 0);
+  const partView = $derived(line?.parts.find((p) => p.index === part));
+
+  async function fades(fin: number, fout: number) {
+    if (!line) return;
+    await app.cmd({ cmd: 'set_clip_fades', line_id: line.line_id, fade_in_s: fin, fade_out_s: fout });
+  }
   const laneKey = $derived(sound ? placementLane(sound) : line ? (line.character ?? '') : tone ? 'roomtone' : null);
   const mix = $derived(laneKey ? mixOf(laneKey) : null);
 
@@ -110,8 +117,15 @@
     <div class="muted src script two">{line.text}</div>
     <div class="ir"><span class="muted">Take</span><span class="iv tn">T{(line.take_index ?? 0) + 1} of {line.takes.length}</span></div>
     <label class="ir"><span class="muted">Gain</span><span class="u"><input class="iv" type="text" inputmode="decimal" value={signed(line.gain_db)} onchange={(e) => { const n = num(e); if (n != null) void app.cmd({ cmd: 'set_clip_gain', line_id: line!.line_id, gain_db: n }); }} aria-label="Gain (dB)" />dB</span></label>
-    <div class="ir"><span class="muted">Pause before</span><span class="iv tn">{line.gap_before_s.toFixed(2)} s</span></div>
-    <label class="ir"><span class="muted">Pin to time</span><input type="checkbox" checked={line.pinned} onchange={(e) => app.cmd({ cmd: 'pin_clip', line_id: line!.line_id, at_s: (e.currentTarget as HTMLInputElement).checked ? line!.start_s : null })} /></label>
+    {#if line.parts.length > 1}<div class="ir"><span class="muted">Part</span><span class="iv tn">{part + 1} of {line.parts.length}</span></div>{/if}
+    <label class="ir"><span class="muted">Fade in</span><span class="u"><input class="iv" type="text" inputmode="decimal" value={Math.round(line.fade_in_s * 1000)} onchange={(e) => { const n = num(e); if (n != null) void fades(Math.max(0, n) / 1000, line!.fade_out_s); }} aria-label="Fade in (ms)" />ms</span></label>
+    <label class="ir"><span class="muted">Fade out</span><span class="u"><input class="iv" type="text" inputmode="decimal" value={Math.round(line.fade_out_s * 1000)} onchange={(e) => { const n = num(e); if (n != null) void fades(line!.fade_in_s, Math.max(0, n) / 1000); }} aria-label="Fade out (ms)" />ms</span></label>
+    <label class="ir"><span class="muted">Muted{line.parts.length > 1 ? ' (part)' : ''}</span><input type="checkbox" checked={!!partView?.muted} onchange={(e) => app.cmd({ cmd: 'set_clip_muted', line_id: line!.line_id, part, muted: (e.currentTarget as HTMLInputElement).checked })} /></label>
+    <div class="hr"></div>
+    <div class="label">Timing</div>
+    <div class="ir"><span class="muted">{line.pinned ? 'At' : 'Pause before'}</span><span class="iv tn">{(line.pinned ? line.start_s : line.gap_before_s).toFixed(2)} s</span></div>
+    <label class="ir"><span class="muted">Locked to script</span><input type="checkbox" checked={!line.pinned} onchange={(e) => app.cmd({ cmd: 'pin_clip', line_id: line!.line_id, at_s: (e.currentTarget as HTMLInputElement).checked ? null : line!.start_s })} /></label>
+    <p class="muted hint">{line.pinned ? 'Free in time: the clip stays where you put it and nothing ripples around it.' : 'Follows the script order; moving it changes the pause before it.'}</p>
   {:else if tone}
     <div class="label">Room tone</div>
     <div class="ttl ellip">{tone.source || 'Room tone'}</div>

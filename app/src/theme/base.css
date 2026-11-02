@@ -303,3 +303,15 @@ textarea {
   font-size: 12px;
   line-height: 1;
 }
+
+/* Clip mute and ripple delete (Edit page), shown on every page */
+.clip-muted {
+  filter: grayscale(0.9);
+  opacity: 0.45 !important;
+}
+.clip-dropped {
+  opacity: 0.35 !important;
+}
+.clip-dropped .script {
+  text-decoration: line-through;
+}

@@ -12,7 +12,7 @@ use crate::error::{CoreError, Result};
 use crate::fountain::ParsedScript;
 use crate::ids::new_id;
 use crate::model::*;
-use crate::timeline::{effective_gap, layout_scene, placement_start};
+use crate::timeline::{effective_gap, layout_scene, placement_start, ItemKind, SceneLayout};
 
 /// Analysis output applied in one undoable step.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, JsonSchema)]
@@ -39,6 +39,14 @@ pub struct AnalysisPayload {
     pub assets: Vec<Asset>,
     #[serde(default)]
     pub buckets: Vec<SoundBucket>,
+}
+
+/// A clip edge for trims.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ClipEdge {
+    Start,
+    End,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema)]
@@ -161,12 +169,63 @@ pub enum Command {
         line_id: String,
         gain_db: f64,
     },
+    /// Splits a dialogue clip at scene time `at_s` (Edit page).
     SplitClip {
         line_id: String,
         at_s: f64,
     },
     ClearSplits {
         line_id: String,
+    },
+    /// Moves one part of a split clip; part 0 moves the whole clip (like `move_clip`).
+    MoveSegment {
+        line_id: String,
+        part: usize,
+        delta_s: f64,
+        #[serde(default = "yes")]
+        ripple: bool,
+    },
+    /// Mutes a part (or the whole line): silent, but it keeps its time.
+    SetClipMuted {
+        line_id: String,
+        #[serde(default)]
+        part: Option<usize>,
+        muted: bool,
+    },
+    /// Ripple delete (`dropped: true`): the part (or line) leaves the cut and the time
+    /// closes up. `false` restores it.
+    SetClipDropped {
+        line_id: String,
+        #[serde(default)]
+        part: Option<usize>,
+        dropped: bool,
+    },
+    /// Moves a clip edge by `delta_s` (positive = later). The audio stays where it is;
+    /// a later end ripples unless `ripple` is off. Limited to the source file.
+    TrimClip {
+        line_id: String,
+        #[serde(default)]
+        part: usize,
+        edge: ClipEdge,
+        delta_s: f64,
+        #[serde(default = "yes")]
+        ripple: bool,
+    },
+    /// Moves a placed sound's edge by `delta_s` (the sound stays where it is).
+    TrimPlacement {
+        placement_id: String,
+        edge: ClipEdge,
+        delta_s: f64,
+    },
+    /// Fades at the start and end of a dialogue line (at least the short edge fade).
+    SetClipFades {
+        line_id: String,
+        fade_in_s: f64,
+        fade_out_s: f64,
+    },
+    /// Several commands as one step (one undo), applied in order.
+    Batch {
+        commands: Vec<Command>,
     },
     UseUnmatched {
         unmatched_id: String,
@@ -308,6 +367,13 @@ impl Command {
             Command::SetClipGain { .. } => "set_clip_gain",
             Command::SplitClip { .. } => "split_clip",
             Command::ClearSplits { .. } => "clear_splits",
+            Command::MoveSegment { .. } => "move_segment",
+            Command::SetClipMuted { .. } => "set_clip_muted",
+            Command::SetClipDropped { .. } => "set_clip_dropped",
+            Command::TrimClip { .. } => "trim_clip",
+            Command::TrimPlacement { .. } => "trim_placement",
+            Command::SetClipFades { .. } => "set_clip_fades",
+            Command::Batch { .. } => "batch",
             Command::UseUnmatched { .. } => "use_unmatched",
             Command::SetRoomTone { .. } => "set_room_tone",
             Command::AddCue { .. } => "add_cue",
@@ -355,6 +421,9 @@ impl Command {
             }),
             Command::AddSources { sources } => json!({
                 "files": sources.iter().map(|s| s.original_name.clone()).collect::<Vec<_>>()
+            }),
+            Command::Batch { commands } => json!({
+                "commands": commands.iter().map(|c| c.log_params()).collect::<Vec<_>>()
             }),
             other => serde_json::to_value(other).unwrap_or(Value::Null),
         }
@@ -550,10 +619,19 @@ impl Command {
                     .iter()
                     .position(|x| x == item_id)
                     .ok_or_else(|| CoreError::not_found("item", item_id))?;
+                let first_before = first_locked(tx.doc(), &sc, &pacing);
                 let item = sc.order.remove(from);
                 let to = (*to_index).min(sc.order.len());
                 sc.order.insert(to, item);
                 tx.put(&sc)?;
+                // a pause belongs between two lines: the line that now opens the scene drops it
+                let first = first_locked(tx.doc(), &sc, &pacing);
+                if let Some(id) = first.filter(|f| Some(f) != first_before.as_ref()) {
+                    let mut b = boxed(tx, &id)?;
+                    if b.gap_s.take().is_some() {
+                        tx.put(&b)?;
+                    }
+                }
                 Ok(json!({ "index": to }))
             }
             Command::SetSceneTightness {
@@ -637,12 +715,7 @@ impl Command {
                 tx.put(&b)?;
                 Ok(Value::Null)
             }
-            Command::PinClip { line_id, at_s } => {
-                let mut b = boxed(tx, line_id)?;
-                b.pinned_s = *at_s;
-                tx.put(&b)?;
-                Ok(Value::Null)
-            }
+            Command::PinClip { line_id, at_s } => pin_clip(tx, line_id, *at_s, &pacing),
             Command::MoveClip {
                 line_id,
                 delta_s,
@@ -654,18 +727,64 @@ impl Command {
                 tx.put(&b)?;
                 Ok(Value::Null)
             }
-            Command::SplitClip { line_id, at_s } => {
+            Command::SplitClip { line_id, at_s } => split_clip(tx, line_id, *at_s, &pacing),
+            Command::ClearSplits { line_id } => {
                 let mut b = boxed(tx, line_id)?;
-                b.splits.push(*at_s);
-                b.splits.sort_by(f64::total_cmp);
+                b.split_points.clear();
                 tx.put(&b)?;
                 Ok(Value::Null)
             }
-            Command::ClearSplits { line_id } => {
+            Command::MoveSegment {
+                line_id,
+                part,
+                delta_s,
+                ripple,
+            } => {
+                if *part == 0 {
+                    move_clip(tx, line_id, *delta_s, *ripple, &pacing)
+                } else {
+                    move_segment(tx, line_id, *part, *delta_s, *ripple, &pacing)
+                }
+            }
+            Command::SetClipMuted {
+                line_id,
+                part,
+                muted,
+            } => set_part_flag(tx, line_id, *part, &pacing, |m, _| *m = *muted),
+            Command::SetClipDropped {
+                line_id,
+                part,
+                dropped,
+            } => set_part_flag(tx, line_id, *part, &pacing, |_, d| *d = *dropped),
+            Command::TrimClip {
+                line_id,
+                part,
+                edge,
+                delta_s,
+                ripple,
+            } => trim_clip(tx, line_id, *part, *edge, *delta_s, *ripple, &pacing),
+            Command::TrimPlacement {
+                placement_id,
+                edge,
+                delta_s,
+            } => trim_placement(tx, placement_id, *edge, *delta_s, &pacing),
+            Command::SetClipFades {
+                line_id,
+                fade_in_s,
+                fade_out_s,
+            } => {
                 let mut b = boxed(tx, line_id)?;
-                b.splits.clear();
+                b.fade_in_s = ms(fade_in_s.max(0.0));
+                b.fade_out_s = ms(fade_out_s.max(0.0));
                 tx.put(&b)?;
                 Ok(Value::Null)
+            }
+            Command::Batch { commands } => {
+                let mut out = Vec::with_capacity(commands.len());
+                for c in commands {
+                    out.push(c.apply(tx)?);
+                }
+                Ok(Value::Array(out))
             }
             Command::UseUnmatched {
                 unmatched_id,
@@ -1136,34 +1255,347 @@ fn move_clip(
     let layout = layout_scene(tx.doc(), &scene, pacing);
     let mut b = boxed(tx, line_id)?;
     if let Some(p) = b.pinned_s {
-        b.pinned_s = Some((p + delta).max(0.0));
+        // unlocked: out of the chain, nothing else moves
+        b.pinned_s = Some(ms((p + delta).max(0.0)));
         tx.put(&b)?;
         return Ok(Value::Null);
     }
     let cur = layout.item(line_id).map(|i| i.gap_before_s).unwrap_or(0.0);
-    b.gap_s = Some(((cur + delta) * 1000.0).round() / 1000.0);
+    b.gap_s = Some(ms(cur + delta));
     tx.put(&b)?;
     if !ripple {
-        // Keep the next box where it was.
-        let pos = scene.order.iter().position(|x| x == line_id);
-        let next = pos.and_then(|p| {
-            scene.order[p + 1..].iter().find(|id| {
-                layout
-                    .item(id)
-                    .map(|i| i.kind == crate::timeline::ItemKind::Box && !i.pieces.is_empty())
-                    .unwrap_or(false)
-            })
-        });
-        if let Some(nid) = next {
-            let ng = layout.item(nid).map(|i| i.gap_before_s).unwrap_or(0.0);
-            let mut nb = boxed(tx, nid)?;
-            if nb.pinned_s.is_none() {
-                nb.gap_s = Some(((ng - delta) * 1000.0).round() / 1000.0);
-                tx.put(&nb)?;
-            }
-        }
+        hold_next(tx, &scene, line_id, &layout, pacing)?;
     }
     Ok(Value::Null)
+}
+
+/// The line that opens a scene's chain (the first locked line on the timeline).
+fn first_locked(doc: &Document, scene: &Scene, pacing: &crate::timeline::Pacing) -> Option<String> {
+    layout_scene(doc, scene, pacing)
+        .items
+        .into_iter()
+        .find(|i| i.kind == ItemKind::Box && !i.pieces.is_empty() && !i.pinned)
+        .map(|i| i.item_id)
+}
+
+/// Rounds to whole milliseconds (stored timing values).
+fn ms(x: f64) -> f64 {
+    (x * 1000.0).round() / 1000.0
+}
+
+/// Shortest clip or part a trim leaves.
+const MIN_KEEP_S: f64 = 0.05;
+
+/// After a change to `line_id`, puts the next locked clip back where it was in `before`.
+fn hold_next(
+    tx: &mut Tx,
+    scene: &Scene,
+    line_id: &str,
+    before: &SceneLayout,
+    pacing: &crate::timeline::Pacing,
+) -> Result<()> {
+    let Some(pos) = scene.order.iter().position(|x| x == line_id) else {
+        return Ok(());
+    };
+    let next = scene.order[pos + 1..].iter().find(|id| {
+        before
+            .item(id)
+            .map(|i| i.kind == ItemKind::Box && !i.pieces.is_empty() && !i.pinned)
+            .unwrap_or(false)
+    });
+    let Some(nid) = next.cloned() else {
+        return Ok(());
+    };
+    let after = layout_scene(tx.doc(), scene, pacing);
+    let (Some(old), Some(new)) = (before.item(&nid), after.item(&nid)) else {
+        return Ok(());
+    };
+    let drift = new.start_s - old.start_s;
+    if drift.abs() < 1e-6 {
+        return Ok(());
+    }
+    let mut nb = boxed(tx, &nid)?;
+    nb.gap_s = Some(ms(new.gap_before_s - drift));
+    tx.put(&nb)?;
+    Ok(())
+}
+
+/// Unlocks a clip at `at_s` (free in time, out of the chain) or, with `None`, locks it
+/// again where it is. Either way the next locked clip stays put.
+fn pin_clip(
+    tx: &mut Tx,
+    line_id: &str,
+    at_s: Option<f64>,
+    pacing: &crate::timeline::Pacing,
+) -> Result<Value> {
+    let scene = scene_of(tx, line_id)?;
+    let before = layout_scene(tx.doc(), &scene, pacing);
+    let start = before
+        .item(line_id)
+        .map(|i| i.start_s)
+        .ok_or_else(|| CoreError::not_found("line", line_id))?;
+    let mut b = boxed(tx, line_id)?;
+    match at_s {
+        Some(t) => b.pinned_s = Some(ms(t.max(0.0))),
+        None => {
+            if b.pinned_s.is_none() {
+                return Ok(json!({ "start_s": start }));
+            }
+            // the pin becomes a pause after the last locked clip
+            b.pinned_s = None;
+            b.gap_s = Some(0.0);
+            tx.put(&b)?;
+            let probe = layout_scene(tx.doc(), &scene, pacing);
+            let at = probe.item(line_id).map(|i| i.start_s).unwrap_or(start);
+            b.gap_s = Some(ms(start - at));
+        }
+    }
+    tx.put(&b)?;
+    hold_next(tx, &scene, line_id, &before, pacing)?;
+    let now = layout_scene(tx.doc(), &scene, pacing);
+    Ok(json!({ "start_s": now.item(line_id).map(|i| i.start_s) }))
+}
+
+/// The split before `part` (`None` for part 0).
+fn part_split(
+    tx: &Tx,
+    line_id: &str,
+    part: usize,
+    pacing: &crate::timeline::Pacing,
+) -> Result<Option<usize>> {
+    if part == 0 {
+        return Ok(None);
+    }
+    let scene = scene_of(tx, line_id)?;
+    layout_scene(tx.doc(), &scene, pacing)
+        .item(line_id)
+        .and_then(|i| i.parts.iter().find(|p| p.index == part))
+        .and_then(|p| p.split)
+        .map(Some)
+        .ok_or_else(|| CoreError::invalid(format!("line {line_id} has no part {part}")))
+}
+
+fn split_mut(b: &mut BoxState, k: usize) -> Result<&mut SplitPoint> {
+    let id = b.id.clone();
+    b.split_points
+        .get_mut(k)
+        .ok_or_else(|| CoreError::invalid(format!("line {id} has no split {k}")))
+}
+
+/// Sets the (muted, dropped) flags of one part, or of every part when `part` is `None`.
+fn set_part_flag(
+    tx: &mut Tx,
+    line_id: &str,
+    part: Option<usize>,
+    pacing: &crate::timeline::Pacing,
+    set: impl Fn(&mut bool, &mut bool),
+) -> Result<Value> {
+    let split = match part {
+        Some(p) => Some(part_split(tx, line_id, p, pacing)?),
+        None => None,
+    };
+    let mut b = boxed(tx, line_id)?;
+    match split {
+        None => {
+            set(&mut b.muted, &mut b.dropped);
+            for sp in b.split_points.iter_mut() {
+                set(&mut sp.muted, &mut sp.dropped);
+            }
+        }
+        Some(None) => set(&mut b.muted, &mut b.dropped),
+        Some(Some(k)) => {
+            let sp = split_mut(&mut b, k)?;
+            set(&mut sp.muted, &mut sp.dropped);
+        }
+    }
+    tx.put(&b)?;
+    Ok(Value::Null)
+}
+
+fn split_clip(
+    tx: &mut Tx,
+    line_id: &str,
+    at_s: f64,
+    pacing: &crate::timeline::Pacing,
+) -> Result<Value> {
+    let scene = scene_of(tx, line_id)?;
+    let layout = layout_scene(tx.doc(), &scene, pacing);
+    let piece = layout
+        .item(line_id)
+        .and_then(|i| {
+            i.pieces.iter().find(|p| {
+                at_s > p.start_s + crate::timeline::MIN_PART_S
+                    && at_s < p.end_s() - crate::timeline::MIN_PART_S
+            })
+        })
+        .cloned()
+        .ok_or_else(|| CoreError::invalid("no audio of this clip at that time"))?;
+    let mut b = boxed(tx, line_id)?;
+    b.split_points.push(SplitPoint {
+        take_id: piece.take_id.clone(),
+        src_s: ms(piece.src_in + (at_s - piece.start_s)),
+        muted: piece.muted,
+        ..Default::default()
+    });
+    let k = b.split_points.len() - 1;
+    tx.put(&b)?;
+    let part = layout_scene(tx.doc(), &scene, pacing)
+        .item(line_id)
+        .and_then(|i| i.parts.iter().find(|p| p.split == Some(k)).map(|p| p.index));
+    Ok(json!({ "part": part }))
+}
+
+fn move_segment(
+    tx: &mut Tx,
+    line_id: &str,
+    part: usize,
+    delta: f64,
+    ripple: bool,
+    pacing: &crate::timeline::Pacing,
+) -> Result<Value> {
+    let scene = scene_of(tx, line_id)?;
+    let before = layout_scene(tx.doc(), &scene, pacing);
+    let k = part_split(tx, line_id, part, pacing)?
+        .ok_or_else(|| CoreError::invalid("part 0 moves with move_clip"))?;
+    let mut b = boxed(tx, line_id)?;
+    let sp = split_mut(&mut b, k)?;
+    sp.offset_s = ms(sp.offset_s + delta);
+    tx.put(&b)?;
+    if !ripple {
+        hold_next(tx, &scene, line_id, &before, pacing)?;
+    }
+    Ok(Value::Null)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn trim_clip(
+    tx: &mut Tx,
+    line_id: &str,
+    part: usize,
+    edge: ClipEdge,
+    delta: f64,
+    ripple: bool,
+    pacing: &crate::timeline::Pacing,
+) -> Result<Value> {
+    let scene = scene_of(tx, line_id)?;
+    let before = layout_scene(tx.doc(), &scene, pacing);
+    let item = before
+        .item(line_id)
+        .ok_or_else(|| CoreError::not_found("line", line_id))?;
+    let lp = item
+        .parts
+        .iter()
+        .find(|p| p.index == part && !p.dropped)
+        .ok_or_else(|| {
+            CoreError::invalid(format!("line {line_id} has no part {part} in the cut"))
+        })?;
+    let own: Vec<&crate::timeline::ClipPiece> =
+        item.pieces.iter().filter(|p| p.part == part).collect();
+    let (Some(first), Some(last)) = (own.first(), own.last()) else {
+        return Err(CoreError::invalid("this part has no audio left"));
+    };
+    let room = (lp.end_s - lp.start_s - MIN_KEEP_S).max(0.0);
+    // the first kept part after this one (its offset keeps it in place)
+    let next_kept = item
+        .parts
+        .iter()
+        .find(|p| p.index > part && !p.dropped)
+        .and_then(|p| p.split);
+    let next_split = item
+        .parts
+        .iter()
+        .find(|p| p.index == part + 1)
+        .and_then(|p| p.split);
+    let source_len = tx
+        .doc()
+        .sources
+        .get(&last.source_id)
+        .map(|s| s.duration_s)
+        .filter(|d| *d > 0.0)
+        .unwrap_or(last.src_out);
+    let gap_before = item.gap_before_s;
+    let mut b = boxed(tx, line_id)?;
+    let d = match (edge, lp.split) {
+        (ClipEdge::Start, None) => {
+            let d = delta.clamp(-first.src_in, room);
+            b.head_s = ms(b.head_s + d);
+            match b.pinned_s {
+                Some(p) => b.pinned_s = Some(ms(p + d)),
+                None => b.gap_s = Some(ms(gap_before + d)),
+            }
+            d
+        }
+        (ClipEdge::Start, Some(k)) => {
+            let sp = split_mut(&mut b, k)?;
+            let d = delta.clamp(-sp.trim_after_s, room);
+            sp.trim_after_s = ms(sp.trim_after_s + d);
+            sp.offset_s = ms(sp.offset_s + d);
+            d
+        }
+        (ClipEdge::End, _) => match next_split {
+            None => {
+                let d = delta.clamp(-room, (source_len - last.src_out).max(0.0));
+                b.tail_s = ms(b.tail_s - d);
+                d
+            }
+            Some(k) => {
+                let sp = split_mut(&mut b, k)?;
+                let d = delta.clamp(-room, sp.trim_before_s);
+                sp.trim_before_s = ms(sp.trim_before_s - d);
+                if let Some(nk) = next_kept {
+                    let n = split_mut(&mut b, nk)?;
+                    n.offset_s = ms(n.offset_s - d);
+                }
+                d
+            }
+        },
+    };
+    tx.put(&b)?;
+    if !ripple {
+        hold_next(tx, &scene, line_id, &before, pacing)?;
+    }
+    Ok(json!({ "delta_s": d }))
+}
+
+fn trim_placement(
+    tx: &mut Tx,
+    placement_id: &str,
+    edge: ClipEdge,
+    delta: f64,
+    pacing: &crate::timeline::Pacing,
+) -> Result<Value> {
+    let mut p = placement(tx, placement_id)?;
+    let asset_len = tx
+        .doc()
+        .assets
+        .get(&p.asset_id)
+        .map(|a| a.duration_s)
+        .filter(|d| *d > 0.0)
+        .unwrap_or(p.in_s + p.len_s);
+    let room = (p.len_s - MIN_KEEP_S).max(0.0);
+    let d = match edge {
+        ClipEdge::Start => {
+            let d = delta.clamp(-p.in_s, room);
+            p.in_s = ms(p.in_s + d);
+            p.len_s = ms(p.len_s - d);
+            if p.anchor.is_some() {
+                p.offset_s = ms(p.offset_s + d);
+            } else {
+                p.at_s = ms(p.at_s + d);
+            }
+            d
+        }
+        ClipEdge::End => {
+            let d = delta.clamp(-room, (asset_len - p.in_s - p.len_s).max(0.0));
+            p.len_s = ms(p.len_s + d);
+            d
+        }
+    };
+    p.fade_in_s = p.fade_in_s.min(p.len_s / 2.0);
+    p.fade_out_s = p.fade_out_s.min(p.len_s / 2.0);
+    p.layer = free_layer(tx.doc(), &p, pacing);
+    tx.put(&p)?;
+    Ok(json!({ "delta_s": d }))
 }
 
 fn use_unmatched(
@@ -1779,6 +2211,239 @@ mod tests {
         assert!(
             (rip.item("c").unwrap().start_s - after.item("c").unwrap().start_s - 0.5).abs() < 1e-6
         );
+    }
+
+    fn lay(bus: &CommandBus) -> crate::timeline::SceneLayout {
+        let sc = bus.doc().scenes["sc"].clone();
+        layout_scene(bus.doc(), &sc, &crate::timeline::Pacing::default())
+    }
+
+    #[test]
+    fn unlocking_and_locking_again_keeps_every_clip_in_place() {
+        let (_d, mut bus) = setup();
+        let before = lay(&bus);
+        bus.execute(&Command::PinClip {
+            line_id: "a".into(),
+            at_s: Some(4.0),
+        })
+        .unwrap();
+        let free = lay(&bus);
+        assert!((free.item("a").unwrap().start_s - 4.0).abs() < 1e-9);
+        assert!((free.item("b").unwrap().start_s - before.item("b").unwrap().start_s).abs() < 1e-6);
+        bus.execute(&Command::PinClip {
+            line_id: "a".into(),
+            at_s: None,
+        })
+        .unwrap();
+        let locked = lay(&bus);
+        assert!(!locked.item("a").unwrap().pinned);
+        assert!((locked.item("a").unwrap().start_s - 4.0).abs() < 1e-6);
+        assert!(
+            (locked.item("b").unwrap().start_s - before.item("b").unwrap().start_s).abs() < 1e-6
+        );
+    }
+
+    #[test]
+    fn moving_the_first_clip_works() {
+        let (_d, mut bus) = setup();
+        bus.execute(&Command::MoveClip {
+            line_id: "a".into(),
+            delta_s: 0.4,
+            ripple: true,
+        })
+        .unwrap();
+        let l = lay(&bus);
+        assert!((l.item("a").unwrap().start_s - 0.4).abs() < 1e-9);
+        assert!((l.item("b").unwrap().start_s - 2.2).abs() < 1e-9);
+    }
+
+    #[test]
+    fn trimming_keeps_the_audio_in_place_and_stops_at_the_source() {
+        let (_d, mut bus) = setup();
+        let mut src = source("src", "character");
+        src.duration_s = 23.0;
+        bus.execute_fn("src", &Value::Null, |tx| tx.put(&src).map(|_| Value::Null))
+            .unwrap();
+        let before = lay(&bus);
+        let b0 = before.item("b").unwrap().clone();
+        bus.execute(&Command::TrimClip {
+            line_id: "b".into(),
+            part: 0,
+            edge: ClipEdge::Start,
+            delta_s: 0.15,
+            ripple: true,
+        })
+        .unwrap();
+        let b = lay(&bus).item("b").unwrap().clone();
+        assert!((b.start_s - b0.start_s - 0.15).abs() < 1e-6);
+        assert!((b.end_s - b0.end_s).abs() < 1e-6);
+        assert!((b.pieces[0].src_in - 20.15).abs() < 1e-6);
+        // the tail can grow only to the end of the file (22 → 23)
+        let r = bus
+            .execute(&Command::TrimClip {
+                line_id: "b".into(),
+                part: 0,
+                edge: ClipEdge::End,
+                delta_s: 5.0,
+                ripple: true,
+            })
+            .unwrap();
+        assert!((r.result["delta_s"].as_f64().unwrap() - 1.0).abs() < 1e-6);
+        assert!((lay(&bus).item("b").unwrap().pieces[0].src_out - 23.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn split_mute_and_ripple_delete_a_part() {
+        let (_d, mut bus) = setup();
+        let b0 = lay(&bus).item("b").unwrap().clone();
+        let r = bus
+            .execute(&Command::SplitClip {
+                line_id: "b".into(),
+                at_s: b0.start_s + 1.0,
+            })
+            .unwrap();
+        assert_eq!(r.result["part"], 1);
+        bus.execute(&Command::SetClipMuted {
+            line_id: "b".into(),
+            part: Some(1),
+            muted: true,
+        })
+        .unwrap();
+        let b = lay(&bus).item("b").unwrap().clone();
+        assert!(b.pieces[1].muted && !b.pieces[0].muted);
+        assert!((b.end_s - b0.end_s).abs() < 1e-6);
+        bus.execute(&Command::SetClipDropped {
+            line_id: "b".into(),
+            part: Some(1),
+            dropped: true,
+        })
+        .unwrap();
+        let b = lay(&bus).item("b").unwrap().clone();
+        assert!((b.end_s - b0.start_s - 1.0).abs() < 1e-6);
+        bus.undo().unwrap();
+        assert!((lay(&bus).item("b").unwrap().end_s - b0.end_s).abs() < 1e-6);
+        bus.execute(&Command::SetClipDropped {
+            line_id: "b".into(),
+            part: None,
+            dropped: true,
+        })
+        .unwrap();
+        assert!(lay(&bus).item("b").unwrap().dropped);
+        assert!(bus
+            .execute(&Command::SetClipMuted {
+                line_id: "b".into(),
+                part: Some(5),
+                muted: true
+            })
+            .is_err());
+    }
+
+    #[test]
+    fn moving_a_part_without_ripple_keeps_the_next_clip() {
+        let (_d, mut bus) = setup();
+        let b0 = lay(&bus).item("b").unwrap().clone();
+        bus.execute(&Command::SplitClip {
+            line_id: "b".into(),
+            at_s: b0.start_s + 1.0,
+        })
+        .unwrap();
+        bus.execute(&Command::MoveSegment {
+            line_id: "b".into(),
+            part: 1,
+            delta_s: 0.3,
+            ripple: true,
+        })
+        .unwrap();
+        let b = lay(&bus).item("b").unwrap().clone();
+        assert!((b.parts[1].start_s - b0.start_s - 1.3).abs() < 1e-6);
+        assert!((b.end_s - b0.end_s - 0.3).abs() < 1e-6);
+    }
+
+    #[test]
+    fn trimming_a_sound_stops_at_the_asset() {
+        let (_d, mut bus) = setup();
+        let asset: Asset = serde_json::from_value(json!({
+            "id": "as", "file": "door.wav", "hash": "h", "duration_s": 2.0, "source": "imported",
+        }))
+        .unwrap();
+        let pl: Placement = serde_json::from_value(json!({
+            "id": "p", "scene_id": "sc", "asset_id": "as", "lane": "sfx",
+            "at_s": 1.0, "in_s": 0.5, "len_s": 1.0,
+        }))
+        .unwrap();
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            tx.put(&asset)?;
+            tx.put(&pl)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        bus.execute(&Command::TrimPlacement {
+            placement_id: "p".into(),
+            edge: ClipEdge::Start,
+            delta_s: -2.0,
+        })
+        .unwrap();
+        let p = bus.doc().placements["p"].clone();
+        assert!(
+            (p.in_s).abs() < 1e-9 && (p.at_s - 0.5).abs() < 1e-9 && (p.len_s - 1.5).abs() < 1e-9
+        );
+        bus.execute(&Command::TrimPlacement {
+            placement_id: "p".into(),
+            edge: ClipEdge::End,
+            delta_s: 9.0,
+        })
+        .unwrap();
+        assert!((bus.doc().placements["p"].len_s - 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_batch_is_one_undo_step() {
+        let (_d, mut bus) = setup();
+        let before = lay(&bus);
+        bus.execute(&Command::Batch {
+            commands: vec![
+                Command::SetClipMuted {
+                    line_id: "a".into(),
+                    part: None,
+                    muted: true,
+                },
+                Command::MoveClip {
+                    line_id: "b".into(),
+                    delta_s: 0.5,
+                    ripple: true,
+                },
+                Command::SetClipFades {
+                    line_id: "b".into(),
+                    fade_in_s: 0.2,
+                    fade_out_s: 0.0,
+                },
+            ],
+        })
+        .unwrap();
+        let l = lay(&bus);
+        assert!(l.item("a").unwrap().muted);
+        assert!((l.item("b").unwrap().pieces[0].fade_in_s - 0.2).abs() < 1e-9);
+        bus.undo().unwrap();
+        assert_eq!(lay(&bus), before);
+    }
+
+    #[test]
+    fn a_line_moved_to_the_top_drops_its_pause() {
+        let (_d, mut bus) = setup();
+        bus.execute(&Command::SetGap {
+            line_id: "b".into(),
+            gap_s: Some(1.2),
+        })
+        .unwrap();
+        bus.execute(&Command::MoveItem {
+            scene_id: "sc".into(),
+            item_id: "b".into(),
+            to_index: 0,
+        })
+        .unwrap();
+        let l = lay(&bus);
+        assert!(l.item("b").unwrap().start_s.abs() < 1e-9);
+        assert!(bus.doc().boxes["b"].gap_s.is_none());
     }
 
     #[test]

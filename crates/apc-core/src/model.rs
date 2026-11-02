@@ -625,9 +625,20 @@ pub struct BoxState {
     pub pinned_s: Option<f64>,
     #[serde(default)]
     pub gain_db: f64,
-    /// Split points in box time (Edit page).
+    /// Split points (Edit page), in source order once laid out.
     #[serde(default)]
-    pub splits: Vec<f64>,
+    pub split_points: Vec<SplitPoint>,
+    /// The first part (the whole line without splits) is silent but keeps its time.
+    #[serde(default)]
+    pub muted: bool,
+    /// The first part is left out and the time closes up (ripple delete).
+    #[serde(default)]
+    pub dropped: bool,
+    /// Fades at the start and end of the line (the edge fade is the minimum).
+    #[serde(default)]
+    pub fade_in_s: f64,
+    #[serde(default)]
+    pub fade_out_s: f64,
     /// Old pick kept as a suggestion after a script change.
     #[serde(default)]
     pub suggested_take: Option<String>,
@@ -646,8 +657,45 @@ impl Entity for BoxState {
 impl BoxState {
     /// True when the box holds edits the Options/Arrange pages cannot show.
     pub fn edited_in_edit(&self) -> bool {
-        self.pinned_s.is_some() || !self.splits.is_empty()
+        self.pinned_s.is_some() || !self.split_points.is_empty()
     }
+
+    /// Number of parts the splits cut the line into.
+    pub fn parts(&self) -> usize {
+        self.split_points.len() + 1
+    }
+
+    /// Mute state of every part.
+    pub fn all_muted(&self) -> bool {
+        self.muted && self.split_points.iter().all(|s| s.muted)
+    }
+
+    /// Drop state of every part.
+    pub fn all_dropped(&self) -> bool {
+        self.dropped && self.split_points.iter().all(|s| s.dropped)
+    }
+}
+
+/// A split of a dialogue clip, by source time so it survives trims and word edits.
+/// It holds the state of the part after it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, schemars::JsonSchema)]
+pub struct SplitPoint {
+    pub take_id: String,
+    /// Source time of the split.
+    pub src_s: f64,
+    /// Extra time before the part after the split (negative overlaps the part before).
+    #[serde(default)]
+    pub offset_s: f64,
+    /// Trimmed from the end of the part before the split (≥ 0).
+    #[serde(default)]
+    pub trim_before_s: f64,
+    /// Trimmed from the start of the part after the split (≥ 0).
+    #[serde(default)]
+    pub trim_after_s: f64,
+    #[serde(default)]
+    pub muted: bool,
+    #[serde(default)]
+    pub dropped: bool,
 }
 
 /// Spacer for an action line (id = action line id).
@@ -778,6 +826,9 @@ pub struct Placement {
     pub fade_curve: FadeCurve,
     #[serde(default)]
     pub gain_db: f64,
+    /// Silent but kept in place (Edit page clip mute).
+    #[serde(default)]
+    pub muted: bool,
 }
 entity!(Placement, Placement, parent = scene_id);
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ClipState from '../components/ClipState.svelte';
   import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { clamp, fmt } from '../lib/format';
@@ -210,13 +211,14 @@
     {@const tc = inWord(r.it, tr.t)}
     {@const shd = itemShade(app.view, r.it)}
     {@const prevGap = i > 0 ? gapOf(rows[i - 1]) : 0}
-    <div class="snip" bind:this={rowEls[r.it.line_id]} style={rowStyle(r, prevGap)} onclick={() => app.select(r.it.line_id)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} role="button" tabindex="-1" onkeydown={() => {}} data-testid="arrange-row">
+    <div class="snip" class:clip-muted={r.it.muted} class:clip-dropped={r.it.dropped} bind:this={rowEls[r.it.line_id]} style={rowStyle(r, prevGap)} onclick={() => app.select(r.it.line_id)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} role="button" tabindex="-1" onkeydown={() => {}} data-testid="arrange-row">
       <div class="top">
         <span class="grip" onmousedown={(e) => grabRow(e, r.it)} title="Drag to reorder" aria-label="Drag to reorder" role="button" tabindex="-1">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg>
         </span>
         <span class="nm who" style="color: {charColor(app.view, r.it.character).name}">{charLabel(app.view, r.it.character)}</span>
-        <span class="script ellip txt" style="font-size: {Math.round(15 * sc)}px">{r.it.words.length ? r.it.words.filter((w) => !w.deleted).map((w) => w.text).join(' ') : r.it.text}</span>
+        <span class="script ellip txt" style="font-size: {Math.round(15 * sc)}px">{#if r.it.words.length && !r.it.dropped}{#each r.it.words.filter((w) => !w.deleted) as w, wi (w.idx)}{wi ? ' ' : ''}<span class:wmuted={w.muted}>{w.text}</span>{/each}{:else}{r.it.text}{/if}</span>
+        <ClipState it={r.it} />
         {#if r.it.moved}<span class="badge moved">Moved</span>{/if}
         {#if hc || tc}<span class="badge cuts">Cuts a word</span>{/if}
         <span class="dur">{(r.it.end_s - r.it.start_s).toFixed(1)} s</span>
@@ -259,6 +261,9 @@
     position: absolute;
     left: 50%;
     top: 50%;
+  }
+  .wmuted {
+    color: var(--text-dim);
   }
   .snip {
     position: relative;

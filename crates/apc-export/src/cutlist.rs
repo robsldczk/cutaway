@@ -63,7 +63,11 @@ pub fn rows(doc: &Document, paths: &EpisodePaths, tl: &EpisodeTimeline) -> Vec<R
                 rec_out: tc(c.rec_out()),
                 direction: c.direction.clone(),
                 feedback: c.feedback.clone(),
-                text: c.text.clone(),
+                text: if c.muted {
+                    format!("(muted) {}", c.text)
+                } else {
+                    c.text.clone()
+                },
             }
         })
         .collect()

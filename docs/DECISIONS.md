@@ -237,3 +237,33 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Measured:** a plain `claude -p` call carries Claude Code's own system prompt and tool definitions (~34k tokens, about $0.045 API-equivalent even for a one-line answer), and can take several turns using tools (a 15 kB synthetic input: $0.149, several turns). The room-classification step sent each scene's director speech from every session in the time window (every session clock starts at zero): 196 kB per call on average, 79 % of all input.
 - **Choice:** the provider calls `claude -p --output-format json --model … --effort … --tools "" --system-prompt <one line> --strict-mcp-config --disable-slash-commands --no-session-persistence`. The same 15 kB input: one turn, $0.043. Effort now goes through `--effort` (supersedes the environment variable of D24). `--bare` is not used: it requires an API key and would bypass the subscription login. Room classification gets only the director mic of each take's own session, within the note windows around the takes (30 s before, 8 s after): 30 kB per call on average, same takes and picks. Every AI call logs its input size and, from the CLI, tokens and API-equivalent cost in `Logs/ai-calls.jsonl`.
 - **Notes:** condensed notes may be longer than a few words (Rob); only a note over 40 words (a copied transcript) is refused.
+
+### D54 Edit page: a fixed time scale (Rob, 2026-11-02, M11)
+- **Finding:** the scale was "fit the scene" times a 0..1 zoom, so a clip moved past the end, a gap change or opening the inspector or bucket rescaled the whole timeline.
+- **Choice:** zoom is an absolute px per second (2–1000), kept for the session. The first visit fits the scene once; after that only zoom actions change it. Scene length only changes how far you can scroll. ⌘-scroll anchors to the pointer, ⌘←/→ to the playhead (or the middle when it is off screen), Z zooms to the selection or the scene and back, the slider is logarithmic.
+
+### D55 Dialogue splits by source time, each part with its own state (M11)
+- **Finding:** `split_clip` stored split points in box time, but nothing (layout, playback, export) read them: splitting a dialogue clip did nothing.
+- **Options:** split points in box time (shift with every trim, comp change or word delete); split a line into separate boxes (breaks the one-line-one-box script model the Options/Arrange pages are built on); split points in source time.
+- **Choice:** `BoxState.split_points` holds take + source time per split, plus the state of the part after it: offset (extra time before it), trims on either side, mute and drop. Part 0's mute and drop live on the box. The layout cuts pieces at split points; parts start at the end of the last kept part plus their offset; dropped parts close up. A split alone plays exactly as before (no fades at the split). Old box-time `splits` are ignored (they never had an effect).
+- **Limits:** inner edges trim only inwards (the audio on the other side belongs to the neighbouring part); a split whose take is no longer in the comp is ignored until the take comes back.
+
+### D56 Clip mute and ripple delete (Rob, 2026-11-02, M11)
+- **Rob:** a muted clip keeps its slot; ripple delete is a separate function.
+- **Choice:** `set_clip_muted` (part or whole line) and `muted` on placements: kept in the layout, skipped by the play schedule (so playback and bounce), exported as `enabled="0"` clips in FCPXML (Resolve keeps them, switched off), left out of SRT, "(muted)" in the cut list. `set_clip_dropped` is ripple delete: the part leaves the cut and the time closes up; it stays restorable (✂ mark on the Edit page, a "Cut · restore" badge on Options and Arrange, ⌃M there restores). ⌫ on dialogue follows the Ripple switch: ripple delete when on, mute when off. ⌫ on a sound removes it.
+- **Why not delete dialogue for real:** lines belong to the script; a dropped line keeps its take and edits, so restoring is lossless.
+
+### D57 Lock to script = pinned clips leave the ripple chain (Rob, 2026-11-02, M11)
+- **Rob:** lock and unlock the pairing to move clips freely.
+- **Choice:** the control bar's Lock switch and a lock on each clip. Locked clips change their pause when moved (today's model). Moving with Lock off pins the clip to absolute time (`pin_clip`); the clip's own lock toggles it. Pinned clips are now **out of the chain**: the next line follows the last locked line, so a free clip never pushes anything (before: a pinned clip pushed later lines when it reached them). Unpinning keeps the clip where it is (its position becomes a pause); pinning and unpinning keep the next locked line in place.
+- **Related:** the first locked line now honours its pause (moving the first clip did nothing before; unlocking line 1 would otherwise pull line 2 to zero). A line reordered to the top drops its pause, so a reorder never adds silence at the start.
+- **Check for existing episodes:** clips pinned before this change no longer push later lines; look at scenes with "pinned" clips once.
+
+### D58 Waveforms from the cached peaks, per piece (M11)
+- **Choice:** each piece of a clip draws its own source range (the take envelope stretched over a trimmed or comped clip did not match what plays). `peaks_batch` fetches the visible pieces at about one point per 2 px, normalized per file like the take envelopes, cached in the page. Detail tops out at the cached 100 points per second (10 ms), enough for breaths, word gaps and plosives; sample-level zoom would need decoding on demand (not done). Vertical zoom: lane height (⌘↑/↓) and waveform height ×1–8.
+
+### D59 Edit page keys follow Logic Pro (Rob, 2026-11-02, M11)
+- **Rob:** Return stays "play line in context"; ←/→ select the previous/next clip on the Edit page only (takes elsewhere); scrubbing is silent.
+- **Choice:** Space, C, I, X, ⌥←/→ nudge as before; ⌘T split at the playhead; ⌃M mute; ⌘←/→ zoom, ⌘↑/↓ lane height, Z zoom toggle; T opens the tool menu, then T pointer, I scissors, A fade, G gain, R marquee; M/S mute/solo the selected lane; ⇧F select all following; ⌘A all; ⌘U cycle to the selection; , and . move the playhead to the previous/next word (Logic: one bar; there are no bars here, words are the grid).
+- **Not verified against Logic's default key commands (check with ⌥K):** ⌥[ / ⌥] for trim start/end to the playhead, the G letter for gain (Logic has no gain tool), ⌃M for region mute.
+- **Multi-clip changes** go through a new `batch` command, so a move, mute or delete of a selection is one undo step.

@@ -1,6 +1,7 @@
 <script lang="ts">
   // Symmetric envelope from normalized peaks (0..1), drawn like the prototype (viewBox 200×40).
-  let { peaks, fill, class: cls = '' }: { peaks: number[]; fill: string; class?: string } = $props();
+  // `gain` is the vertical waveform zoom (the Edit page).
+  let { peaks, fill, gain = 1, class: cls = '' }: { peaks: number[]; fill: string; gain?: number; class?: string } = $props();
   const path = $derived.by(() => {
     const n = peaks.length;
     if (n === 0) return 'M0 20 L200 20 Z';
@@ -8,7 +9,7 @@
     const bot: string[] = [];
     for (let i = 0; i < n; i++) {
       const x = (i / Math.max(1, n - 1)) * 200;
-      const h = Math.max(0.4, Math.min(1, peaks[i]) * 18);
+      const h = Math.max(0.4, Math.min(1, peaks[i] * gain) * 18);
       top += `${i ? 'L' : 'M'}${x.toFixed(1)} ${(20 - h).toFixed(1)}`;
       bot.push(`L${x.toFixed(1)} ${(20 + h).toFixed(1)}`);
     }

@@ -111,7 +111,8 @@ impl PlaySchedule {
     ) -> Self {
         let mut clips = Vec::new();
         for item in &layout.items {
-            for p in &item.pieces {
+            // muted parts keep their time but are not heard
+            for p in item.pieces.iter().filter(|p| !p.muted) {
                 let mut gain = p.gain_db;
                 if settings.loudness_match {
                     let lufs = doc.takes.get(&p.take_id).and_then(|t| t.lufs);
@@ -135,7 +136,11 @@ impl PlaySchedule {
         }
         let mut duration = layout.duration_s;
         if settings.include_sound {
-            for p in doc.placements.values().filter(|p| p.scene_id == scene.id) {
+            for p in doc
+                .placements
+                .values()
+                .filter(|p| p.scene_id == scene.id && !p.muted)
+            {
                 let start = placement_start(layout, p);
                 clips.push(ScheduledClip {
                     source_id: format!("asset:{}", p.asset_id),
@@ -322,6 +327,18 @@ mod tests {
     }
 
     #[test]
+    fn muted_clips_keep_their_time_but_are_not_scheduled() {
+        let (mut doc, scene) = sample_doc();
+        let p = Pacing::default();
+        doc.boxes.get_mut("a").unwrap().muted = true;
+        let s = PlaySchedule::from_scene(&doc, &scene, &p, &MixSettings::default());
+        assert_eq!(s.clips.len(), 1);
+        assert_eq!(s.clips[0].owner, "b");
+        assert!((s.clips[0].start_s - 1.8).abs() < 1e-9);
+        assert!((s.duration_s - 3.8).abs() < 1e-9);
+    }
+
+    #[test]
     fn lane_mix_mutes_solos_and_sets_volume_and_pan() {
         use apc_core::LaneMix;
         let (mut doc, scene) = sample_doc();
@@ -401,6 +418,7 @@ mod tests {
                 fade_out_s: 0.0,
                 fade_curve: Default::default(),
                 gain_db: 0.0,
+                muted: false,
             },
         );
         doc.locations.insert(

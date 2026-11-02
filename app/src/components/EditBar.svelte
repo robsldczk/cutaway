@@ -1,19 +1,14 @@
 <script lang="ts">
   // The Edit page's control bar, modelled on Logic: inspector and mixer toggles, tools,
-  // transport with cycle and a time display, snap, ripple, zoom and the bucket toggle.
-  import { app, type Tool } from '../lib/app.svelte';
+  // transport with cycle and a time display, snap, ripple, lock, zoom and the bucket toggle.
+  import { app } from '../lib/app.svelte';
   import { fmt } from '../lib/format';
+  import { TOOLS } from '../lib/tools';
   import Icon from './Icon.svelte';
 
-  let { zoom = $bindable(0), lcdDetail }: { zoom: number; lcdDetail: string } = $props();
+  let { onZoom, lcdDetail }: { onZoom: (px: number) => void; lcdDetail: string } = $props();
 
-  const tools: { id: Tool; label: string }[] = [
-    { id: 'pointer', label: 'Pointer' },
-    { id: 'split', label: 'Split' },
-    { id: 'fade', label: 'Fade' },
-    { id: 'gain', label: 'Gain' },
-    { id: 'marquee', label: 'Marquee' },
-  ];
+  const WAVE = [1, 2, 4, 8];
 
   function toStart() {
     if (app.playing) void app.stop();
@@ -26,8 +21,8 @@
   <button class="ib" class:on={app.mixer} aria-label="Mixer (X)" title="Mixer (X)" aria-pressed={app.mixer} onclick={() => (app.mixer = !app.mixer)}><Icon name="mixer" size={17} stroke={1.8} /></button>
   <span class="sep" aria-hidden="true"></span>
   <div class="tools" role="group" aria-label="Tools">
-    {#each tools as t (t.id)}
-      <button class="ib" class:on={app.tool === t.id} aria-label={t.label} title={t.label} aria-pressed={app.tool === t.id} onclick={() => (app.tool = t.id)}><Icon name={t.id} stroke={1.8} /></button>
+    {#each TOOLS as t (t.id)}
+      <button class="ib" class:on={app.tool === t.id} aria-label={t.label} title="{t.label} (T {t.key})" aria-pressed={app.tool === t.id} onclick={() => (app.tool = t.id)}><Icon name={t.id} stroke={1.8} /></button>
     {/each}
   </div>
   <span class="flex"></span>
@@ -40,8 +35,10 @@
   </div>
   <span class="flex"></span>
   <button class="btn" class:act={app.snapWords} aria-pressed={app.snapWords} onclick={() => (app.snapWords = !app.snapWords)} title="Snap to words and action lines">Snap: {app.snapWords ? 'words' : 'off'}</button>
-  <button class="btn" class:act={app.ripple} aria-pressed={app.ripple} onclick={() => (app.ripple = !app.ripple)} title="Ripple moves everything after a clip (⌥-drag inverts)">Ripple</button>
-  <input type="range" min="0" max="1" step="0.01" bind:value={zoom} aria-label="Zoom" class="zoom" />
+  <button class="btn" class:act={app.ripple} aria-pressed={app.ripple} onclick={() => (app.ripple = !app.ripple)} title="Ripple moves everything after a clip (⌥-drag inverts); ⌫ then ripple-deletes dialogue">Ripple</button>
+  <button class="btn" class:act={app.lockScript} aria-pressed={app.lockScript} onclick={() => (app.lockScript = !app.lockScript)} title="Locked: dialogue follows the script order and pauses. Unlocked: dialogue moves freely in time"><Icon name={app.lockScript ? 'lock' : 'unlock'} size={13} />Lock</button>
+  <button class="btn tn" onclick={() => (app.waveGain = WAVE[(WAVE.indexOf(app.waveGain) + 1) % WAVE.length])} title="Waveform height" aria-label="Waveform height">Wave ×{app.waveGain}</button>
+  <input type="range" min={Math.log(2)} max={Math.log(1000)} step="0.01" value={Math.log(app.editPx || 50)} oninput={(e) => onZoom(Math.exp(+(e.currentTarget as HTMLInputElement).value))} aria-label="Zoom" title="Zoom (⌘← ⌘→, Z)" class="zoom" />
   <button class="btn" class:act={app.editBucket} aria-pressed={app.editBucket} onclick={() => (app.editBucket = !app.editBucket)}>Bucket <span class="kb">B</span></button>
 </section>
 

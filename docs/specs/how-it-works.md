@@ -88,6 +88,7 @@ Session language: English. Takes are not slated and not cut. Take structure is d
 | Edit | Deleted word ranges, pause trims, close-or-keep-pause flag |
 | Spacer | Linked action line, duration, enabled flag |
 | Gap | Duration between boxes, override flag |
+| Split point | Edit page split of a box by source time; the part after it has an offset, trims, mute and drop *(added in implementation, M11 / D55)* |
 
 Rules:
 
@@ -95,6 +96,8 @@ Rules:
 - **Default handles:** 1 s.
 - **Storage:** project state in the episode SQLite file (see the architecture spec), plus a cache for transcripts, alignments and waveform peaks. *(Changed in implementation: was "project state as JSON"; the architecture spec and build brief settle on SQLite.)*
 - **Undo:** per box and per scene.
+- **Mute and ripple delete** *(added in implementation, M11 / D56)*: a muted box, part or sound keeps its time but is not heard (skipped in playback and bounce, disabled in FCPXML, no subtitle). A ripple-deleted part leaves the cut and the time closes up; it can be restored.
+- **Pinned boxes** *(changed in implementation, M11 / D57)*: a box pinned to absolute time is out of the ripple chain; the next box follows the last unpinned one. The first unpinned box honours its pause.
 
 ## Audio rules
 

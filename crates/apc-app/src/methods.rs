@@ -503,6 +503,14 @@ pub struct PeaksP {
     pub t1: f64,
     #[serde(default)]
     pub buckets: Option<usize>,
+    /// Scale to the file's loudest peak (as the take waveforms are drawn).
+    #[serde(default)]
+    pub normalize: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct PeaksBatchP {
+    pub ranges: Vec<PeaksP>,
 }
 
 #[derive(Deserialize, JsonSchema, Default)]
@@ -650,6 +658,7 @@ registry! {
     "stop", NoParams, Read, false, "Stop playback.";
     "playhead", NoParams, Read, false, "Playhead position and state.";
     "peaks", PeaksP, Read, false, "Waveform peaks of a source range.";
+    "peaks_batch", PeaksBatchP, Read, false, "Waveform peaks of several source ranges in one call (the Edit page's visible clips).";
     "import_view", NoParams, Read, false, "Everything the Import › Files page shows: script, cast, room links and what needs fixing.";
     "match_files", NoParams, Write, true, "Redo match: group files into sessions (timecode, else folder) and link director rooms. Hand-set links are kept.";
     "link_room", LinkRoomP, Write, true, "Link a director room file to the recordings it serves (kept on Redo match).";
@@ -742,6 +751,27 @@ fn export_target(svc: &Service, p: &ExportP, ext: &str) -> (ExportScope, PathBuf
 }
 
 impl Service {
+    /// Peaks of a source range: |max| per bucket, at most the cached 100 per second.
+    fn peaks_of(&mut self, p: &PeaksP) -> Result<Vec<f32>> {
+        let a = self
+            .analysis_of(&p.source_id)
+            .ok_or_else(|| AppError::Params("unknown source".into()))?;
+        let fine = ((p.t1 - p.t0).max(0.0) * apc_media::analysis::PEAK_FPS as f64).ceil() as usize;
+        let buckets = p.buckets.unwrap_or(200).clamp(1, fine.max(1));
+        let g = if p.normalize {
+            a.peaks
+                .iter()
+                .map(|(lo, hi)| lo.abs().max(hi.abs()))
+                .fold(1e-4f32, f32::max)
+        } else {
+            1.0
+        };
+        Ok(a.peaks_range(p.t0, p.t1, buckets)
+            .into_iter()
+            .map(|(lo, hi)| (lo.abs().max(hi.abs()) / g).min(1.0))
+            .collect())
+    }
+
     /// Dispatches a method by name.
     pub fn call(&mut self, name: &str, params: &Value) -> Result<Value> {
         let info = method(name).ok_or_else(|| AppError::UnknownMethod(name.into()))?;
@@ -1195,9 +1225,13 @@ impl Service {
             "playhead" => crate::player::playhead(self),
             "peaks" => {
                 let p: PeaksP = parse(params)?;
-                let a = self.analysis_of(&p.source_id).ok_or_else(|| AppError::Params("unknown source".into()))?;
-                let pk: Vec<f32> = a.peaks_range(p.t0, p.t1, p.buckets.unwrap_or(200)).into_iter().map(|(lo, hi)| lo.abs().max(hi.abs())).collect();
-                Ok(json!(pk))
+                Ok(json!(self.peaks_of(&p)?))
+            }
+            "peaks_batch" => {
+                let p: PeaksBatchP = parse(params)?;
+                // a missing file gives an empty list, so one bad range doesn't blank the rest
+                let out: Vec<Vec<f32>> = p.ranges.iter().map(|r| self.peaks_of(r).unwrap_or_default()).collect();
+                Ok(json!(out))
             }
             "import_view" => crate::import::view(self),
             "match_files" => crate::import::match_files(self),

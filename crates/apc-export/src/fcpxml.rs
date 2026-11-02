@@ -228,12 +228,14 @@ pub fn write(
             let mut s = String::new();
             let _ = write!(
                 s,
-                "              <asset-clip ref=\"{rid}\" lane=\"{lane}\" offset=\"{}\" name=\"{}\" start=\"{}\" duration=\"{}\" audioRole=\"{}\" tcFormat=\"NDF\">",
+                "              <asset-clip ref=\"{rid}\" lane=\"{lane}\" offset=\"{}\" name=\"{}\" start=\"{}\" duration=\"{}\" audioRole=\"{}\" tcFormat=\"NDF\"{}>",
                 rt(c.rec_in),
                 esc(&name),
                 rt(m.tc_start_s + c.src_in),
                 rt(dur),
-                esc(&role_of(&c.lane, doc))
+                esc(&role_of(&c.lane, doc)),
+                // clip mute: in the timeline, switched off
+                if c.muted { " enabled=\"0\"" } else { "" }
             );
             let fade_in = c.fade_in_s.min(dur / 2.0);
             let fade_out = c.fade_out_s.min(dur / 2.0);
