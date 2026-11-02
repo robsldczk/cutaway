@@ -63,8 +63,16 @@ pub enum Cmd {
     },
     /// Run the local ASR (or import transcript sidecars).
     Transcribe,
-    /// Deterministic matching + AI for ambiguous parts (the full analysis).
-    Align,
+    /// Deterministic matching + AI for ambiguous parts (the full analysis). With
+    /// --character or --line, only those; the rest of the episode stays as it is.
+    Align {
+        /// Re-analyse only this character's session (repeatable).
+        #[arg(long = "character")]
+        characters: Vec<String>,
+        /// Re-analyse only this line's takes (repeatable).
+        #[arg(long = "line")]
+        lines: Vec<String>,
+    },
     /// Room classification, note condensing, picks.
     Notes,
     /// Sound effects.
@@ -277,7 +285,14 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                 }
                 Cmd::Roles { .. } => call(&mut sess, "roles", json!({})),
                 Cmd::Transcribe => call(&mut sess, "run_transcription", json!({})),
-                Cmd::Align => call(&mut sess, "run_alignment", json!({})),
+                Cmd::Align { characters, lines } if characters.is_empty() && lines.is_empty() => {
+                    call(&mut sess, "run_alignment", json!({}))
+                }
+                Cmd::Align { characters, lines } => call(
+                    &mut sess,
+                    "analyze_scope",
+                    json!({ "characters": characters, "line_ids": lines }),
+                ),
                 Cmd::Notes => call(&mut sess, "run_notes", json!({})),
                 Cmd::Sfx {
                     cmd: SfxCmd::Spot { scene },

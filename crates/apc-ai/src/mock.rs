@@ -510,6 +510,90 @@ impl Default for MockProvider {
     }
 }
 
+/// Word-overlap similarity (Dice on normalised words), 0..1.
+fn overlap(a: &str, b: &str) -> f64 {
+    let a = apc_core::text::norm_words(a);
+    let b = apc_core::text::norm_words(b);
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
+    let mut rest = b.clone();
+    let mut common = 0;
+    for w in &a {
+        if let Some(i) = rest.iter().position(|x| x == w) {
+            rest.swap_remove(i);
+            common += 1;
+        }
+    }
+    2.0 * common as f64 / (a.len() + b.len()) as f64
+}
+
+/// Rules version of the rescue: a left-over sentence that shares most of its words with
+/// one of the actor's lines is a take of it; a sentence the editor linked to a line is.
+fn take_rescue(input: &TakeRescueInput) -> TakeRescueOutput {
+    let own: Vec<&RescueScriptLine> = input
+        .script
+        .iter()
+        .filter(|l| l.character == input.character)
+        .collect();
+    let mut rescues = Vec::new();
+    let mut done = std::collections::HashSet::new();
+    for h in &input.hints {
+        for id in &h.ids {
+            let Some(row) = input.recording.iter().find(|r| &r.id == id) else {
+                continue;
+            };
+            if !row.id.starts_with('s') || !done.insert(id.clone()) {
+                continue;
+            }
+            let line = h.line.clone().filter(|l| own.iter().any(|o| &o.label == l));
+            let read_as = line
+                .as_ref()
+                .and_then(|l| own.iter().find(|o| &o.label == l))
+                .map(|o| o.text.clone())
+                .unwrap_or_default();
+            rescues.push(Rescue {
+                id: id.clone(),
+                confidence: if line.is_some() {
+                    RescueConfidence::High
+                } else {
+                    RescueConfidence::Low
+                },
+                line,
+                read_as,
+                from: None,
+                to: None,
+            });
+        }
+    }
+    for row in input.recording.iter().filter(|r| r.tag == "?") {
+        if done.contains(&row.id) {
+            continue;
+        }
+        let best = own
+            .iter()
+            .map(|l| (overlap(&row.text, &l.text), *l))
+            .max_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some((sim, l)) = best {
+            if sim >= 0.5 {
+                rescues.push(Rescue {
+                    id: row.id.clone(),
+                    line: Some(l.label.clone()),
+                    read_as: l.text.clone(),
+                    confidence: if sim >= 0.7 {
+                        RescueConfidence::High
+                    } else {
+                        RescueConfidence::Medium
+                    },
+                    from: None,
+                    to: None,
+                });
+            }
+        }
+    }
+    TakeRescueOutput { rescues }
+}
+
 fn parse<T: serde::de::DeserializeOwned>(v: &Value) -> Result<T, AiError> {
     serde_json::from_value(v.clone())
         .map_err(|e| AiError::Failed(format!("mock got bad input: {e}")))
@@ -583,6 +667,7 @@ impl AiProvider for MockProvider {
             AiTask::SoundSpot => serde_json::to_value(spot(&parse(&req.input)?))?,
             AiTask::SoundTag => serde_json::to_value(sound_tag(&parse(&req.input)?))?,
             AiTask::NameMatch => serde_json::to_value(name_match(&parse(&req.input)?))?,
+            AiTask::TakeRescue => serde_json::to_value(take_rescue(&parse(&req.input)?))?,
         };
         Ok(v)
     }
@@ -591,6 +676,66 @@ impl AiProvider for MockProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rescue_rules_take_own_lines_only() {
+        let row = |id: &str, speaker: &str, text: &str, tag: &str| RescueRow {
+            id: id.into(),
+            speaker: speaker.into(),
+            text: text.into(),
+            tag: tag.into(),
+            pause_before_s: None,
+        };
+        let input = TakeRescueInput {
+            character: "SARA".into(),
+            scene: "4".into(),
+            script: vec![
+                RescueScriptLine {
+                    label: "L1".into(),
+                    character: "SARA".into(),
+                    text: "It's a little bit late to get a Turkey, though…".into(),
+                },
+                RescueScriptLine {
+                    label: "L2".into(),
+                    character: "PAUL".into(),
+                    text: "Germany doesn't have Thanksgiving?".into(),
+                },
+            ],
+            recording: vec![
+                row(
+                    "s1",
+                    "SARA",
+                    "it's a lid of a bit late to get a tricky though",
+                    "?",
+                ),
+                row("s2", "SARA", "Germany doesn't have Thanksgiving?", "?"),
+                row(
+                    "d3",
+                    "DIRECTOR",
+                    "it's a little bit late to get a turkey",
+                    "",
+                ),
+                row("s4", "SARA", "can I get some water", "?"),
+            ],
+            hints: vec![],
+            examples: vec![],
+        };
+        let out = take_rescue(&input);
+        let got: Vec<(&str, Option<&str>)> = out
+            .rescues
+            .iter()
+            .map(|r| (r.id.as_str(), r.line.as_deref()))
+            .collect();
+        assert_eq!(
+            got,
+            [("s1", Some("L1"))],
+            "Paul's line and the director never"
+        );
+        let text = input.text().unwrap();
+        assert!(text.contains("s1 SARA [?]: it's a lid"), "{text}");
+        assert!(text.contains("d3 DIRECTOR: it's a little"), "{text}");
+        assert!(!text.contains("\"t0\""), "no timecodes in the text");
+    }
 
     #[test]
     fn picks_and_notes_from_stage0_phrases() {

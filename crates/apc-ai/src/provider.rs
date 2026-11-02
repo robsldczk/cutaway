@@ -26,6 +26,8 @@ pub struct AiRequest {
     pub prompt: String,
     pub prompt_version: u32,
     pub input: Value,
+    /// Plain-text input, sent instead of the JSON when the task provides one.
+    pub text: Option<String>,
     pub output_schema: Value,
 }
 
@@ -36,7 +38,9 @@ impl AiRequest {
             "{}\n\n## Output\nReturn only one JSON object that matches this JSON Schema, with no prose and no code fences:\n{}\n\n## Input\n{}\n",
             self.prompt.trim(),
             serde_json::to_string_pretty(&self.output_schema).unwrap_or_default(),
-            serde_json::to_string_pretty(&self.input).unwrap_or_default()
+            self.text
+                .clone()
+                .unwrap_or_else(|| serde_json::to_string_pretty(&self.input).unwrap_or_default())
         )
     }
 }

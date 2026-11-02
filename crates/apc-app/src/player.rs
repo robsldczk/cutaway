@@ -96,6 +96,40 @@ pub fn play_take(svc: &mut Service, take_id: &str, from_s: f64) -> Result<Value>
     Ok(r)
 }
 
+/// Plays a stretch of a source file alone, as recorded (dev panel). The playhead then
+/// reports seconds into the stretch.
+pub fn play_source(svc: &mut Service, source_id: &str, t0: f64, t1: f64) -> Result<Value> {
+    if !svc.doc().sources.contains_key(source_id) {
+        return Err(crate::AppError::Params(format!(
+            "unknown source '{source_id}'"
+        )));
+    }
+    let (t0, t1) = (t0.max(0.0), t1.max(t0));
+    let clip = apc_audio::ScheduledClip {
+        source_id: source_id.to_string(),
+        src_in: t0,
+        src_out: t1,
+        start_s: 0.0,
+        gain_db: 0.0,
+        fade_in_s: 0.005,
+        fade_out_s: 0.005,
+        lane: "audition".into(),
+        loop_len_s: None,
+        pan: 0.0,
+        linear_fade: false,
+        owner: source_id.to_string(),
+    };
+    let sched = PlaySchedule {
+        clips: vec![clip],
+        duration_s: t1 - t0,
+    };
+    let scene = svc.player.scene_id.clone().unwrap_or_default();
+    let r = start(svc, sched, &scene, 0.0, None, vec![])?;
+    svc.player.take_id = None;
+    svc.player.sound = Some(format!("source:{source_id}"));
+    Ok(r)
+}
+
 /// Plays a sound file alone (bucket audition: a library sound or a cached preview).
 /// The playhead then reports `sound` = the label, and seconds into the file.
 pub fn play_file(

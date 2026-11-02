@@ -14,6 +14,7 @@ pub enum AiTask {
     SoundSpot,
     SoundTag,
     NameMatch,
+    TakeRescue,
 }
 
 impl AiTask {
@@ -26,6 +27,7 @@ impl AiTask {
             AiTask::SoundSpot => "sound_spot",
             AiTask::SoundTag => "sound_tag",
             AiTask::NameMatch => "name_match",
+            AiTask::TakeRescue => "take_rescue",
         }
     }
 }
@@ -41,6 +43,11 @@ pub trait Validate {
 pub trait AiTaskIo: Serialize + JsonSchema {
     const TASK: AiTask;
     type Output: DeserializeOwned + Serialize + JsonSchema + Validate;
+    /// Plain-text rendering sent instead of the JSON input, when reading matters more than
+    /// structure (a scene's script and recording).
+    fn text(&self) -> Option<String> {
+        None
+    }
 }
 
 fn unit(name: &str, v: f64) -> Result<(), String> {
@@ -385,6 +392,168 @@ impl Validate for NameMatchOutput {
 impl AiTaskIo for NameMatchInput {
     const TASK: AiTask = AiTask::NameMatch;
     type Output = NameMatchOutput;
+}
+
+// ---- take_rescue ----
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RescueScriptLine {
+    /// `L1`, `L2` … in scene order.
+    pub label: String,
+    pub character: String,
+    pub text: String,
+}
+
+/// One sentence of the scene's recording.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RescueRow {
+    /// `s…` session mic (may be a take), `d…` director mic (never a take).
+    pub id: String,
+    pub speaker: String,
+    pub text: String,
+    /// `= L3` already a take of L3 · `?` to judge · `bleed` not the actor · empty for the
+    /// director.
+    #[serde(default)]
+    pub tag: String,
+    /// Silence before this sentence, when long enough to matter (seconds).
+    #[serde(default)]
+    pub pause_before_s: Option<f64>,
+}
+
+/// A stretch the editor marked in the dev panel.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RescueHint {
+    pub ids: Vec<String>,
+    /// The line the editor linked it to.
+    #[serde(default)]
+    pub line: Option<String>,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TakeRescueInput {
+    /// The actor whose session mic is judged.
+    pub character: String,
+    pub scene: String,
+    /// The whole scene, every character.
+    pub script: Vec<RescueScriptLine>,
+    pub recording: Vec<RescueRow>,
+    #[serde(default)]
+    pub hints: Vec<RescueHint>,
+    /// Worked examples from the editor's earlier corrections.
+    #[serde(default)]
+    pub examples: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RescueConfidence {
+    High,
+    Medium,
+    Low,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Rescue {
+    /// A session-mic id from the recording (`s…`).
+    pub id: String,
+    /// The script line it performs (`L3`), or null: not a take.
+    pub line: Option<String>,
+    /// What the actor actually said, as you read it.
+    #[serde(default)]
+    pub read_as: String,
+    pub confidence: RescueConfidence,
+    /// When only part of the sentence is the take: its first and last words, quoted
+    /// from the recording.
+    #[serde(default)]
+    pub from: Option<String>,
+    #[serde(default)]
+    pub to: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TakeRescueOutput {
+    pub rescues: Vec<Rescue>,
+}
+
+impl Validate for TakeRescueOutput {
+    fn validate(&self) -> Result<(), String> {
+        for r in &self.rescues {
+            if !r.id.starts_with('s') {
+                return Err(format!(
+                    "{} is not a session-mic sentence; only s… ids can be takes",
+                    r.id
+                ));
+            }
+            if let Some(l) = &r.line {
+                if !l.starts_with('L') {
+                    return Err(format!("line of {} must be a label like L3, got {l}", r.id));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl AiTaskIo for TakeRescueInput {
+    const TASK: AiTask = AiTask::TakeRescue;
+    type Output = TakeRescueOutput;
+
+    fn text(&self) -> Option<String> {
+        use std::fmt::Write;
+        let mut t = String::new();
+        let _ = writeln!(
+            t,
+            "CHARACTER: {}\nSCENE: {}\n\nSCRIPT",
+            self.character, self.scene
+        );
+        for l in &self.script {
+            let _ = writeln!(t, "{} {}: {}", l.label, l.character, l.text);
+        }
+        let _ = writeln!(
+            t,
+            "\nRECORDING (s = {}'s session mic, may be takes · d = director mic, notes and cues only, never a take)",
+            self.character
+        );
+        for r in &self.recording {
+            if let Some(p) = r.pause_before_s {
+                let _ = writeln!(t, "— {p:.0} s —");
+            }
+            let tag = if r.tag.is_empty() {
+                String::new()
+            } else {
+                format!(" [{}]", r.tag)
+            };
+            let _ = writeln!(t, "{} {}{}: {}", r.id, r.speaker, tag, r.text);
+        }
+        if !self.hints.is_empty() {
+            let _ = writeln!(
+                t,
+                "\nMARKED BY THE EDITOR (judge these ids too, whatever their tag)"
+            );
+            for h in &self.hints {
+                let line = h
+                    .line
+                    .as_deref()
+                    .map(|l| format!(" → {l}"))
+                    .unwrap_or_default();
+                let _ = writeln!(t, "{}{}: {}", h.ids.join(", "), line, h.note);
+            }
+        }
+        if !self.examples.is_empty() {
+            let _ = writeln!(t, "\nEARLIER CORRECTIONS BY THE EDITOR");
+            for e in &self.examples {
+                let _ = writeln!(t, "- {e}");
+            }
+        }
+        Some(t)
+    }
 }
 
 /// JSON schema of a task's output.

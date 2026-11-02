@@ -465,22 +465,47 @@ impl Service {
 
     /// Runs the whole analysis and applies it as one undoable command.
     pub fn analyze(&mut self, progress: &dyn Fn(apc_analysis::Progress)) -> Result<MatchReport> {
+        self.analyze_with(apc_analysis::AnalysisScope::everything(), progress)
+    }
+
+    /// Runs the analysis for a scope (some characters, some lines, or dev-panel marks).
+    /// Marks get their proposals stored; everything else is applied as one undo step.
+    pub fn analyze_with(
+        &mut self,
+        mut scope: apc_analysis::AnalysisScope,
+        progress: &dyn Fn(apc_analysis::Progress),
+    ) -> Result<MatchReport> {
         self.bus.refresh()?;
         self.prepare_asr(progress)?;
+        let cfg = self.config();
+        scope.rescue = scope.rescue && cfg.ai.rescue;
+        scope.examples = cfg.ai.rescue_examples.clone();
         let (ai, warn) = self.ai_runner();
         let asr = self.asr_provider();
-        let out = apc_analysis::analyze(
+        let out = apc_analysis::analyze_scoped(
             self.doc(),
             &self.paths,
             &apc_analysis::Providers {
                 asr: asr.as_ref(),
                 ai: &ai,
             },
+            &scope,
             progress,
         )?;
         let mut report = out.report;
         if let Some(w) = warn {
             report.flagged.insert(0, w);
+        }
+        if !scope.marks.is_empty() {
+            for (id, proposal) in out.proposals {
+                if let Some(mut m) = self.doc().marks.get(&id).cloned() {
+                    m.proposal = Some(proposal);
+                    m.status = MarkStatus::Proposed;
+                    self.exec(&Command::PutMark { mark: m })?;
+                }
+            }
+            self.last_report = Some(report.clone());
+            return Ok(report);
         }
         progress(apc_analysis::Progress {
             stage: "vocals".into(),
@@ -488,7 +513,9 @@ impl Service {
             message: format!("Collecting {} vocal sounds", out.vocals.len()),
         });
         let mut payload = out.payload;
-        (payload.assets, payload.buckets) = crate::vocals::prepare(self, &out.vocals)?;
+        if !out.vocals.is_empty() {
+            (payload.assets, payload.buckets) = crate::vocals::prepare(self, &out.vocals)?;
+        }
         self.exec(&Command::ApplyAnalysis { payload })?;
         std::fs::write(self.paths.logs.join("match-report.md"), &report.markdown)?;
         self.media.clear();

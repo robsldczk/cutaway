@@ -99,6 +99,7 @@ impl AiRunner {
             prompt: p.text.to_string(),
             prompt_version: p.version,
             input: input_v,
+            text: input.text(),
             output_schema: output_schema::<I>(),
         };
         let mut last_err = String::new();

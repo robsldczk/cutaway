@@ -17,9 +17,11 @@ use apc_core::*;
 use apc_media::{bwf, loudness, sync::measure_offset, AudioAnalysis, AudioReader};
 
 use crate::align::{actions_in, active_scenes, align, dialogue_in, units_of, AlignOptions, Unit};
-use crate::asr::{AsrProvider, AsrRequest, Transcript};
+use crate::asr::{AsrProvider, AsrRequest, TWord, Transcript};
 use crate::edges::refine;
 use crate::error::Result;
+use crate::rescue::{rescue_scene, Decision, Hint, MicTake, SceneJob};
+use crate::sentences::{sentences, MergeOptions, Mic, Sentence};
 use crate::sessions::{group_sessions, pair_rooms_by_name, FileSpan, NamedFile};
 use crate::wordmap::{coverage, map_words};
 
@@ -54,6 +56,8 @@ pub struct RoleReport {
     pub lines_with_takes: usize,
     pub role_lines_total: usize,
     pub bleed_dropped: usize,
+    /// Takes Claude found in speech the matcher left over.
+    pub rescued: usize,
     pub unmatched: usize,
 }
 
@@ -70,9 +74,41 @@ pub struct MatchReport {
     pub markdown: String,
 }
 
+/// What a run covers. Empty means the whole episode.
+#[derive(Debug, Clone, Default)]
+pub struct AnalysisScope {
+    /// Only these characters' sessions (their session mics and director mics).
+    pub characters: Vec<String>,
+    /// Only these lines' takes (notes and unmatched speech stay as they are).
+    pub line_ids: Vec<String>,
+    /// Dev-panel marks: judge only these stretches and return proposals; nothing else.
+    pub marks: Vec<DevMark>,
+    /// With marks: link the marked stretch to its line as is, without asking Claude.
+    pub manual: bool,
+    /// Ask Claude about session-mic speech the matcher left over.
+    pub rescue: bool,
+    /// Worked examples from earlier corrections, for the rescue prompt.
+    pub examples: Vec<String>,
+}
+
+impl AnalysisScope {
+    pub fn everything() -> Self {
+        AnalysisScope {
+            rescue: true,
+            ..Default::default()
+        }
+    }
+
+    fn is_scoped(&self) -> bool {
+        !self.characters.is_empty() || !self.line_ids.is_empty() || !self.marks.is_empty()
+    }
+}
+
 pub struct AnalysisOutput {
     pub payload: AnalysisPayload,
     pub report: MatchReport,
+    /// With marks in the scope: one proposal per mark id.
+    pub proposals: Vec<(String, MarkProposal)>,
     /// Each character's vocal sounds (breaths, "mh-hm", efforts …) for their vocal bucket.
     pub vocals: Vec<crate::vocals::VocalCandidate>,
 }
@@ -110,6 +146,171 @@ struct RawTake {
     bleed: bool,
     before: Vec<usize>,
     after: Vec<usize>,
+    origin: TakeOrigin,
+    read_as: Option<String>,
+}
+
+/// A take candidate on source `k` for words `[w0, w1)`: edges from the segments, snapped
+/// to the audio, and its level.
+fn raw_take(
+    d: &SourceData,
+    k: usize,
+    unit: usize,
+    score: f64,
+    w0: usize,
+    w1: usize,
+    thr: f32,
+) -> RawTake {
+    let words = &d.tr.words;
+    let off = d.src.offset_s;
+    let (mut s0, mut s1) = (words[w0].t0, words[w1 - 1].t1);
+    let sf = &d.tr.segments[words[w0].seg];
+    let sl = &d.tr.segments[words[w1 - 1].seg];
+    if w0 == sf.w0 {
+        s0 = sf.start;
+    }
+    if w1 == sl.w1 {
+        s1 = sl.end;
+    }
+    let db = d.analysis.rms_db(s0 + off, s1 + off);
+    let (r0, r1) = refine(&d.analysis.env, s0 + off, s1 + off, thr);
+    RawTake {
+        unit,
+        source: k,
+        score,
+        w0,
+        w1,
+        t0: r0,
+        t1: r1,
+        s0: r0 - off,
+        s1: r1 - off,
+        db,
+        heard: words[w0..w1]
+            .iter()
+            .map(|w| w.raw.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+        bleed: db < BLEED_DB,
+        before: vec![],
+        after: vec![],
+        origin: TakeOrigin::Matcher,
+        read_as: None,
+    }
+}
+
+/// A rescued (or hand-linked) take from a checked decision.
+fn decided_take(
+    d: &SourceData,
+    k: usize,
+    units: &[Unit],
+    dec: &Decision,
+    thr: f32,
+    origin: TakeOrigin,
+) -> Option<RawTake> {
+    let u = dec.unit?;
+    let heard: Vec<String> = d.tr.words[dec.w0..dec.w1]
+        .iter()
+        .map(|w| w.w.clone())
+        .collect();
+    let score = crate::fuzzy::ratio(&units[u].target, &heard.join(" ")).round();
+    let mut t = raw_take(d, k, u, score, dec.w0, dec.w1, thr);
+    t.bleed = false;
+    t.origin = origin;
+    t.read_as = (!dec.read_as.is_empty()).then(|| dec.read_as.clone());
+    Some(t)
+}
+
+/// The takes entity of a raw take (notes are filled in later).
+fn build_take(
+    r: &RawTake,
+    u: &Unit,
+    line: &ScriptLine,
+    d: &SourceData,
+    take_no: u32,
+    readers: &mut HashMap<usize, AudioReader>,
+) -> Take {
+    let off = d.src.offset_s;
+    let tw = &d.tr.words[r.w0..r.w1];
+    let heard_norm: Vec<String> = tw.iter().map(|w| w.w.clone()).collect();
+    // a rescued take was misheard: read Claude's reading against the script when it
+    // has the same number of words, so the word map still lines up
+    let read: Vec<String> = r
+        .read_as
+        .as_deref()
+        .map(apc_core::text::norm_words)
+        .filter(|v| v.len() == heard_norm.len())
+        .unwrap_or_else(|| heard_norm.clone());
+    let map = map_words(&read, &line.words);
+    let cov = coverage(&map, line.words.len());
+    let first = map.iter().flatten().next().copied().unwrap_or(0);
+    let score_ok = r.score >= 85.0 || r.origin != TakeOrigin::Matcher;
+    let take_type = if tw.len() <= 2 && line.words.len() > 3 {
+        TakeType::Micro
+    } else if first >= 2.max((line.words.len() as f64 * 0.3) as usize) {
+        TakeType::Pickup
+    } else if !score_ok || cov < 0.6 {
+        TakeType::Partial
+    } else {
+        TakeType::Full
+    };
+    let lufs = {
+        let rd = match readers.entry(r.source) {
+            std::collections::hash_map::Entry::Occupied(e) => Some(e.into_mut()),
+            std::collections::hash_map::Entry::Vacant(v) => {
+                AudioReader::open(&d.path).ok().map(|x| v.insert(x))
+            }
+        };
+        rd.and_then(|rd| rd.read_range(r.t0, r.t1).ok())
+            .and_then(|s| {
+                loudness::integrated_lufs(&s, d.analysis.info.sample_rate, d.analysis.info.channels)
+                    .ok()
+                    .flatten()
+            })
+            .map(|l| (l * 10.0).round() / 10.0)
+    };
+    Take {
+        id: stable_id("tk", &[&u.id, &d.src.id, &format!("{:.1}", r.t0)]),
+        line_id: u.id.clone(),
+        source_id: d.src.id.clone(),
+        take_no,
+        take_type,
+        t0: (r.t0 * 1000.0).round() / 1000.0,
+        t1: (r.t1 * 1000.0).round() / 1000.0,
+        words: tw
+            .iter()
+            .zip(map.iter())
+            .map(|(w, m)| TakeWord {
+                w: w.w.clone(),
+                raw: w.raw.clone(),
+                t0: w.t0 + off,
+                t1: w.t1 + off,
+                script_idx: *m,
+            })
+            .collect(),
+        score: r.score,
+        heard: r.heard.clone(),
+        lufs,
+        db: (r.db * 10.0).round() / 10.0,
+        partial: matches!(take_type, TakeType::Partial | TakeType::Micro),
+        pick: 0,
+        favorite: false,
+        favorite_origin: None,
+        direction: String::new(),
+        feedback: String::new(),
+        direction_raw: String::new(),
+        feedback_raw: String::new(),
+        tags: vec![],
+        note_ids: vec![],
+        confidence: if r.origin == TakeOrigin::Matcher {
+            (r.score / 100.0).min(1.0)
+        } else {
+            0.9
+        },
+        needs_rematch: false,
+        ai_flag: None,
+        origin: r.origin,
+        read_as: r.read_as.clone(),
+    }
 }
 
 struct RoomSeg {
@@ -162,6 +363,19 @@ pub fn analyze(
     doc: &Document,
     paths: &EpisodePaths,
     p: &Providers,
+    progress: &dyn Fn(Progress),
+) -> Result<AnalysisOutput> {
+    analyze_scoped(doc, paths, p, &AnalysisScope::everything(), progress)
+}
+
+/// Runs the analysis for a scope: some characters, some lines, or dev-panel marks.
+/// The deterministic part always sees everything (it is cheap and keeps ids stable);
+/// AI calls and the payload stay inside the scope.
+pub fn analyze_scoped(
+    doc: &Document,
+    paths: &EpisodePaths,
+    p: &Providers,
+    scope: &AnalysisScope,
     progress: &dyn Fn(Progress),
 ) -> Result<AnalysisOutput> {
     let say = |stage: &str, fraction: f64, message: String| {
@@ -310,10 +524,68 @@ pub fn analyze(
         sources[k].tr = t.shifted(-sources[k].src.offset_s);
     }
 
-    // 4. Role tracks.
+    // Scope: which characters' sessions take part beyond the deterministic pass.
+    let line_scope: BTreeSet<String> = scope.line_ids.iter().cloned().collect();
+    let mut chars: BTreeSet<String> = scope.characters.iter().cloned().collect();
+    for lid in &scope.line_ids {
+        if let Some(c) = doc.lines.get(lid).and_then(|l| l.character.clone()) {
+            chars.insert(c);
+        }
+    }
+    for m in &scope.marks {
+        if let Some(c) = doc
+            .sources
+            .get(&m.source_id)
+            .and_then(|s| s.character.clone())
+        {
+            chars.insert(c);
+        }
+    }
+    let in_chars = |c: &str| chars.is_empty() || chars.contains(c);
+    let scoped_sessions: BTreeSet<String> = sources
+        .iter()
+        .filter(|d| d.src.role == Role::Character)
+        .filter(|d| d.src.character.as_deref().is_some_and(in_chars))
+        .filter_map(|d| d.src.session_id.clone())
+        .collect();
+    let in_session = |d: &SourceData| {
+        !scope.is_scoped()
+            || d.src
+                .session_id
+                .as_ref()
+                .is_some_and(|s| scoped_sessions.contains(s))
+    };
+    let want_rescue = scope.rescue || !scope.marks.is_empty();
+    let merge = MergeOptions::default();
+    let sents: Vec<Vec<Sentence>> = sources
+        .iter()
+        .map(|d| {
+            if want_rescue && in_session(d) {
+                sentences(&d.tr, &merge)
+            } else {
+                vec![]
+            }
+        })
+        .collect();
+    let slevels: Vec<Vec<f64>> = sources
+        .iter()
+        .zip(&sents)
+        .map(|(d, ss)| {
+            ss.iter()
+                .map(|s| {
+                    d.analysis
+                        .rms_db(s.t0 + d.src.offset_s, s.t1 + d.src.offset_s)
+                })
+                .collect()
+        })
+        .collect();
+    let n_scenes = units.iter().map(|u| u.scene_idx + 1).max().unwrap_or(0);
+
+    // 4. Role tracks: the matcher, then Claude for what it left over.
     let mut raw: Vec<RawTake> = Vec::new();
     let mut unmatched: Vec<Unmatched> = Vec::new();
     let mut near_by_session: HashMap<String, BTreeSet<usize>> = HashMap::new();
+    let mut quiet_by_source: HashMap<usize, Option<f64>> = HashMap::new();
     for (k, d) in sources.iter().enumerate() {
         if d.src.role != Role::Character {
             continue;
@@ -321,6 +593,9 @@ pub fn analyze(
         let Some(role) = d.src.character.clone() else {
             continue;
         };
+        if !in_chars(&role) {
+            continue;
+        }
         say(
             "align",
             k as f64 / sources.len().max(1) as f64,
@@ -333,55 +608,90 @@ pub fn analyze(
             .or_default()
             .extend(near.iter().copied());
         let speak = dialogue_in(&units, &near);
-        let (hits, used) = align(&units, &speak, words, &opts);
+        let (hits, mut used) = align(&units, &speak, words, &opts);
         let thr = d.analysis.percentile(60.0) * 3.0;
         let off = d.src.offset_s;
-        let mut mine: Vec<RawTake> = Vec::new();
-        for h in &hits {
-            let u = &units[h.unit];
-            let (mut s0, mut s1) = (words[h.w0].t0, words[h.w1 - 1].t1);
-            let sf = &d.tr.segments[words[h.w0].seg];
-            let sl = &d.tr.segments[words[h.w1 - 1].seg];
-            if h.w0 == sf.w0 {
-                s0 = sf.start;
-            }
-            if h.w1 == sl.w1 {
-                s1 = sl.end;
-            }
-            let db = d.analysis.rms_db(s0 + off, s1 + off);
-            let (r0, r1) = refine(&d.analysis.env, s0 + off, s1 + off, thr);
-            if u.character.as_deref() != Some(role.as_str()) {
-                continue;
-            }
-            mine.push(RawTake {
-                unit: h.unit,
-                source: k,
-                score: h.score,
-                w0: h.w0,
-                w1: h.w1,
-                t0: r0,
-                t1: r1,
-                s0: r0 - off,
-                s1: r1 - off,
-                db,
-                heard: words[h.w0..h.w1]
-                    .iter()
-                    .map(|w| w.raw.as_str())
-                    .collect::<Vec<_>>()
-                    .join(" "),
-                bleed: db < BLEED_DB,
-                before: vec![],
-                after: vec![],
-            });
-        }
+        let mut mine: Vec<RawTake> = hits
+            .iter()
+            .filter(|h| units[h.unit].character.as_deref() == Some(role.as_str()))
+            .map(|h| raw_take(d, k, h.unit, h.score, h.w0, h.w1, thr))
+            .collect();
         // Bleed: quiet in absolute terms, or far below this mic's typical take level.
         let mut levels: Vec<f64> = mine.iter().map(|t| t.db).collect();
         levels.sort_by(f64::total_cmp);
         let median = levels.get(levels.len() / 2).copied();
+        quiet_by_source.insert(k, median);
         let quiet = |db: f64| db < BLEED_DB || median.is_some_and(|m| db < m - RELATIVE_BLEED_DB);
         for t in mine.iter_mut() {
             t.bleed = quiet(t.db);
         }
+
+        // Rescue: Claude reads each scene of this session and judges the left-overs.
+        let mut rescued = 0;
+        if scope.rescue && scope.marks.is_empty() {
+            let (mics, mic_words) = mics_of(&sources, k, &role, &sents, &slevels);
+            let role_scenes: BTreeSet<usize> = units
+                .iter()
+                .filter(|u| {
+                    u.kind == LineKind::Dialogue && u.character.as_deref() == Some(role.as_str())
+                })
+                .filter(|u| line_scope.is_empty() || line_scope.contains(&u.id))
+                .map(|u| u.scene_idx)
+                .collect();
+            for &sc in &role_scenes {
+                let Some((lo, hi)) = stretch(&units, &mine, sc, n_scenes) else {
+                    continue;
+                };
+                say(
+                    "rescue",
+                    k as f64 / sources.len().max(1) as f64,
+                    format!("Reading {role}'s takes, scene {}", sc + 1),
+                );
+                let takes: Vec<MicTake> = mine
+                    .iter()
+                    .filter(|t| !t.bleed)
+                    .map(|t| MicTake {
+                        unit: t.unit,
+                        w0: t.w0,
+                        w1: t.w1,
+                    })
+                    .collect();
+                let job = SceneJob {
+                    doc,
+                    units: &units,
+                    scene_idx: sc,
+                    role: &role,
+                    mics: &mics,
+                    words: &mic_words,
+                    takes: &takes,
+                    quiet: &quiet,
+                    lo,
+                    hi,
+                    hints: &[],
+                    examples: &scope.examples,
+                };
+                let r = rescue_scene(&job, p.ai);
+                flagged.extend(r.flagged);
+                for dec in &r.decisions {
+                    let Some(u) = dec.unit else { continue };
+                    if !line_scope.is_empty() && !line_scope.contains(&units[u].id) {
+                        continue;
+                    }
+                    let clash = mine
+                        .iter()
+                        .any(|t| !t.bleed && t.w0 < dec.w1 && dec.w0 < t.w1);
+                    if clash {
+                        continue;
+                    }
+                    if let Some(t) = decided_take(d, k, &units, dec, thr, TakeOrigin::Rescue) {
+                        used.extend(t.w0..t.w1);
+                        mine.push(t);
+                        rescued += 1;
+                    }
+                }
+            }
+        }
+
         mine.sort_by(|a, b| a.t0.total_cmp(&b.t0));
         for i in 1..mine.len() {
             let (a, b) = (&mine[i - 1], &mine[i]);
@@ -398,6 +708,7 @@ pub fn analyze(
             role: role.clone(),
             source_id: d.src.id.clone(),
             bleed_dropped: mine.iter().filter(|t| t.bleed).count(),
+            rescued,
             role_lines_total: units
                 .iter()
                 .filter(|u| u.character.as_deref() == Some(role.as_str()))
@@ -431,9 +742,36 @@ pub fn analyze(
         raw.extend(mine);
     }
 
+    // Marks from the dev panel: judge those stretches only and return proposals.
+    if !scope.marks.is_empty() {
+        let proposals = propose_marks(
+            doc,
+            &units,
+            &sources,
+            &sents,
+            &slevels,
+            &raw,
+            &quiet_by_source,
+            scope,
+            p.ai,
+            n_scenes,
+            &mut flagged,
+        );
+        report.flagged = flagged;
+        return Ok(AnalysisOutput {
+            payload: AnalysisPayload::default(),
+            report,
+            proposals,
+            vocals: vec![],
+        });
+    }
+
     // 5. Room tracks: cue reading vs notes.
     let mut room: Vec<RoomSeg> = Vec::new();
-    for d in sources.iter().filter(|d| d.src.role == Role::Room) {
+    for d in sources
+        .iter()
+        .filter(|d| d.src.role == Role::Room && in_session(d))
+    {
         say(
             "room",
             0.0,
@@ -556,100 +894,31 @@ pub fn analyze(
         for (n, &ti) in list.iter().enumerate() {
             let r = &raw[ti];
             let d = &sources[r.source];
-            let off = d.src.offset_s;
-            let tw = &d.tr.words[r.w0..r.w1];
-            let heard_norm: Vec<String> = tw.iter().map(|w| w.w.clone()).collect();
-            let map = map_words(&heard_norm, &line.words);
-            let cov = coverage(&map, line.words.len());
-            let first = map.iter().flatten().next().copied().unwrap_or(0);
-            let take_type = if tw.len() <= 2 && line.words.len() > 3 {
-                TakeType::Micro
-            } else if first >= 2.max((line.words.len() as f64 * 0.3) as usize) {
-                TakeType::Pickup
-            } else if r.score < 85.0 || cov < 0.6 {
-                TakeType::Partial
-            } else {
-                TakeType::Full
-            };
-            let lufs = {
-                let rd = match readers.entry(r.source) {
-                    std::collections::hash_map::Entry::Occupied(e) => Some(e.into_mut()),
-                    std::collections::hash_map::Entry::Vacant(v) => {
-                        AudioReader::open(&d.path).ok().map(|x| v.insert(x))
-                    }
-                };
-                rd.and_then(|rd| rd.read_range(r.t0, r.t1).ok())
-                    .and_then(|s| {
-                        loudness::integrated_lufs(
-                            &s,
-                            d.analysis.info.sample_rate,
-                            d.analysis.info.channels,
-                        )
-                        .ok()
-                        .flatten()
-                    })
-                    .map(|l| (l * 10.0).round() / 10.0)
-            };
-            let id = stable_id("tk", &[&u.id, &d.src.id, &format!("{:.1}", r.t0)]);
-            take_of_raw.insert(ti, takes.len());
+            let mut t = build_take(r, u, line, d, (n + 1) as u32, &mut readers);
             after_texts.insert(
-                id.clone(),
+                t.id.clone(),
                 r.after.iter().map(|&i| room[i].text.clone()).collect(),
             );
-            takes.push(Take {
-                id,
-                line_id: u.id.clone(),
-                source_id: d.src.id.clone(),
-                take_no: (n + 1) as u32,
-                take_type,
-                t0: (r.t0 * 1000.0).round() / 1000.0,
-                t1: (r.t1 * 1000.0).round() / 1000.0,
-                words: tw
-                    .iter()
-                    .zip(map.iter())
-                    .map(|(w, m)| TakeWord {
-                        w: w.w.clone(),
-                        raw: w.raw.clone(),
-                        t0: w.t0 + off,
-                        t1: w.t1 + off,
-                        script_idx: *m,
-                    })
-                    .collect(),
-                score: r.score,
-                heard: r.heard.clone(),
-                lufs,
-                db: (r.db * 10.0).round() / 10.0,
-                partial: matches!(take_type, TakeType::Partial | TakeType::Micro),
-                pick: 0,
-                favorite: false,
-                favorite_origin: None,
-                direction: String::new(),
-                feedback: String::new(),
-                direction_raw: r
-                    .before
-                    .iter()
-                    .map(|&i| room[i].text.as_str())
-                    .collect::<Vec<_>>()
-                    .join(" "),
-                feedback_raw: r
-                    .after
-                    .iter()
-                    .map(|&i| room[i].text.as_str())
-                    .collect::<Vec<_>>()
-                    .join(" "),
-                tags: vec![],
-                note_ids: r
-                    .before
-                    .iter()
-                    .chain(r.after.iter())
-                    .map(|&i| room[i].id.clone())
-                    .collect(),
-                confidence: (r.score / 100.0).min(1.0),
-                needs_rematch: false,
-                ai_flag: None,
-                origin: Default::default(),
-                read_as: None,
-            });
+            t.direction_raw = r
+                .before
+                .iter()
+                .map(|&i| room[i].text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            t.feedback_raw = r
+                .after
+                .iter()
+                .map(|&i| room[i].text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            t.note_ids = r
+                .before
+                .iter()
+                .chain(r.after.iter())
+                .map(|&i| room[i].id.clone())
+                .collect();
+            take_of_raw.insert(ti, takes.len());
+            takes.push(t);
         }
     }
     for (ti, k) in &take_of_raw {
@@ -674,6 +943,10 @@ pub fn analyze(
         takes.iter().map(|t| scene_of_line(&t.line_id)).collect();
     scenes_with_takes.sort();
     scenes_with_takes.dedup();
+    if !line_scope.is_empty() {
+        let keep: BTreeSet<String> = line_scope.iter().map(|l| scene_of_line(l)).collect();
+        scenes_with_takes.retain(|s| keep.contains(s));
+    }
     let mut dropped: BTreeSet<String> = BTreeSet::new();
     for (si, scene_id) in scenes_with_takes.iter().enumerate() {
         say(
@@ -683,6 +956,7 @@ pub fn analyze(
         );
         let idx: Vec<usize> = (0..takes.len())
             .filter(|&i| &scene_of_line(&takes[i].line_id) == scene_id)
+            .filter(|&i| line_scope.is_empty() || line_scope.contains(&takes[i].line_id))
             .collect();
         let line_text = |t: &Take| {
             doc.lines
@@ -695,7 +969,7 @@ pub fn analyze(
         let ambiguous: Vec<usize> = idx
             .iter()
             .copied()
-            .filter(|&i| takes[i].score < 85.0)
+            .filter(|&i| takes[i].score < 85.0 && takes[i].origin == TakeOrigin::Matcher)
             .collect();
         if !ambiguous.is_empty() {
             let input = LineMatchInput {
@@ -1035,8 +1309,38 @@ pub fn analyze(
             })
         })
         .collect();
-    let vocals = crate::vocals::find_vocals(&tracks);
+    // a scoped run leaves the vocal buckets alone
+    let vocals = if scope.is_scoped() {
+        vec![]
+    } else {
+        crate::vocals::find_vocals(&tracks)
+    };
     drop(tracks);
+
+    // Payload: inside the scope only.
+    let (mut takes, mut notes, mut unmatched) = (takes, notes, unmatched);
+    let mut line_scope_out: Vec<String> = vec![];
+    let mut source_scope_out: Vec<String> = vec![];
+    if !line_scope.is_empty() {
+        takes.retain(|t| line_scope.contains(&t.line_id));
+        notes.clear();
+        unmatched.clear();
+        line_scope_out = line_scope.iter().cloned().collect();
+    } else if scope.is_scoped() {
+        line_scope_out = doc
+            .lines
+            .values()
+            .filter(|l| l.character.as_deref().is_some_and(in_chars))
+            .map(|l| l.id.clone())
+            .collect();
+        source_scope_out = sources
+            .iter()
+            .filter(|d| in_session(d))
+            .map(|d| d.src.id.clone())
+            .collect();
+        notes.retain(|n| source_scope_out.contains(&n.source_id));
+        unmatched.retain(|u| source_scope_out.contains(&u.source_id));
+    }
     Ok(AnalysisOutput {
         vocals,
         payload: AnalysisPayload {
@@ -1045,13 +1349,263 @@ pub fn analyze(
             takes,
             notes,
             unmatched,
-            line_scope: vec![],
-            source_scope: vec![],
+            line_scope: line_scope_out,
+            source_scope: source_scope_out,
             assets: vec![],
             buckets: vec![],
         },
         report,
+        proposals: vec![],
     })
+}
+
+/// The actor's session mic `k` and its session's director mics, with their transcripts.
+fn mics_of<'a>(
+    sources: &'a [SourceData],
+    k: usize,
+    role: &str,
+    sents: &'a [Vec<Sentence>],
+    levels: &'a [Vec<f64>],
+) -> (Vec<Mic<'a>>, Vec<&'a [TWord]>) {
+    let session = sources[k].src.session_id.clone();
+    let mut mics = vec![Mic {
+        source_id: &sources[k].src.id,
+        session: true,
+        speaker: role.to_string(),
+        sentences: &sents[k],
+        levels: &levels[k],
+    }];
+    let mut words: Vec<&[TWord]> = vec![&sources[k].tr.words];
+    for (i, d) in sources.iter().enumerate() {
+        if d.src.role == Role::Room && session.is_some() && d.src.session_id == session {
+            mics.push(Mic {
+                source_id: &d.src.id,
+                session: false,
+                speaker: String::new(),
+                sentences: &sents[i],
+                levels: &levels[i],
+            });
+            words.push(&d.tr.words);
+        }
+    }
+    (mics, words)
+}
+
+/// Where scene `sc` was recorded on one session mic (session time): around the matcher's
+/// takes of that scene, or between the neighbouring scenes' takes when it has none.
+fn stretch(units: &[Unit], mine: &[RawTake], sc: usize, n_scenes: usize) -> Option<(f64, f64)> {
+    let of = |s: usize| {
+        mine.iter()
+            .filter(move |t| !t.bleed && units[t.unit].scene_idx == s)
+    };
+    let lo = of(sc).map(|t| t.s0).reduce(f64::min);
+    let hi = of(sc).map(|t| t.s1).reduce(f64::max);
+    if let (Some(lo), Some(hi)) = (lo, hi) {
+        return Some(((lo - 30.0).max(0.0), hi + 15.0));
+    }
+    let prev = (0..sc)
+        .rev()
+        .find_map(|p| of(p).map(|t| t.s1).reduce(f64::max));
+    let next = (sc + 1..n_scenes).find_map(|n| of(n).map(|t| t.s0).reduce(f64::min));
+    match (prev, next) {
+        (Some(a), Some(b)) if a < b => Some((a, b)),
+        _ => None,
+    }
+}
+
+/// Proposals for dev-panel marks: the marked stretch is judged again (by Claude, or as
+/// linked by hand) and compared with the takes the episode has now.
+#[allow(clippy::too_many_arguments)]
+fn propose_marks(
+    doc: &Document,
+    units: &[Unit],
+    sources: &[SourceData],
+    sents: &[Vec<Sentence>],
+    levels: &[Vec<f64>],
+    raw: &[RawTake],
+    quiet_by_source: &HashMap<usize, Option<f64>>,
+    scope: &AnalysisScope,
+    ai: &AiRunner,
+    n_scenes: usize,
+    flagged: &mut Vec<String>,
+) -> Vec<(String, MarkProposal)> {
+    let mut out = Vec::new();
+    let mut readers: HashMap<usize, AudioReader> = HashMap::new();
+    for m in &scope.marks {
+        let mut prop = MarkProposal::default();
+        let Some(k) = sources.iter().position(|d| d.src.id == m.source_id) else {
+            prop.summary
+                .push("the marked file is not part of the analysis".into());
+            out.push((m.id.clone(), prop));
+            continue;
+        };
+        let d = &sources[k];
+        let Some(role) = d
+            .src
+            .character
+            .clone()
+            .filter(|_| d.src.role == Role::Character)
+        else {
+            prop.summary.push(
+                "marks only work on a character's session mic, never the director mic".into(),
+            );
+            out.push((m.id.clone(), prop));
+            continue;
+        };
+        let off = d.src.offset_s;
+        let (t0, t1) = (m.t0 - off, m.t1 - off);
+        let mine: Vec<RawTake> = raw.iter().filter(|t| t.source == k).cloned().collect();
+        let unit = m
+            .line_id
+            .as_ref()
+            .and_then(|l| units.iter().position(|u| &u.id == l));
+        if m.line_id.is_some() && unit.is_none() {
+            prop.summary
+                .push("the linked line is not in the script".into());
+            out.push((m.id.clone(), prop));
+            continue;
+        }
+        if let Some(u) = unit {
+            if units[u].character.as_deref() != Some(role.as_str()) {
+                prop.summary
+                    .push(format!("{} is not {role}'s line", units[u].id));
+                out.push((m.id.clone(), prop));
+                continue;
+            }
+        }
+        // the scene: the linked line's, or the one the nearest take belongs to
+        let scene = unit.map(|u| units[u].scene_idx).or_else(|| {
+            mine.iter()
+                .filter(|t| !t.bleed)
+                .min_by(|a, b| (a.s0 - t0).abs().total_cmp(&(b.s0 - t0).abs()))
+                .map(|t| units[t.unit].scene_idx)
+        });
+        let Some(sc) = scene else {
+            prop.summary
+                .push("no scene found for this stretch; link it to a line".into());
+            out.push((m.id.clone(), prop));
+            continue;
+        };
+        let thr = d.analysis.percentile(60.0) * 3.0;
+        let decisions: Vec<Decision> = if scope.manual {
+            let Some(u) = unit else {
+                prop.summary
+                    .push("link the stretch to a line to make a take by hand".into());
+                out.push((m.id.clone(), prop));
+                continue;
+            };
+            let ws: Vec<usize> = (0..d.tr.words.len())
+                .filter(|&i| d.tr.words[i].t0 >= t0 - 0.05 && d.tr.words[i].t1 <= t1 + 0.05)
+                .collect();
+            match (ws.first(), ws.last()) {
+                (Some(&a), Some(&b)) => vec![Decision {
+                    row_id: "manual".into(),
+                    sentence: 0,
+                    unit: Some(u),
+                    w0: a,
+                    w1: b + 1,
+                    read_as: String::new(),
+                    confidence: RescueConfidence::High,
+                }],
+                _ => {
+                    prop.summary.push("no words in the marked stretch".into());
+                    out.push((m.id.clone(), prop));
+                    continue;
+                }
+            }
+        } else {
+            let (mics, mic_words) = mics_of(sources, k, &role, sents, levels);
+            let median = quiet_by_source.get(&k).copied().flatten();
+            let quiet =
+                |db: f64| db < BLEED_DB || median.is_some_and(|x| db < x - RELATIVE_BLEED_DB);
+            let (lo, hi) = stretch(units, &mine, sc, n_scenes)
+                .map(|(a, b)| (a.min(t0 - 30.0), b.max(t1 + 15.0)))
+                .unwrap_or((t0 - 60.0, t1 + 30.0));
+            let takes: Vec<MicTake> = mine
+                .iter()
+                .filter(|t| !t.bleed)
+                .map(|t| MicTake {
+                    unit: t.unit,
+                    w0: t.w0,
+                    w1: t.w1,
+                })
+                .collect();
+            let hints = [Hint {
+                t0,
+                t1,
+                unit,
+                note: m.note.clone(),
+            }];
+            let job = SceneJob {
+                doc,
+                units,
+                scene_idx: sc,
+                role: &role,
+                mics: &mics,
+                words: &mic_words,
+                takes: &takes,
+                quiet: &quiet,
+                lo,
+                hi,
+                hints: &hints,
+                examples: &scope.examples,
+            };
+            let r = rescue_scene(&job, ai);
+            flagged.extend(r.flagged.iter().cloned());
+            prop.summary
+                .extend(r.refused.iter().map(|x| format!("refused: {x}")));
+            r.decisions
+        };
+        let origin = if scope.manual {
+            TakeOrigin::Manual
+        } else {
+            TakeOrigin::Rescue
+        };
+        for dec in &decisions {
+            let (a, b) = (d.tr.words[dec.w0].t0 + off, d.tr.words[dec.w1 - 1].t1 + off);
+            let label = dec.unit.map(|u| units[u].id.clone());
+            let existing: Vec<&Take> = doc
+                .takes
+                .values()
+                .filter(|t| t.source_id == d.src.id && t.t0 < b && a < t.t1)
+                .collect();
+            let keeps = existing.iter().any(|t| Some(&t.line_id) == label.as_ref());
+            for t in &existing {
+                if Some(&t.line_id) != label.as_ref() && !prop.remove.contains(&t.id) {
+                    prop.remove.push(t.id.clone());
+                }
+            }
+            match dec.unit {
+                Some(u) if !keeps => {
+                    if let Some(r) = decided_take(d, k, units, dec, thr, origin) {
+                        let line = &doc.lines[&units[u].id];
+                        let t = build_take(&r, &units[u], line, d, 0, &mut readers);
+                        prop.summary.push(format!(
+                            "{} → take of “{}” ({:?}){}",
+                            dec.row_id,
+                            line.text,
+                            dec.confidence,
+                            if dec.read_as.is_empty() {
+                                String::new()
+                            } else {
+                                format!(", read as “{}”", dec.read_as)
+                            }
+                        ));
+                        prop.add.push(t);
+                    }
+                }
+                Some(_) => prop
+                    .summary
+                    .push(format!("{} → already a take of that line", dec.row_id)),
+                None => prop.summary.push(format!("{} → not a take", dec.row_id)),
+            }
+        }
+        if decisions.is_empty() && prop.summary.is_empty() {
+            prop.summary.push("no answer for the marked stretch".into());
+        }
+        out.push((m.id.clone(), prop));
+    }
+    out
 }
 
 fn first_texts(texts: &[String], n: usize) -> String {

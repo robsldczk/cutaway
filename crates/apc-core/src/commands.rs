@@ -1398,7 +1398,14 @@ fn apply_analysis(tx: &mut Tx, payload: &AnalysisPayload) -> Result<Value> {
     let new_ids: HashSet<&str> = payload.takes.iter().map(|t| t.id.as_str()).collect();
     for t in doc.takes.values() {
         if in_scope(&t.line_id) && !new_ids.contains(t.id.as_str()) {
-            tx.delete::<Take>(&t.id)?;
+            if t.favorite && t.favorite_origin.as_deref() == Some("user") {
+                // a take starred by hand is never dropped by a re-run; it is flagged
+                let mut kept = t.clone();
+                kept.needs_rematch = true;
+                tx.put(&kept)?;
+            } else {
+                tx.delete::<Take>(&t.id)?;
+            }
         }
     }
     for t in &payload.takes {
@@ -1558,6 +1565,30 @@ mod tests {
         });
         assert!(r.is_err());
         assert!(!bus.doc().takes.contains_key("td"));
+    }
+
+    #[test]
+    fn a_rerun_keeps_a_hand_starred_take_it_no_longer_finds() {
+        let (_d, mut bus) = setup();
+        let id = bus.doc().takes_of_line("a")[0].id.clone();
+        let mut t = bus.doc().takes[&id].clone();
+        t.favorite = true;
+        t.favorite_origin = Some("user".into());
+        bus.execute_fn("star", &Value::Null, |tx| {
+            tx.put(&t)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        bus.execute(&Command::ApplyAnalysis {
+            payload: AnalysisPayload::default(),
+        })
+        .unwrap();
+        let kept = &bus.doc().takes[&id];
+        assert!(kept.needs_rematch);
+        assert!(
+            bus.doc().takes_of_line("b").is_empty(),
+            "unstarred takes go"
+        );
     }
 
     #[test]

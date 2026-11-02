@@ -4,6 +4,7 @@
 pub mod bridge;
 pub mod buckets;
 pub mod demo;
+pub mod dev;
 pub mod error;
 pub mod import;
 pub mod jobs;

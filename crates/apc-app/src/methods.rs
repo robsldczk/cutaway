@@ -505,6 +505,60 @@ pub struct PeaksP {
     pub buckets: Option<usize>,
 }
 
+#[derive(Deserialize, JsonSchema, Default)]
+pub struct AnalysisScopeP {
+    /// Only these characters' sessions (their session mics and director mics).
+    #[serde(default)]
+    pub characters: Vec<String>,
+    /// Only these lines' takes.
+    #[serde(default)]
+    pub line_ids: Vec<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct SourceIdP {
+    pub source_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct MarkP {
+    /// Updates this mark; a new one is made when absent.
+    #[serde(default)]
+    pub mark_id: Option<String>,
+    /// A character's session mic (the director mic is never a take).
+    pub source_id: String,
+    /// Source-file seconds.
+    pub t0: f64,
+    pub t1: f64,
+    pub kind: MarkKind,
+    /// The script line it belongs to.
+    #[serde(default)]
+    pub line_id: Option<String>,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct MarkIdP {
+    pub mark_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct SendMarksP {
+    pub mark_ids: Vec<String>,
+    /// Link as marked, without asking the AI.
+    #[serde(default)]
+    pub manual: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct PlaySourceP {
+    pub source_id: String,
+    /// Source-file seconds.
+    pub t0: f64,
+    pub t1: f64,
+}
+
 macro_rules! registry {
     ($( $name:literal, $P:ty, $access:ident, $mcp:literal, $desc:literal; )*) => {
         /// Every method with its parameter schema.
@@ -531,7 +585,16 @@ registry! {
     "run_alignment", NoParams, Write, true, "Run the full analysis: sync, alignment, takes, room notes, picks. One undoable step.";
     "run_notes", NoParams, Write, true, "Re-run room classification, note condensing and pick detection (re-runs the cached pipeline).";
     "job_status", NoParams, Read, true, "Background jobs with progress.";
-    "start_analysis", NoParams, Write, false, "Run the analysis in the background (the UI polls job_status).";
+    "start_analysis", AnalysisScopeP, Write, false, "Run the analysis in the background (the UI polls job_status). With characters or line_ids, only those (dev).";
+    "analyze_scope", AnalysisScopeP, Write, true, "Re-run the analysis for some characters' sessions or some lines only; the rest of the episode stays as it is. One undoable step.";
+    "dev_sessions", NoParams, Read, true, "Dev panel: each character's session mic with its takes by origin (matcher, rescue, manual) and marks.";
+    "dev_session", SourceIdP, Read, true, "Dev panel: one actor session as the AI reads it: every sentence of the session mic and the director mic by time, what each became, the script and the marks.";
+    "put_mark", MarkP, Write, true, "Mark a stretch of a character's session mic (missed take, wrong line, not a take, edges) with a note and optionally the script line it belongs to.";
+    "delete_mark", MarkIdP, Write, true, "Remove a mark.";
+    "send_marks", SendMarksP, Write, true, "Judge marked stretches again, by the AI with the marks as hints (or as linked, with manual), and store a proposal on each. Runs in the background; returns a job id.";
+    "apply_mark", MarkIdP, Write, true, "Apply a mark's proposal (adds and removes takes). One undoable step.";
+    "discard_mark", MarkIdP, Write, true, "Drop a mark's proposal; the mark stays.";
+    "play_source", PlaySourceP, Read, false, "Play a stretch of a source file (dev panel).";
     "match_report", NoParams, Read, true, "The last match report (Markdown).";
     "list_lines", SceneP, Read, true, "Lines of a scene in timeline order with their selected take and take count.";
     "list_takes", LineP, Read, true, "Takes of a line with type, notes, pick and timing.";
@@ -739,7 +802,94 @@ impl Service {
                 }))
             }
             "job_status" => Ok(serde_json::to_value(self.jobs.list())?),
-            "start_analysis" => Ok(json!({ "job_id": self.jobs.start_analysis(self.paths.file.clone()) })),
+            "start_analysis" => {
+                let p: AnalysisScopeP = parse(params)?;
+                let scope = (!p.characters.is_empty() || !p.line_ids.is_empty()).then(|| apc_analysis::AnalysisScope {
+                    characters: p.characters,
+                    line_ids: p.line_ids,
+                    ..apc_analysis::AnalysisScope::everything()
+                });
+                Ok(json!({ "job_id": self.jobs.start_analysis(self.paths.file.clone(), scope) }))
+            }
+            "analyze_scope" => {
+                let p: AnalysisScopeP = parse(params)?;
+                let scope = apc_analysis::AnalysisScope {
+                    characters: p.characters,
+                    line_ids: p.line_ids,
+                    ..apc_analysis::AnalysisScope::everything()
+                };
+                let r = self.analyze_with(scope, &|_| {})?;
+                Ok(json!({
+                    "takes_found": r.takes_found, "lines_matched": r.lines_matched,
+                    "rescued": r.roles.iter().map(|x| x.rescued).sum::<usize>(), "flagged": r.flagged,
+                }))
+            }
+            "dev_sessions" => Ok(crate::dev::sessions(self)),
+            "dev_session" => {
+                let p: SourceIdP = parse(params)?;
+                crate::dev::session_view(self, &p.source_id)
+            }
+            "put_mark" => {
+                let p: MarkP = parse(params)?;
+                let src = self
+                    .doc()
+                    .sources
+                    .get(&p.source_id)
+                    .cloned()
+                    .ok_or_else(|| AppError::Params(format!("unknown source '{}'", p.source_id)))?;
+                if src.role != Role::Character {
+                    return Err(AppError::Params("marks go on a character's session mic; the director mic is notes only".into()));
+                }
+                let (t0, t1) = (p.t0.min(p.t1), p.t0.max(p.t1));
+                let old = p.mark_id.as_ref().and_then(|id| self.doc().marks.get(id).cloned());
+                let mark = DevMark {
+                    id: p.mark_id.clone().unwrap_or_else(|| new_id("mk")),
+                    source_id: p.source_id,
+                    t0,
+                    t1,
+                    kind: p.kind,
+                    line_id: p.line_id,
+                    note: p.note,
+                    text: crate::dev::heard_between(self, &src, t0, t1),
+                    status: MarkStatus::Open,
+                    proposal: None,
+                    created_at: old.map(|m| m.created_at).unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+                };
+                Ok(self.exec(&Command::PutMark { mark })?.result)
+            }
+            "delete_mark" => {
+                let p: MarkIdP = parse(params)?;
+                Ok(self.exec(&Command::DeleteMark { mark_id: p.mark_id })?.result)
+            }
+            "send_marks" => {
+                let p: SendMarksP = parse(params)?;
+                let marks: Vec<DevMark> = p
+                    .mark_ids
+                    .iter()
+                    .map(|id| self.doc().marks.get(id).cloned().ok_or_else(|| AppError::Params(format!("no mark '{id}'"))))
+                    .collect::<Result<_>>()?;
+                let scope = apc_analysis::AnalysisScope {
+                    marks,
+                    manual: p.manual,
+                    ..apc_analysis::AnalysisScope::everything()
+                };
+                Ok(json!({ "job_id": self.jobs.start_analysis(self.paths.file.clone(), Some(scope)) }))
+            }
+            "apply_mark" => {
+                let p: MarkIdP = parse(params)?;
+                Ok(self.exec(&Command::ApplyMark { mark_id: p.mark_id })?.result)
+            }
+            "discard_mark" => {
+                let p: MarkIdP = parse(params)?;
+                let mut m = self.doc().marks.get(&p.mark_id).cloned().ok_or_else(|| AppError::Params(format!("no mark '{}'", p.mark_id)))?;
+                m.proposal = None;
+                m.status = MarkStatus::Discarded;
+                Ok(self.exec(&Command::PutMark { mark: m })?.result)
+            }
+            "play_source" => {
+                let p: PlaySourceP = parse(params)?;
+                crate::player::play_source(self, &p.source_id, p.t0, p.t1)
+            }
             "match_report" => {
                 let md = self
                     .last_report

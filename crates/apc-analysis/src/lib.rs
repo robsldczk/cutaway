@@ -9,10 +9,14 @@ pub mod fuzzy;
 #[cfg(feature = "parakeet")]
 pub mod parakeet;
 pub mod pipeline;
+pub mod rescue;
 pub mod roles;
+pub mod sentences;
 pub mod sessions;
 pub mod vocals;
 pub mod wordmap;
 
 pub use error::{AnalysisError, Result};
-pub use pipeline::{analyze, AnalysisOutput, MatchReport, Progress, Providers};
+pub use pipeline::{
+    analyze, analyze_scoped, AnalysisOutput, AnalysisScope, MatchReport, Progress, Providers,
+};

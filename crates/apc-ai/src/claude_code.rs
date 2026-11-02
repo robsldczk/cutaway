@@ -280,6 +280,7 @@ mod tests {
             prompt: "p".into(),
             prompt_version: 1,
             input: Value::Null,
+            text: None,
             output_schema: Value::Null,
         };
         let v = p.run(&req).unwrap();

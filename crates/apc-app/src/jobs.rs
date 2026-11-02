@@ -98,17 +98,24 @@ impl Jobs {
     }
 
     /// Starts the full analysis of `file` in the background.
-    pub fn start_analysis(&self, file: PathBuf) -> String {
+    pub fn start_analysis(
+        &self,
+        file: PathBuf,
+        scope: Option<apc_analysis::AnalysisScope>,
+    ) -> String {
         let jobs = self.clone();
         let id_cell = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
         let id_for_work = id_cell.clone();
         let id = self.spawn("analysis", file, move |svc, progress| {
             let jid = id_for_work.lock().map(|g| g.clone()).unwrap_or_default();
-            let r = svc.analyze(&|p| {
+            let scope = scope.unwrap_or_else(apc_analysis::AnalysisScope::everything);
+            let marks = scope.marks.len();
+            let r = svc.analyze_with(scope, &|p| {
                 progress(p.fraction, &p.message);
                 jobs.update(&jid, |j| j.stage = p.stage.clone());
             })?;
-            Ok(serde_json::json!({ "takes_found": r.takes_found, "lines_matched": r.lines_matched, "picks_found": r.picks_found, "flagged": r.flagged }))
+            let rescued: usize = r.roles.iter().map(|x| x.rescued).sum();
+            Ok(serde_json::json!({ "takes_found": r.takes_found, "lines_matched": r.lines_matched, "picks_found": r.picks_found, "rescued": rescued, "marks": marks, "flagged": r.flagged }))
         });
         if let Ok(mut g) = id_cell.lock() {
             *g = id.clone();

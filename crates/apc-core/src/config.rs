@@ -17,6 +17,10 @@ pub struct AiConfig {
     pub effort: String,
     pub batch: String,
     pub timeout_s: u64,
+    /// Ask the AI about session-mic speech the matcher left over (misheard takes).
+    pub rescue: bool,
+    /// Worked examples from the editor's corrections, added to the rescue prompt.
+    pub rescue_examples: Vec<String>,
 }
 
 impl Default for AiConfig {
@@ -27,6 +31,8 @@ impl Default for AiConfig {
             effort: "medium".into(),
             batch: "scene".into(),
             timeout_s: 300,
+            rescue: true,
+            rescue_examples: vec![],
         }
     }
 }
