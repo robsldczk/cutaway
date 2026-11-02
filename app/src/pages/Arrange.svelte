@@ -2,6 +2,7 @@
   import ClipState from '../components/ClipState.svelte';
   import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
+  import { call } from '../lib/bridge';
   import { clamp, fmt } from '../lib/format';
   import { charColor, charLabel, itemShade, rgba } from '../lib/colors';
   import { openEditor } from '../lib/keys';
@@ -39,7 +40,8 @@
 
   // local previews while dragging; committed on mouse up
   let gapPreview = $state<{ id: string; g: number } | null>(null);
-  let trimPreview = $state<{ id: string; h: number; t: number } | null>(null);
+  // in and out in source seconds
+  let trimPreview = $state<{ id: string; a: number; z: number } | null>(null);
   let drag = $state<{ id: string; dy: number; y0: number } | null>(null);
   let rowEls: Record<string, HTMLDivElement> = $state({});
   let off = $state(0);
@@ -58,19 +60,71 @@
     return it.takes[it.take_index ?? 0];
   }
 
+  /** Source stretch a strip shows: the take plus handles to lengthen into (none on comps). */
+  function win(it: ItemView) {
+    const t = takeOf(it);
+    if (!t || t.duration <= 0) return null;
+    const base = it.comp.length ? 0 : clamp(t.duration * 0.4, 0.75, 2);
+    const pre = base ? Math.min(t.src_in, Math.max(0, -it.head_s) + base) : 0;
+    const post = base ? Math.min(Math.max(0, t.source_len - t.src_out), Math.max(0, -it.tail_s) + base) : 0;
+    return { a: t.src_in - pre, z: t.src_out + post };
+  }
+  /** Position of a source time on the strip (0..1). */
+  function fx(it: ItemView, s: number) {
+    const w = win(it);
+    return w ? clamp((s - w.a) / Math.max(0.001, w.z - w.a), 0, 1) : 0;
+  }
+
   function trims(it: ItemView) {
     if (trimPreview?.id === it.line_id) return trimPreview;
     const t = takeOf(it);
-    if (!t || t.duration <= 0) return { id: it.line_id, h: 0, t: 1 };
-    return { id: it.line_id, h: clamp(it.head_s / t.duration, 0, 1), t: clamp(1 - it.tail_s / t.duration, 0, 1) };
+    if (!t) return { id: it.line_id, a: 0, z: 0 };
+    return { id: it.line_id, a: t.src_in + it.head_s, z: t.src_out - it.tail_s };
   }
 
-  function inWord(it: ItemView, f: number) {
+  function inWord(it: ItemView, s: number) {
     const t = takeOf(it);
     if (!t) return false;
-    const x = f * t.duration;
+    const x = s - t.src_in;
     return t.words.some((w) => x > w.t0 + 0.003 && x < w.t1 - 0.003);
   }
+
+  // waveforms of the strips' handles, fetched once per stretch
+  let stripPeaks = $state<Record<string, number[]>>({});
+  const winKey = (src: string, a: number, z: number) => `${src}|${a.toFixed(3)}|${z.toFixed(3)}`;
+  function peaksOf(it: ItemView): number[] {
+    const t = takeOf(it);
+    const w = win(it);
+    if (!t || !w) return [];
+    const got = stripPeaks[winKey(t.source_id, w.a, w.z)];
+    if (got?.length) return got;
+    // until they arrive: the take's own envelope with flat handles
+    const per = t.peaks.length / t.duration;
+    const flat = (s: number) => new Array<number>(Math.round(s * per)).fill(0);
+    return [...flat(t.src_in - w.a), ...t.peaks, ...flat(w.z - t.src_out)];
+  }
+  $effect(() => {
+    const want: { key: string; source_id: string; t0: number; t1: number; buckets: number }[] = [];
+    for (const r of rows) {
+      const t = takeOf(r.it);
+      const w = win(r.it);
+      if (!t || !w || (w.a >= t.src_in && w.z <= t.src_out)) continue;
+      const key = winKey(t.source_id, w.a, w.z);
+      if (!(key in stripPeaks)) want.push({ key, source_id: t.source_id, t0: w.a, t1: w.z, buckets: Math.min(480, Math.round((t.peaks.length * (w.z - w.a)) / t.duration)) });
+    }
+    if (!want.length) return;
+    void call<number[][]>('peaks_batch', { ranges: want.map((m) => ({ source_id: m.source_id, t0: m.t0, t1: m.t1, buckets: m.buckets, normalize: true })) })
+      .then((r) => {
+        const next = { ...stripPeaks };
+        want.forEach((m, i) => (next[m.key] = r[i] ?? []));
+        stripPeaks = next;
+      })
+      .catch(() => {
+        const next = { ...stripPeaks };
+        for (const m of want) next[m.key] = [];
+        stripPeaks = next;
+      });
+  });
 
   function gapOf(r: Row) {
     if (!r.next) return 0;
@@ -108,16 +162,17 @@
 
   function grabTrim(e: MouseEvent, it: ItemView, edge: 'h' | 't') {
     const strip = (e.currentTarget as HTMLElement).parentElement;
-    if (!strip) return;
+    const w = win(it);
+    if (!strip || !w) return;
     const rect = strip.getBoundingClientRect();
     const base = trims(it);
     track(
       e,
       (ev) => {
-        const f = clamp((ev.clientX - rect.left) / rect.width, 0, 1);
+        const s = w.a + clamp((ev.clientX - rect.left) / rect.width, 0, 1) * (w.z - w.a);
         const cur = trimPreview ?? { ...base };
-        if (edge === 'h') cur.h = Math.min(f, cur.t - 0.08);
-        else cur.t = Math.max(f, cur.h + 0.08);
+        if (edge === 'h') cur.a = Math.min(s, cur.z - 0.1);
+        else cur.z = Math.max(s, cur.a + 0.1);
         trimPreview = { ...cur };
       },
       async () => {
@@ -125,20 +180,20 @@
         trimPreview = null;
         const t = takeOf(it);
         if (!p || !t) return;
-        await app.cmd({ cmd: 'set_trim', line_id: it.line_id, head_s: +(p.h * t.duration).toFixed(3), tail_s: +((1 - p.t) * t.duration).toFixed(3) });
+        await app.cmd({ cmd: 'set_trim', line_id: it.line_id, head_s: +(p.a - t.src_in).toFixed(3), tail_s: +(t.src_out - p.z).toFixed(3) });
       },
     );
   }
 
   function scrub(e: MouseEvent, it: ItemView) {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const t = takeOf(it);
+    const w = win(it);
     const set = (x: number) => {
-      if (!t) return;
+      if (!w) return;
       const tr = trims(it);
-      const f = clamp((x - rect.left) / rect.width, tr.h, tr.t);
+      const s = clamp(w.a + ((x - rect.left) / rect.width) * (w.z - w.a), tr.a, tr.z);
       app.curId = it.line_id;
-      const at = it.start_s + (f - tr.h) * t.duration;
+      const at = it.start_s + (s - tr.a);
       app.locator = at;
       if (!app.playing) app.pos = at;
     };
@@ -207,8 +262,10 @@
   {#each rows as r, i (r.it.line_id)}
     {@const t = takeOf(r.it)}
     {@const tr = trims(r.it)}
-    {@const hc = inWord(r.it, tr.h)}
-    {@const tc = inWord(r.it, tr.t)}
+    {@const hc = inWord(r.it, tr.a)}
+    {@const tc = inWord(r.it, tr.z)}
+    {@const h = fx(r.it, tr.a)}
+    {@const tl = fx(r.it, tr.z)}
     {@const shd = itemShade(app.view, r.it)}
     {@const prevGap = i > 0 ? gapOf(rows[i - 1]) : 0}
     <div class="snip" class:clip-muted={r.it.muted} class:clip-dropped={r.it.dropped} bind:this={rowEls[r.it.line_id]} style={rowStyle(r, prevGap)} onclick={() => app.select(r.it.line_id)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} role="button" tabindex="-1" onkeydown={() => {}} data-testid="arrange-row">
@@ -221,21 +278,22 @@
         <ClipState it={r.it} />
         {#if r.it.moved}<span class="badge moved">Moved</span>{/if}
         {#if hc || tc}<span class="badge cuts">Cuts a word</span>{/if}
-        <span class="dur">{(r.it.end_s - r.it.start_s).toFixed(1)} s</span>
+        <span class="dur" data-testid="row-dur">{(r.it.end_s - r.it.start_s).toFixed(1)} s</span>
       </div>
       <div class="strip" onmousedown={(e) => scrub(e, r.it)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} title="Click to set the locator, I / O to set in and out" style="height: {Math.round(30 * sc)}px" role="slider" tabindex="-1" aria-valuenow={0}>
         {#if t}
-          <Waveform peaks={t.peaks} fill={rgba(shd, 0.85)} />
-          <div class="shade" style="left: 0; width: {tr.h * 100}%"></div>
-          <div class="shade" style="right: 0; width: {(1 - tr.t) * 100}%"></div>
+          <Waveform peaks={peaksOf(r.it)} fill={rgba(shd, 0.85)} />
+          <div class="shade" style="left: 0; width: {h * 100}%"></div>
+          <div class="shade" style="right: 0; width: {(1 - tl) * 100}%"></div>
+          {#each [fx(r.it, t.src_in), fx(r.it, t.src_out)] as e, k (k)}{#if e > 0.001 && e < 0.999}<span class="tedge" style="left: {e * 100}%" title="Where the take was cut"></span>{/if}{/each}
           {#if r.it.line_id === app.curId}
-            {@const lf = clamp(tr.h + (app.locator - r.it.start_s) / Math.max(0.01, t.duration), 0, 1)}
-            {@const pf = clamp(tr.h + (app.pos - r.it.start_s) / Math.max(0.01, t.duration), 0, 1)}
+            {@const lf = fx(r.it, tr.a + app.locator - r.it.start_s)}
+            {@const pf = fx(r.it, tr.a + app.pos - r.it.start_s)}
             <span class="vline" style="background: var(--locator); left: {lf * 100}%"></span><span class="flag" style="left: {lf * 100}%"></span>
             {#if app.playing || app.pos > r.it.start_s}<span class="vline phead" style="left: {pf * 100}%"></span>{/if}
           {/if}
-          <span class="hdl" role="slider" tabindex="-1" aria-valuenow={tr.h} onmousedown={(e) => grabTrim(e, r.it, 'h')} title="Drag to trim the head" style="left: calc({tr.h * 100}% - 5px); background: {hc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>
-          <span class="hdl" role="slider" tabindex="-1" aria-valuenow={tr.t} onmousedown={(e) => grabTrim(e, r.it, 't')} title="Drag to trim the tail" style="left: calc({tr.t * 100}% - 5px); background: {tc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>
+          <span class="hdl" role="slider" tabindex="-1" aria-label="Clip start" aria-valuenow={h} onmousedown={(e) => grabTrim(e, r.it, 'h')} title="Drag to trim the head, or out to lengthen it" style="left: calc({h * 100}% - 5px); background: {hc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>
+          <span class="hdl" role="slider" tabindex="-1" aria-label="Clip end" aria-valuenow={tl} onmousedown={(e) => grabTrim(e, r.it, 't')} title="Drag to trim the tail, or out to lengthen it" style="left: calc({tl * 100}% - 5px); background: {tc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>
         {:else}
           <span class="none">no takes</span>
         {/if}
@@ -333,6 +391,14 @@
     bottom: 0;
     pointer-events: none;
     background: var(--trim-shade);
+  }
+  .tedge {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    width: 0;
+    border-left: 1px dashed rgb(var(--ink-rgb) / 0.35);
+    pointer-events: none;
   }
   .phead {
     background: var(--playhead);

@@ -32,6 +32,8 @@ export interface TakeView {
   tc_in: number;
   words: WordView[];
   peaks: number[];
+  /** Length of the source file (how far a clip can be lengthened). */
+  source_len: number;
   needs_rematch: boolean;
   ai_flag: string | null;
 }

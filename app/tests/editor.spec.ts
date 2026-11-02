@@ -112,3 +112,26 @@ test('a collapsed group previews its clips; the script strip keeps its words', a
   await expect(page.getByTestId('strip-word').first()).toBeVisible();
   if (shots) await page.screenshot({ path: `${shots}/edit-collapsed.png` });
 });
+
+test('Arrange lengthens a clip into its handle and undo shortens it again', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('current-box')).toBeVisible();
+  await page.keyboard.press('2');
+  const row = page.getByTestId('arrange-row').first();
+  const dur = row.getByTestId('row-dur');
+  const len = async () => parseFloat((await dur.textContent()) ?? '0');
+  const before = await len();
+  // the strip shows handle audio on both sides, so the end handle sits inside the strip
+  const end = row.getByRole('slider', { name: 'Clip end' });
+  await end.hover(); // waits for the column to stop moving
+  const strip = (await row.locator('.strip').boundingBox())!;
+  const eb = (await end.boundingBox())!;
+  expect(eb.x + eb.width).toBeLessThan(strip.x + strip.width - 10);
+  await page.mouse.down();
+  await page.mouse.move(strip.x + strip.width - 2, eb.y + eb.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(len).toBeGreaterThan(before + 0.3);
+  if (shots) await page.screenshot({ path: `${shots}/arrange-lengthened.png` });
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect.poll(len).toBeCloseTo(before, 1);
+});

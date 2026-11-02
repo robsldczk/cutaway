@@ -117,6 +117,7 @@ Reorder lines and spacers, set pauses, trim heads and tails.
   - **Moved** badge (outlined) when a line is out of script order.
   - **Cuts a word** badge (amber `#E6B84C`) when a head or tail trim lands inside a word.
 - **Waveform strip** under the text: the take's waveform in its shade. Trimmed head and tail are darkened. Two handles trim the head and tail (amber when they cut a word). Click sets the **locator** (blue flag `#9FD6FF`); I and O set in and out at the locator. The playhead is a white glowing line.
+  - *Changed in implementation (D63):* the strip also shows a handle of source audio on each side of the take (darkened, like a trim). Dragging a handle out into it lengthens the clip; a dashed mark shows where the take was cut. The handle grows with each extension, up to the ends of the file. Comps keep the take-only strip.
 - **Gap rows** between lines: a hairline and a centred pill showing the pause (`‖ 0.30 s`) and the action line that sits there. Drag the row up or down to change the pause in 50 ms steps; dragging below zero overlaps the two lines (`overlap 0.20 s`, shown with blended colors).
 - **Reorder:** drag the grip; a glowing insertion line shows the drop point; ripple is the default. Alt+Up/Down moves the current line.
 - The current row has a brighter gradient and a 1.5 px outline in its shade, and sits on the centre hairline.

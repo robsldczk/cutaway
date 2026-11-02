@@ -488,6 +488,14 @@ Rules that hold throughout:
 - [x] Fixture test (skips without the files): EP02 `.thrl` gives the same lines as Throughline's Fountain export of the same draft; in the app, importing the `.thrl` over the Fountain export changes 0 lines.
 - [ ] (Rob) Manual: import the EP02 `.thrl` in the app, then the pilot's context; check the scene list, inspector and a spotting run.
 
+### M13: Lengthen clips on Arrange (Rob, 2026-11-02)
+Why: a cut that sits wrong (a clipped first word, a cut-off tail) has to be pulled out on Arrange, not only trimmed in. Decision D63.
+- [x] `set_trim` clamps extensions to the source file; core test.
+- [x] Take view gives the source length.
+- [x] Arrange strip: source window with handles on both sides, handle peaks from `peaks_batch`, take-edge mark, handles drag out into the window.
+- [x] Playwright: lengthen the end, undo.
+- [ ] (Rob) Manual: pull out a clipped head and a cut-off tail on a real scene and listen.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -535,3 +543,4 @@ Rules that hold throughout:
 - 2026-11-02 Branch `epidemic` (D60): Spot script on demand (new and changed scenes, or re-spot all; background job with progress), Epidemic bucket pages of 5 with a stored offset, free Epidemic search bar with drag into buckets or a new bucket (pinned previews). CLI `sfx spot-script`, `sfx search`. Playwright gets an Epidemic stand-in (`app/tests/epidemic-standin.mjs`) and keys in memory. check.sh green, Playwright 8/8. Not verified against the real Epidemic API (needs Rob's key).
 - 2026-11-02 `editor` (M11, D54–D59) and `epidemic` (D60) merged into `dev`; the epidemic hand-off fixes (spotting per scene makes buckets, bucket edits on the latest document, exact "more", re-spot tidies) and the toast moved off the top bars. check.sh green, Playwright 14/14; pushed to origin/dev.
 - 2026-11-02 M12 done (D61) on branch `throughline` (worktree `../cutaway-throughline`, because another session works in the main folder on `dev`): native `.thrl` reader (gzip JSON, format up to 1.12) giving the same parsed script as Fountain, story context per episode (scene title/summary/act/cast/arc, character bios, setting descriptions and groups) merged newest-wins, `import_story` for bios from another file (the pilot's), scene list titles and act dividers, inspector story section, parent room tone, story context in spotting and file-name matching (prompts v2, `ai.story_context`). EP02: the `.thrl` matches Throughline's Fountain export line for line. Fixed on the way: `!CUT TO:` parsed as a transition, a flaky dev-panel eval test. check.sh green.
+- 2026-11-02 Pacing (D62): breath gap down to −500 ms (overlap), tightness slider right = tighter up to ×10. M13 done (D63): Arrange lengthens clips into handle audio from the source, `set_trim` clamps to the file. check.sh green, Playwright green.

@@ -299,3 +299,15 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - The tightness slider shows the inverse of the stored multiplier on a log scale, ×0.35 … ×10, right = tighter. The stored value and its 0.1–3 clamp are unchanged, so no migration; a scene set to "×2" before now shows as ×0.50, which is what it was doing.
   - A negative default gap is divided by the multiplier instead of multiplied, so tighter always means an earlier entry. A default overlap never reaches back past the start of the line before. Pauses set by hand stay as they are (they could already overlap, down to −5 s).
 - **Options not taken:** trimming the pre-roll and tail per clip when tight (changes the clip edges, which are per take and user-editable); a separate per-scene overlap setting (a third control for the same feel).
+
+### D63 Lengthening clips on Arrange (Rob, 2026-11-02)
+- **Rob:** Arrange trims clips; it should also lengthen them when a cut sits wrong.
+- **Found:** the model already allowed it (`head_s`/`tail_s` below zero reach into the source, as the Edit page's `trim_clip` does). Only the Arrange strip stopped at the take's edges, because it drew the take alone.
+- **Choice:**
+  - The strip shows a source window: the take plus a handle on each side of 40 % of the take, 0.75–2 s. Each handle also covers what is already extended, so every drag can go 0.75–2 s further. The window never goes past the ends of the file (`source_len` in the take view).
+  - The handle audio is fetched with `peaks_batch` once per window. Until it arrives, the handles are drawn flat.
+  - Outside the in and out points the strip is darkened, as for trims. A dashed mark shows the take's original edge.
+  - `set_trim` clamps extensions to the source file (the head at its start, the tail at its end when the length is known), so no caller can send a clip before 0 s.
+  - Arrange keeps the clip's start in place: lengthening the head moves the words later and ripples the lines after it, the mirror of trimming. On the Edit page, which has a time scale, the words stay where they are.
+  - Comps keep the take-only strip, because a comp's head and tail belong to different takes.
+- **Options not taken:** a strip that rescales live while dragging past its edge (moving handles under the cursor); a fixed handle length (too short for a cut deep in the next word, too wide for short lines).

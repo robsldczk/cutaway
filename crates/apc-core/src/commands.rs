@@ -579,13 +579,25 @@ impl Command {
                 tail_s,
             } => {
                 let mut b = boxed(tx, line_id)?;
+                let (mut head, mut tail) = (*head_s, *tail_s);
                 if let Some(t) = b.take_id.as_ref().and_then(|id| tx.doc().takes.get(id)) {
-                    if head_s + tail_s > t.duration() - 0.05 {
+                    // negative trims extend into the source, never past its ends
+                    head = head.max(-t.t0);
+                    if let Some(len) = tx
+                        .doc()
+                        .sources
+                        .get(&t.source_id)
+                        .map(|s| s.duration_s)
+                        .filter(|d| *d > 0.0)
+                    {
+                        tail = tail.max(-(len - t.t1).max(0.0));
+                    }
+                    if head + tail > t.duration() - 0.05 {
                         return Err(CoreError::invalid("trims leave nothing of the take"));
                     }
                 }
-                b.head_s = *head_s;
-                b.tail_s = *tail_s;
+                b.head_s = ms(head);
+                b.tail_s = ms(tail);
                 tx.put(&b)?;
                 Ok(Value::Null)
             }
@@ -2177,6 +2189,46 @@ mod tests {
             .unwrap()
             .iter()
             .all(|h| h.name != "set_trim"));
+    }
+
+    #[test]
+    fn set_trim_extends_into_the_source_up_to_its_ends() {
+        let (_d, mut bus) = setup();
+        let t = bus.doc().takes["tb"].clone();
+        let mut src = source(&t.source_id, "character");
+        src.duration_s = t.t1 + 0.5;
+        bus.execute_fn("src", &Value::Null, |tx| tx.put(&src).map(|_| Value::Null))
+            .unwrap();
+        let before = layout_scene(
+            bus.doc(),
+            &bus.doc().scenes["sc"],
+            &crate::timeline::Pacing::default(),
+        );
+        let len0 = before.item("b").unwrap().end_s - before.item("b").unwrap().start_s;
+        bus.execute(&Command::SetTrim {
+            line_id: "b".into(),
+            head_s: -0.4,
+            tail_s: -2.0,
+        })
+        .unwrap();
+        let b = &bus.doc().boxes["b"];
+        assert_eq!((b.head_s, b.tail_s), (-0.4, -0.5));
+        let after = layout_scene(
+            bus.doc(),
+            &bus.doc().scenes["sc"],
+            &crate::timeline::Pacing::default(),
+        );
+        let it = after.item("b").unwrap();
+        assert!((it.end_s - it.start_s - (len0 + 0.9)).abs() < 1e-6);
+        assert!((it.pieces[0].src_in - (t.t0 - 0.4)).abs() < 1e-6);
+        // the head stops at the start of the file
+        bus.execute(&Command::SetTrim {
+            line_id: "b".into(),
+            head_s: -1000.0,
+            tail_s: 0.0,
+        })
+        .unwrap();
+        assert_eq!(bus.doc().boxes["b"].head_s, ms(-t.t0));
     }
 
     #[test]

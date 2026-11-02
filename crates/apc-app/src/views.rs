@@ -48,6 +48,8 @@ pub struct TakeView {
     pub words: Vec<WordView>,
     /// Normalized waveform envelope (0..1) across the take.
     pub peaks: Vec<f32>,
+    /// Length of the take's source file (how far a clip can be lengthened).
+    pub source_len: f64,
     pub needs_rematch: bool,
     pub ai_flag: Option<String>,
 }
@@ -233,6 +235,7 @@ pub fn scene_summaries(doc: &Document) -> Vec<SceneSummary> {
 
 fn take_view(svc: &mut Service, t: &Take, is_default: bool) -> TakeView {
     let src = svc.doc().sources.get(&t.source_id).cloned();
+    let src_len = src.as_ref().map(|s| s.duration_s).unwrap_or(0.0);
     let peaks = svc
         .analysis_of(&t.source_id)
         .map(|a| {
@@ -284,6 +287,7 @@ fn take_view(svc: &mut Service, t: &Take, is_default: bool) -> TakeView {
             })
             .collect(),
         peaks,
+        source_len: src_len,
         needs_rematch: t.needs_rematch,
         ai_flag: t.ai_flag.clone(),
     }
