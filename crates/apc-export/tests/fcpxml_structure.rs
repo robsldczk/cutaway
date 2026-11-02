@@ -255,6 +255,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             fade_out_s: 0.1,
             fade_curve: Default::default(),
             gain_db: -3.0,
+            muted: false,
         },
     );
     (paths, d)
@@ -404,6 +405,32 @@ fn srt_and_cut_list() {
     assert!(csv.contains("door.wav"));
     let md = cutlist::markdown("Ep", &rows);
     assert!(md.contains("| S1 | S1.1 | PAUL | T1 (1/2) | Paul.wav |"));
+}
+
+#[test]
+fn muted_clips_are_disabled_and_get_no_subtitle() {
+    let dir = tempfile::tempdir().unwrap();
+    let (paths, mut doc) = setup(dir.path());
+    let sara = doc
+        .boxes
+        .values()
+        .find(|b| doc.lines[&b.id].character.as_deref() == Some("SARA"))
+        .map(|b| b.id.clone())
+        .unwrap();
+    doc.boxes.get_mut(&sara).unwrap().muted = true;
+    doc.placements.get_mut("pl").unwrap().muted = true;
+    let tl = EpisodeTimeline::build(&doc, &ExportScope::All);
+    let xml = fcpxml::write(&doc, &paths, &tl, "Ep");
+    assert_eq!(
+        xml.matches("enabled=\"0\"").count(),
+        2,
+        "Sara's clip and the door"
+    );
+    let s = srt::write(&tl, true);
+    assert!(!s.contains("SARA:"));
+    assert!(s.contains("PAUL:"));
+    let csv = cutlist::csv(&cutlist::rows(&doc, &paths, &tl));
+    assert!(csv.contains("(muted)"));
 }
 
 #[test]

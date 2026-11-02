@@ -43,6 +43,12 @@ pub struct ClipPiece {
     pub fade_in_s: f64,
     pub fade_out_s: f64,
     pub gain_db: f64,
+    /// Part of the line (0 before the first split).
+    #[serde(default)]
+    pub part: usize,
+    /// Silent but in place (clip mute).
+    #[serde(default)]
+    pub muted: bool,
 }
 
 impl ClipPiece {
@@ -68,6 +74,23 @@ pub struct LayoutWord {
     pub end_s: f64,
     pub deleted: bool,
     pub script_idx: Option<usize>,
+    #[serde(default)]
+    pub part: usize,
+    #[serde(default)]
+    pub muted: bool,
+}
+
+/// A part of a line between splits (the whole line when it has none), in scene time.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LayoutPart {
+    pub index: usize,
+    /// Index in `BoxState::split_points` of the split before this part (`None` for part 0).
+    pub split: Option<usize>,
+    pub start_s: f64,
+    pub end_s: f64,
+    pub muted: bool,
+    /// Ripple-deleted: no length, sits where it was cut out.
+    pub dropped: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,6 +114,14 @@ pub struct LayoutItem {
     pub take_id: Option<String>,
     pub pieces: Vec<ClipPiece>,
     pub words: Vec<LayoutWord>,
+    #[serde(default)]
+    pub parts: Vec<LayoutPart>,
+    /// Every part muted.
+    #[serde(default)]
+    pub muted: bool,
+    /// Every part dropped: the line is out of the cut.
+    #[serde(default)]
+    pub dropped: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -218,14 +249,25 @@ fn spans_for(doc: &Document, b: &BoxState) -> Vec<Span> {
 }
 
 /// Builds the clip pieces and word list of one box, in box time starting at 0.
-fn build_box(
-    doc: &Document,
-    b: &BoxState,
-    pacing: &Pacing,
-) -> (Vec<ClipPiece>, Vec<LayoutWord>, f64) {
+struct BuiltBox {
+    pieces: Vec<ClipPiece>,
+    words: Vec<LayoutWord>,
+    parts: Vec<LayoutPart>,
+    dur: f64,
+}
+
+/// Shortest part a split may leave.
+pub const MIN_PART_S: f64 = 0.01;
+
+fn build_box(doc: &Document, b: &BoxState, pacing: &Pacing) -> BuiltBox {
     let mut spans = spans_for(doc, b);
     if spans.is_empty() {
-        return (Vec::new(), Vec::new(), 0.0);
+        return BuiltBox {
+            pieces: Vec::new(),
+            words: Vec::new(),
+            parts: Vec::new(),
+            dur: 0.0,
+        };
     }
     // Head and tail trims apply to the first and last spans.
     if let Some(f) = spans.first_mut() {
@@ -234,6 +276,36 @@ fn build_box(
     if let Some(l) = spans.last_mut() {
         l.src_out -= b.tail_s;
     }
+
+    // Split points inside a span, in play order: (span, source time, split index).
+    let mut bounds: Vec<(usize, f64, usize)> = Vec::new();
+    for (k, sp) in b.split_points.iter().enumerate() {
+        if let Some(si) = spans.iter().position(|s| {
+            s.take_id == sp.take_id
+                && sp.src_s > s.src_in + MIN_PART_S
+                && sp.src_s < s.src_out - MIN_PART_S
+        }) {
+            bounds.push((si, sp.src_s, k));
+        }
+    }
+    bounds.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    bounds.dedup_by(|a, b| a.0 == b.0 && (a.1 - b.1).abs() < MIN_PART_S);
+    // (offset, muted, dropped) of a part
+    let state = |part: usize| -> (f64, bool, bool) {
+        match part.checked_sub(1).and_then(|k| bounds.get(k)) {
+            Some(&(_, _, k)) => {
+                let sp = &b.split_points[k];
+                (sp.offset_s, sp.muted, sp.dropped)
+            }
+            None => (0.0, b.muted, b.dropped),
+        }
+    };
+    let part_of = |si: usize, t: f64| {
+        bounds
+            .iter()
+            .filter(|(bs, bt, _)| *bs < si || (*bs == si && *bt <= t + 1e-9))
+            .count()
+    };
 
     // Word list across spans.
     struct W {
@@ -308,9 +380,20 @@ fn build_box(
         }
     }
 
-    // Split each span by its cuts into pieces and lay them end to end.
+    // Trims at a split cut audio on either side of it.
+    for &(si, t, k) in &bounds {
+        let sp = &b.split_points[k];
+        if sp.trim_before_s > 0.0 {
+            cuts.push((si, (t - sp.trim_before_s).max(spans[si].src_in), t));
+        }
+        if sp.trim_after_s > 0.0 {
+            cuts.push((si, t, (t + sp.trim_after_s).min(spans[si].src_out)));
+        }
+    }
+
+    // Split each span by its cuts (and split points) into pieces and lay them end to end.
     let mut pieces: Vec<ClipPiece> = Vec::new();
-    let mut piece_ranges: Vec<(usize, f64, f64, f64)> = Vec::new(); // span, in, out, box start
+    let mut piece_span: Vec<usize> = Vec::new();
     let mut cursor = 0.0;
     for (si, s) in spans.iter().enumerate() {
         let mut segs = vec![(s.src_in, s.src_out)];
@@ -336,14 +419,27 @@ fn build_box(
             }
             segs = next;
         }
+        for &(_, bt, _) in bounds.iter().filter(|x| x.0 == si) {
+            segs = segs
+                .into_iter()
+                .flat_map(|(a, z)| {
+                    if bt > a + 1e-9 && bt < z - 1e-9 {
+                        vec![(a, bt), (bt, z)]
+                    } else {
+                        vec![(a, z)]
+                    }
+                })
+                .collect();
+        }
         for (a, z) in segs {
             if z - a < 0.005 {
                 continue;
             }
-            let overlap = if pieces.is_empty() {
-                0.0
-            } else {
-                pacing.splice_fade_s
+            let part = part_of(si, a);
+            // parts meet end to end; the part pass below places them
+            let overlap = match pieces.last() {
+                Some(l) if l.part == part => pacing.splice_fade_s,
+                _ => 0.0,
             };
             let start = (cursor - overlap).max(0.0);
             pieces.push(ClipPiece {
@@ -352,39 +448,122 @@ fn build_box(
                 src_in: a,
                 src_out: z,
                 start_s: start,
-                fade_in_s: if pieces.is_empty() {
-                    pacing.edge_fade_s
-                } else {
-                    pacing.splice_fade_s
-                },
+                fade_in_s: pacing.splice_fade_s,
                 fade_out_s: pacing.splice_fade_s,
                 gain_db: b.gain_db,
+                part,
+                muted: state(part).1,
             });
-            piece_ranges.push((si, a, z, start));
+            piece_span.push(si);
             cursor = start + (z - a);
         }
     }
-    if let Some(l) = pieces.last_mut() {
-        l.fade_out_s = pacing.edge_fade_s;
+
+    // Parts: each starts at the end of the last kept part plus its offset; dropped parts
+    // close up. Pieces are in part order, so one pass does it.
+    let n_parts = bounds.len() + 1;
+    let mut kept: Vec<ClipPiece> = Vec::new();
+    let mut kept_span: Vec<usize> = Vec::new();
+    let mut parts = Vec::with_capacity(n_parts);
+    let mut end_prev: Option<f64> = None;
+    for part in 0..n_parts {
+        let (offset, muted, dropped) = state(part);
+        let own: Vec<usize> = (0..pieces.len())
+            .filter(|&i| pieces[i].part == part)
+            .collect();
+        let at = end_prev.unwrap_or(0.0);
+        let split = part.checked_sub(1).map(|k| bounds[k].2);
+        let Some(&first) = own.first() else {
+            parts.push(LayoutPart {
+                index: part,
+                split,
+                start_s: at,
+                end_s: at,
+                muted,
+                dropped,
+            });
+            continue;
+        };
+        if dropped {
+            parts.push(LayoutPart {
+                index: part,
+                split,
+                start_s: at,
+                end_s: at,
+                muted,
+                dropped,
+            });
+            continue;
+        }
+        let new_start = match end_prev {
+            None => 0.0,
+            Some(e) => (e + offset).max(0.0),
+        };
+        let delta = new_start - pieces[first].start_s;
+        let mut end = new_start;
+        for i in own {
+            let mut p = pieces[i].clone();
+            p.start_s += delta;
+            end = end.max(p.end_s());
+            kept.push(p);
+            kept_span.push(piece_span[i]);
+        }
+        parts.push(LayoutPart {
+            index: part,
+            split,
+            start_s: new_start,
+            end_s: end,
+            muted,
+            dropped,
+        });
+        end_prev = Some(end);
     }
+    // Fades: edges of the line, and part edges unless the parts still play as one.
+    for i in 0..kept.len() {
+        if i == 0 {
+            kept[i].fade_in_s = pacing.edge_fade_s;
+        }
+        if i + 1 == kept.len() {
+            kept[i].fade_out_s = pacing.edge_fade_s;
+            continue;
+        }
+        let (p, n) = (&kept[i], &kept[i + 1]);
+        if p.part == n.part {
+            continue;
+        }
+        let seamless = p.source_id == n.source_id
+            && (p.src_out - n.src_in).abs() < 1e-6
+            && (p.end_s() - n.start_s).abs() < 1e-6
+            && p.muted == n.muted;
+        let f = if seamless { 0.0 } else { pacing.edge_fade_s };
+        kept[i].fade_out_s = f;
+        kept[i + 1].fade_in_s = f;
+    }
+    let dur = kept.iter().map(|p| p.end_s()).fold(0.0_f64, f64::max);
 
     // Place words in box time.
     let mut out_words = Vec::new();
     for (idx, w) in words.iter().enumerate() {
-        let hit = piece_ranges
-            .iter()
-            .find(|(s, a, z, _)| *s == w.span && w.t0 >= *a - 1e-6 && w.t0 < *z);
+        let hit = (0..kept.len())
+            .find(|&j| {
+                kept_span[j] == w.span && w.t0 >= kept[j].src_in - 1e-6 && w.t0 < kept[j].src_out
+            })
+            .map(|j| &kept[j]);
         let (start, end) = match hit {
-            Some((_, a, z, st)) => (st + (w.t0 - a), st + (w.t1.min(*z) - a)),
+            Some(p) => (
+                p.start_s + (w.t0 - p.src_in),
+                p.start_s + (w.t1.min(p.src_out) - p.src_in),
+            ),
             None => {
-                // deleted or trimmed away: place it at the nearest cut point
-                let prev = piece_ranges
-                    .iter()
-                    .rfind(|(s, a, _, _)| *s < w.span || (*s == w.span && *a <= w.t0));
-                let t = prev.map(|(_, a, z, st)| st + (z - a)).unwrap_or(0.0);
+                // deleted, trimmed or dropped: place it at the nearest cut point
+                let prev = (0..kept.len()).rfind(|&j| {
+                    kept_span[j] < w.span || (kept_span[j] == w.span && kept[j].src_in <= w.t0)
+                });
+                let t = prev.map(|j| kept[j].end_s()).unwrap_or(0.0);
                 (t, t)
             }
         };
+        let part = part_of(w.span, w.t0);
         out_words.push(LayoutWord {
             idx,
             text: w.text.clone(),
@@ -393,9 +572,16 @@ fn build_box(
             end_s: end,
             deleted: deleted[idx] || hit.is_none(),
             script_idx: w.script_idx,
+            part,
+            muted: state(part).1,
         });
     }
-    (pieces, out_words, cursor)
+    BuiltBox {
+        pieces: kept,
+        words: out_words,
+        parts,
+        dur,
+    }
 }
 
 /// Lays out one scene.
@@ -430,6 +616,9 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
                 take_id: None,
                 pieces: Vec::new(),
                 words: Vec::new(),
+                parts: Vec::new(),
+                muted: false,
+                dropped: false,
             });
             continue;
         }
@@ -437,8 +626,23 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
             id: item_id.clone(),
             ..Default::default()
         });
-        let (mut pieces, mut words, dur) = build_box(doc, &b, pacing);
+        let BuiltBox {
+            mut pieces,
+            mut words,
+            mut parts,
+            dur,
+        } = build_box(doc, &b, pacing);
+        let dropped = !parts.is_empty() && parts.iter().all(|p| p.dropped);
+        let muted = parts.iter().any(|p| !p.dropped) && parts.iter().all(|p| p.dropped || p.muted);
         if pieces.is_empty() {
+            for p in parts.iter_mut() {
+                p.start_s = cursor;
+                p.end_s = cursor;
+            }
+            for w in words.iter_mut() {
+                w.start_s = cursor;
+                w.end_s = cursor;
+            }
             items.push(LayoutItem {
                 item_id: item_id.clone(),
                 kind: ItemKind::Box,
@@ -448,14 +652,18 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
                 gap_overridden: false,
                 pinned: false,
                 character: line.character.clone(),
-                take_id: None,
+                take_id: if dropped { b.take_id.clone() } else { None },
                 pieces,
                 words,
+                parts,
+                muted,
+                dropped,
             });
             continue;
         }
         let (gap, overridden) = if first_box {
-            (0.0, b.gap_s.is_some())
+            // the first locked line starts the scene unless it was moved later
+            (b.gap_s.unwrap_or(0.0).max(0.0), b.gap_s.is_some())
         } else {
             match b.gap_s {
                 Some(g) => (g, true),
@@ -476,28 +684,34 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
             w.start_s += start;
             w.end_s += start;
         }
+        for p in parts.iter_mut() {
+            p.start_s += start;
+            p.end_s += start;
+        }
         let end = start + dur;
         items.push(LayoutItem {
             item_id: item_id.clone(),
             kind: ItemKind::Box,
             start_s: start,
             end_s: end,
-            gap_before_s: if first_box { 0.0 } else { start - cursor },
+            gap_before_s: start - cursor,
             gap_overridden: overridden,
             pinned: b.pinned_s.is_some(),
             character: line.character.clone(),
             take_id: b.take_id.clone(),
             pieces,
             words,
+            parts,
+            muted,
+            dropped,
         });
-        // Pinned boxes don't push the ripple cursor backwards.
-        cursor = if b.pinned_s.is_some() {
-            cursor.max(end)
-        } else {
-            end
-        };
-        pending_spacers = 0.0;
-        first_box = false;
+        // Pinned (unlocked) boxes are out of the chain: the next box follows the last
+        // locked one, and spacers before a pinned box still count for it.
+        if b.pinned_s.is_none() {
+            cursor = end;
+            pending_spacers = 0.0;
+            first_box = false;
+        }
     }
     let duration_s = items.iter().map(|i| i.end_s).fold(0.0_f64, f64::max);
     SceneLayout {
@@ -772,6 +986,112 @@ pub(crate) mod tests {
         assert_eq!(b.words.len(), 2);
     }
 
+    fn split_b(d: &mut Document, src_s: f64) -> &mut SplitPoint {
+        let b = d.boxes.get_mut("b").unwrap();
+        b.split_points.push(SplitPoint {
+            take_id: "tb".into(),
+            src_s,
+            ..Default::default()
+        });
+        b.split_points.last_mut().unwrap()
+    }
+
+    #[test]
+    fn a_split_alone_plays_the_same() {
+        let (mut d, sc) = doc2();
+        let p = Pacing::default();
+        let before = layout_scene(&d, &sc, &p).item("b").unwrap().clone();
+        split_b(&mut d, 21.0);
+        let l = layout_scene(&d, &sc, &p);
+        let b = l.item("b").unwrap();
+        assert_eq!(b.pieces.len(), 2);
+        assert_eq!(b.parts.len(), 2);
+        assert!((b.pieces[0].src_out - 21.0).abs() < 1e-9);
+        assert!((b.pieces[1].start_s - b.pieces[0].end_s()).abs() < 1e-9);
+        // one stretch of audio: no fades at the split
+        assert_eq!(b.pieces[0].fade_out_s, 0.0);
+        assert_eq!(b.pieces[1].fade_in_s, 0.0);
+        assert!((b.end_s - before.end_s).abs() < 1e-9);
+        assert_eq!(b.words[1].part, 1);
+        assert!((b.words[1].start_s - before.words[1].start_s).abs() < 1e-9);
+    }
+
+    #[test]
+    fn parts_move_by_their_offset_and_close_up_when_dropped() {
+        let (mut d, sc) = doc2();
+        let p = Pacing::default();
+        let before = layout_scene(&d, &sc, &p).item("b").unwrap().clone();
+        split_b(&mut d, 21.0).offset_s = 0.5;
+        let b = layout_scene(&d, &sc, &p).item("b").unwrap().clone();
+        assert!((b.end_s - before.end_s - 0.5).abs() < 1e-9);
+        assert!((b.words[1].start_s - before.words[1].start_s - 0.5).abs() < 1e-9);
+        assert!(b.pieces[1].fade_in_s > 0.0);
+        d.boxes.get_mut("b").unwrap().split_points[0].dropped = true;
+        let b = layout_scene(&d, &sc, &p).item("b").unwrap().clone();
+        assert_eq!(b.pieces.len(), 1);
+        assert!((b.end_s - b.start_s - 1.0).abs() < 1e-9);
+        assert!(b.words[1].deleted);
+        assert!(b.parts[1].dropped);
+        assert!(!b.dropped);
+        d.boxes.get_mut("b").unwrap().dropped = true;
+        let l = layout_scene(&d, &sc, &p);
+        let b = l.item("b").unwrap();
+        assert!(b.dropped && b.pieces.is_empty());
+        assert!((l.duration_s - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn splits_survive_a_head_trim() {
+        let (mut d, sc) = doc2();
+        split_b(&mut d, 21.0);
+        d.boxes.get_mut("b").unwrap().head_s = 0.15;
+        let l = layout_scene(&d, &sc, &Pacing::default());
+        let b = l.item("b").unwrap();
+        assert!((b.pieces[0].src_in - 20.15).abs() < 1e-9);
+        assert!((b.pieces[1].src_in - 21.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn trims_at_a_split_cut_audio_on_either_side() {
+        let (mut d, sc) = doc2();
+        let sp = split_b(&mut d, 21.0);
+        sp.trim_before_s = 0.1;
+        sp.trim_after_s = 0.1;
+        let l = layout_scene(&d, &sc, &Pacing::default());
+        let b = l.item("b").unwrap();
+        assert!((b.pieces[0].src_out - 20.9).abs() < 1e-9);
+        assert!((b.pieces[1].src_in - 21.1).abs() < 1e-9);
+        assert!((b.end_s - b.start_s - 1.8).abs() < 1e-9);
+    }
+
+    #[test]
+    fn muted_parts_keep_their_time() {
+        let (mut d, sc) = doc2();
+        let p = Pacing::default();
+        let before = layout_scene(&d, &sc, &p);
+        split_b(&mut d, 21.0).muted = true;
+        let l = layout_scene(&d, &sc, &p);
+        let b = l.item("b").unwrap();
+        assert!(!b.pieces[0].muted && b.pieces[1].muted);
+        assert!(b.words[1].muted && !b.words[1].deleted);
+        assert!(!b.muted);
+        assert!((l.duration_s - before.duration_s).abs() < 1e-9);
+        d.boxes.get_mut("b").unwrap().muted = true;
+        assert!(layout_scene(&d, &sc, &p).item("b").unwrap().muted);
+    }
+
+    #[test]
+    fn pinned_clips_are_out_of_the_chain() {
+        let (mut d, sc) = doc2();
+        let p = Pacing::default();
+        d.boxes.get_mut("a").unwrap().pinned_s = Some(6.0);
+        let l = layout_scene(&d, &sc, &p);
+        // b now opens the chain
+        assert!(l.item("b").unwrap().start_s.abs() < 1e-9);
+        assert!((l.item("a").unwrap().start_s - 6.0).abs() < 1e-9);
+        assert!((l.duration_s - 7.0).abs() < 1e-9);
+    }
+
     #[test]
     fn anchors_follow_their_line() {
         let (mut d, sc) = doc2();
@@ -797,6 +1117,7 @@ pub(crate) mod tests {
             fade_out_s: 0.0,
             fade_curve: Default::default(),
             gain_db: 0.0,
+            muted: false,
         };
         let before = placement_start(&layout_scene(&d, &sc, &p), &pl);
         d.boxes.get_mut("b").unwrap().gap_s = Some(2.0);

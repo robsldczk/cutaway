@@ -38,6 +38,9 @@ pub struct TimelineClip {
     pub direction: String,
     pub feedback: String,
     pub text: String,
+    /// Clip mute: exported but disabled.
+    #[serde(default)]
+    pub muted: bool,
 }
 
 impl TimelineClip {
@@ -142,11 +145,16 @@ impl EpisodeTimeline {
                     direction: take.map(|t| t.direction.clone()).unwrap_or_default(),
                     feedback: take.map(|t| t.feedback.clone()).unwrap_or_default(),
                     text: line.text.clone(),
+                    muted: p.muted,
                 });
                 scene_end = scene_end.max(offset + p.end_s());
             }
-            let words: Vec<&apc_core::timeline::LayoutWord> =
-                item.words.iter().filter(|w| !w.deleted).collect();
+            // muted words are not heard, so they get no subtitle
+            let words: Vec<&apc_core::timeline::LayoutWord> = item
+                .words
+                .iter()
+                .filter(|w| !w.deleted && !w.muted)
+                .collect();
             if let (Some(f), Some(l)) = (words.first(), words.last()) {
                 self.cues.push(Cue {
                     start_s: offset + f.start_s,
@@ -158,7 +166,7 @@ impl EpisodeTimeline {
                         .collect::<Vec<_>>()
                         .join(" "),
                 });
-            } else {
+            } else if !item.muted && !item.words.iter().any(|w| w.muted) {
                 self.cues.push(Cue {
                     start_s: offset + item.start_s,
                     end_s: offset + item.end_s,
@@ -201,6 +209,7 @@ impl EpisodeTimeline {
                 direction: String::new(),
                 feedback: String::new(),
                 text: desc,
+                muted: p.muted,
             });
         }
         self.scenes.push(SceneMark {

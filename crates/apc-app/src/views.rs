@@ -3,7 +3,7 @@
 use serde::Serialize;
 
 use apc_core::commands::default_take;
-use apc_core::timeline::{layout_scene, placement_start, ItemKind};
+use apc_core::timeline::{layout_scene, placement_start, ItemKind, LayoutPart};
 use apc_core::*;
 
 use crate::error::{AppError, Result};
@@ -61,15 +61,20 @@ pub struct LayoutWordView {
     pub end_s: f64,
     pub deleted: bool,
     pub script_idx: Option<usize>,
+    pub part: usize,
+    pub muted: bool,
 }
 
 #[derive(Serialize)]
 pub struct PieceView {
     pub take_id: String,
+    pub source_id: String,
     pub src_in: f64,
     pub src_out: f64,
     pub start_s: f64,
     pub len_s: f64,
+    pub part: usize,
+    pub muted: bool,
 }
 
 #[derive(Serialize)]
@@ -95,6 +100,11 @@ pub struct ItemView {
     pub takes: Vec<TakeView>,
     pub words: Vec<LayoutWordView>,
     pub pieces: Vec<PieceView>,
+    /// Parts between splits (one when the line has none), in scene time.
+    pub parts: Vec<LayoutPart>,
+    /// Every part muted / every part ripple-deleted.
+    pub muted: bool,
+    pub dropped: bool,
     pub head_s: f64,
     pub tail_s: f64,
     pub comp: Vec<CompSegment>,
@@ -329,6 +339,8 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
                     end_s: w.end_s,
                     deleted: w.deleted,
                     script_idx: w.script_idx,
+                    part: w.part,
+                    muted: w.muted,
                 })
                 .collect(),
             pieces: li
@@ -336,12 +348,18 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
                 .iter()
                 .map(|p| PieceView {
                     take_id: p.take_id.clone(),
+                    source_id: p.source_id.clone(),
                     src_in: p.src_in,
                     src_out: p.src_out,
                     start_s: p.start_s,
                     len_s: p.len(),
+                    part: p.part,
+                    muted: p.muted,
                 })
                 .collect(),
+            parts: li.parts.clone(),
+            muted: li.muted,
+            dropped: li.dropped,
             head_s: b.head_s,
             tail_s: b.tail_s,
             comp: b.comp.clone(),
@@ -456,6 +474,10 @@ pub struct PlacementView {
     pub fade_out_s: f64,
     pub fade_curve: FadeCurve,
     pub gain_db: f64,
+    pub muted: bool,
+    /// Asset in point and the asset's length (trim limits).
+    pub in_s: f64,
+    pub asset_len_s: f64,
     pub peaks: Vec<f32>,
     /// Where the sound came from ("Epidemic Sound", "ElevenLabs", "Library").
     pub origin: String,
@@ -534,6 +556,13 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
             fade_out_s: p.fade_out_s,
             fade_curve: p.fade_curve,
             gain_db: p.gain_db,
+            muted: p.muted,
+            in_s: p.in_s,
+            asset_len_s: doc
+                .assets
+                .get(&p.asset_id)
+                .map(|a| a.duration_s)
+                .unwrap_or(p.in_s + p.len_s),
             peaks,
             origin: doc
                 .assets

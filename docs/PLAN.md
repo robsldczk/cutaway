@@ -398,6 +398,54 @@ Rules that hold throughout:
 - [x] Unit tests (merge, mapping back, doubles, director never a take, validation), mock rescue on the fixture, scoped apply keeps out-of-scope data, Playwright smoke test of the dev panel.
 - [x] Copy of Tarmac-EP02 with Claude (Sara): rescue numbers in the progress log. Full episode with Claude: not run yet (about 15–25 min).
 
+### M11: Editor basics on the Edit page (Rob, 2026-11-02, branch `editor`)
+Why: Rob's first real session in the Edit page: the time scale jumps when a clip moves, clips can't be trimmed, the waveform can't be read, and there is no clip mute. The page should work like a minimal NLE with Logic Pro key commands.
+
+Rob's answers: a muted clip keeps its slot (plus a separate ripple delete); "frame handles" are clip-edge trim handles; unlocking a clip frees it from the script order and pauses; Return stays "play line in context"; ←/→ select the previous/next clip on the Edit page only (takes elsewhere); scrubbing is silent.
+
+Rules that hold throughout: every change is a command (UI, CLI and MCP share them); source media is never touched; mute and ripple delete show in every view and are heard in playback, bounce and export.
+
+**11.1 Fixed time scale and a solid playhead** (UI)
+- [ ] Zoom is absolute (px/s); scene length, clip moves and panel widths never change it. Zoom anchors to the pointer (⌘-scroll) or the playhead (keys). ⌘←/→ zoom, Z toggles fit-scene and back.
+- [ ] Full-height playhead with a handle in the ruler; drag scrubs silently, click on the ruler or an empty lane jumps.
+- [ ] The view follows the playhead while playing.
+
+**11.2 Real dialogue splits** (core)
+- [ ] Split points stored by source time (take + seconds), so they survive trims and take-level edits. Each part after a split has its own offset, trims at the split, mute and drop.
+- [ ] Layout cuts the pieces at split points; parts shift by their offsets; dropped parts close up (ripple inside the line); words follow.
+- [ ] `split_clip` takes scene time; `move_segment` moves a part (part 0 moves the clip); `clear_splits` stays.
+
+**11.3 Mute and ripple delete** (core + every view)
+- [ ] `set_clip_muted` (a part or the whole line) and `muted` on placements: kept in place, skipped in playback and bounce, disabled clips in FCPXML, left out of SRT, marked in the cut list.
+- [ ] `ripple_delete` on a dialogue part: the part drops out and the time closes; restore with `set_clip_dropped`. Placements: Delete removes.
+- [ ] Options and Arrange grey out muted lines and parts, show dropped ones struck through with restore.
+- [ ] Keys: ⌃M mute, Delete = ripple delete when Ripple is on, mute otherwise (dialogue).
+
+**11.4 Trim handles** (core + UI)
+- [ ] `trim_clip` (dialogue: head/tail of the line and inner split edges, content stays in place, ripple setting respected, limited to the source file) and `trim_placement` (in point and length, limited to the asset).
+- [ ] Edge handles on every clip; the hidden audio shows faintly while dragging; edges snap to words; trim start/end to playhead.
+
+**11.5 Waveforms you can read** (app + UI)
+- [ ] Each piece draws its own source range (matches what plays); peaks fetched for the visible range at the current zoom, cached; normalized per source like the take peaks.
+- [ ] Lane height and waveform vertical zoom.
+
+**11.6 Lock to script**
+- [ ] A global "Lock" switch and a per-clip lock. Unlocked clips move freely in absolute time (pin) and never ripple; locking again keeps the clip where it is (`pin_clip` without a time turns the pin back into a pause).
+
+**11.7 Script strip and collapsed groups**
+- [ ] Word row in the script strip (each word at its time, current word lit while playing), visible whatever is collapsed.
+- [ ] A collapsed group shows a preview row of its clips merged into blocks (Dialogue with sentence labels).
+
+**11.8 Selection, fades, keys**
+- [ ] Multi-select (⇧-click, rubber band on empty lanes), ⇧F select all following, ⌘U cycle to selection; move, nudge, mute, delete on the selection.
+- [ ] ⌘T split at playhead; fade handles on clip corners (dialogue included).
+- [ ] Logic keys on the Edit page: ←/→ previous/next clip, , / . previous/next word, T tool menu, M/S on the selected lane, ⌘↑/↓ lane height; help overlay updated.
+
+**11.9 Verification**
+- [ ] Core tests: splits survive head trims, offsets and drops, mute skipped in schedule/bounce, FCPXML disabled clip, SRT skip, trims clamp to the source, unpin keeps the position.
+- [ ] Playwright: zoom stays fixed when a clip moves, trim handle, mute greys the line in Arrange.
+- [ ] DECISIONS entries, "Changed in implementation" note in frontend-design.md, progress log.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
