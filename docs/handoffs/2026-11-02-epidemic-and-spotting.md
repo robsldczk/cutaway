@@ -85,7 +85,7 @@ cd app && npx playwright test                             # 14 specs, incl. test
 7. **FIXED: re-spot left old state.** Keywords that only came from replaced cues are dropped, and keywords typed by hand stay. AI buckets the scene no longer fills let go of the scene, and are deleted if nothing is left in them (no cues, kept sounds or pinned previews). Test: `re_spotting_a_changed_script_tidies_the_buckets`. Original report: AI buckets that lose all their cues are kept, and old keywords stay (at most 6 per bucket).
 8. **Script re-import.** If a re-import ever gives unchanged lines new ids, every scene counts as changed. On the demo, unchanged lines keep their ids (covered by the test).
 9. **Cosmetic issues:**
-   - the global toast (`App.svelte`, `top: 84px`, centred) covers the Spot button area of the Sounds top bar while it shows;
+   - FIXED: the global toast (`App.svelte`) sat at `top: 84px` over the Spot button (and over the Edit page's control bar); it now shows bottom centre above the transport and lets clicks through;
    - previews still use made-up waveforms, although the API returns a `waveformUrl` that could be used.
 10. **FIXED: stale docs** (RUN_REPORT now notes the change). Original report: `docs/RUN_REPORT.md` still calls Epidemic a stub (D28). D37 and D60 supersede that.
 

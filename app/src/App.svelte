@@ -157,12 +157,16 @@
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--stage-hairline) 10%, var(--stage-hairline) 90%, transparent);
   }
+  /* bottom centre, above the transport: the top bars (Edit control bar, Sounds' Spot
+     button) stay visible while it shows */
   .toast {
     position: absolute;
     left: 50%;
-    top: 84px;
+    bottom: 120px;
     transform: translateX(-50%);
     z-index: 50;
+    max-width: min(640px, 90%);
+    pointer-events: none;
     padding: 8px 14px;
     border-radius: var(--radius-pill);
     background: var(--panel-solid);
