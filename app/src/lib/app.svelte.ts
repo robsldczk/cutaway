@@ -11,6 +11,13 @@ export type Drawer = null | 'inspector' | 'unmatched' | 'bucket';
 
 export type Theme = 'dark' | 'light';
 
+/** A clip on the Edit page: a dialogue part (`part`, 0 without splits), a sound or the room tone. */
+export interface EditSel {
+  kind: 'line' | 'sound' | 'roomtone';
+  id: string;
+  part?: number;
+}
+
 export interface RecentEpisode {
   name: string;
   path: string;
@@ -87,8 +94,17 @@ class AppState {
   snapWords = $state(true);
   ripple = $state(true);
   cycle = $state<{ on: boolean; from: number; to: number }>({ on: false, from: 0, to: 0 });
-  /** What the edit page has selected (shared with its inspector and the LCD). */
-  editSel = $state<{ kind: 'line' | 'sound' | 'roomtone'; id: string } | null>(null);
+  /** What the edit page has selected (shared with its inspector and the LCD): the clip
+   *  clicked last, and everything selected with it (⇧-click, rubber band, ⇧F). */
+  editSel = $state<EditSel | null>(null);
+  editMany = $state<EditSel[]>([]);
+  /** Edit page time scale in px per second; 0 until the page first fits the scene. */
+  editPx = $state(0);
+  /** Edit page lane height and waveform height (⌘↑/↓, the vertical zoom). */
+  laneScale = $state(1);
+  waveGain = $state(1);
+  /** Dialogue clips follow the script order and pauses; off, they move freely in time. */
+  lockScript = $state(true);
   /** Bucket the full bucket highlights or opens in its side panel. */
   openBucket = $state<string | null>(null);
   /** Sound being auditioned from a bucket (asset id or remote id). */
@@ -183,6 +199,7 @@ class AppState {
     this.curId = null;
     this.passageTo = null;
     this.editSel = null;
+    this.editMany = [];
     this.openBucket = null;
     this.overlay = null;
     this.drawer = null;
@@ -419,6 +436,22 @@ class AppState {
     const prev = this.lines[this.curIndex - 1];
     if (this.playing) await this.stop();
     await this.play(prev ? prev.start_s : c.start_s, c.end_s + 0.2);
+  }
+
+  /** Silent scrub: moves the playhead without restarting playback. */
+  scrubTo(t: number) {
+    this.pos = t;
+    this.locator = t;
+    const it = this.lineAt(t);
+    if (it) this.curId = it.line_id;
+  }
+
+  /** ⌃M on Options and Arrange: mutes the current line, or restores it when it was cut. */
+  async toggleMuteCurrent() {
+    const c = this.cur;
+    if (!c || c.takes.length === 0) return;
+    if (c.dropped) await this.cmd({ cmd: 'set_clip_dropped', line_id: c.line_id, dropped: false });
+    else await this.cmd({ cmd: 'set_clip_muted', line_id: c.line_id, muted: !c.muted });
   }
 
   seek(t: number) {

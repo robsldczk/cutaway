@@ -1,4 +1,5 @@
 <script lang="ts">
+  import ClipState from '../components/ClipState.svelte';
   import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { fmt } from '../lib/format';
@@ -63,7 +64,7 @@
   }
 
   function textOf(it: ItemView): string {
-    if (it.takes.length === 0 || it.words.length === 0) return it.text;
+    if (it.takes.length === 0 || it.words.length === 0 || it.dropped) return it.text;
     return it.words.filter((w) => !w.deleted).map((w) => w.text).join(' ');
   }
 
@@ -75,8 +76,9 @@
   const live = $derived(!!cur && (app.playing || (app.pos > cur.start_s + 0.01 && app.pos < cur.end_s)));
   const R = $derived(Math.round(32 * sc));
 
-  function wordStyle(w: { start_s: number; end_s: number; deleted: boolean }) {
+  function wordStyle(w: { start_s: number; end_s: number; deleted: boolean; muted: boolean }) {
     if (w.deleted) return 'color: var(--text-dim); text-decoration: line-through';
+    if (w.muted) return 'color: var(--text-dim)';
     if (!live || w.end_s < app.pos) return 'color: var(--text-strong)';
     if (w.start_s <= app.pos) return `transform: scale(1.22); color: var(--text-strong); text-shadow: 0 0 22px ${rgba(sh, 0.95)}`;
     return 'color: rgb(var(--ink-rgb) / 0.42)';
@@ -126,13 +128,14 @@
             <div class="deck" aria-hidden="true" style={dk.style}><span class="dnum">{dk.num}</span></div>
           {/each}
           {#key app.anim.id === cur.line_id ? app.anim.n : 0}
-            <article class="glass abox {app.anim.id === cur.line_id && app.anim.n ? 'in' + app.anim.dir : ''}" ondblclick={openEditor} aria-label="Current line" style="position: relative; z-index: 5; {boxStyle}">
+            <article class="glass abox {app.anim.id === cur.line_id && app.anim.n ? 'in' + app.anim.dir : ''}" class:clip-muted={cur.muted} class:clip-dropped={cur.dropped} ondblclick={openEditor} aria-label="Current line" style="position: relative; z-index: 5; {boxStyle}">
               <div class="hd">
                 <div class="nmrow">
                   <span class="nm" style="font-size: 12px; color: {color.name}">{charLabel(app.view, cur.character)}</span>
                   {#if take?.favorite}<span style="font-size: 13px; color: {color.name}" title={take.favorite_origin === 'director' ? 'Director pick' : 'Your favorite'}>★</span>{/if}
                   {#if cur.low_confidence}<button class="lowc" title="Low confidence: open the inspector (⌘I)" aria-label="Low confidence" onclick={() => (app.drawer = 'inspector')}></button>{/if}
                   {#if cur.edited_in_edit}<button class="edited" onclick={() => app.setPage('edit')} title="Edited on the Edit page">edited in Edit</button>{/if}
+                  <ClipState it={cur} />
                 </div>
                 <span class="pos" data-testid="take-pos">{cur.takes.length ? `${k + 1} / ${cur.takes.length}` : 'no takes'}</span>
               </div>
@@ -163,10 +166,10 @@
           <div class="side chip">{fmt(app.pos)}</div>
         </div>
       {:else}
-        <div class="boxs" class:passage={inPassage(r.it.line_id)} onclick={() => app.select(r.it.line_id)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} style="flex: none; {lineStyle(r.it, r.j)}" role="button" tabindex="-1" onkeydown={() => {}}>
+        <div class="boxs" class:passage={inPassage(r.it.line_id)} class:clip-muted={r.it.muted} class:clip-dropped={r.it.dropped} onclick={() => app.select(r.it.line_id)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} style="flex: none; {lineStyle(r.it, r.j)}" role="button" tabindex="-1" onkeydown={() => {}}>
           <div class="hd small">
             <span class="nm" style="color: {charColor(app.view, r.it.character).name}; font-size: {Math.max(10, Math.round(11 * sc))}px">{charLabel(app.view, r.it.character)}</span>
-            <span class="info">{r.it.takes[r.it.take_index ?? 0]?.favorite ? '★ ' : ''}{r.it.takes.length ? `${(r.it.take_index ?? 0) + 1}/${r.it.takes.length}` : '—'}{r.it.edited_in_edit ? ' · Edit' : ''}</span>
+            <span class="info">{r.it.takes[r.it.take_index ?? 0]?.favorite ? '★ ' : ''}{r.it.takes.length ? `${(r.it.take_index ?? 0) + 1}/${r.it.takes.length}` : '—'}{r.it.edited_in_edit ? ' · Edit' : ''}{r.it.dropped ? ' · cut' : r.it.muted ? ' · muted' : ''}</span>
           </div>
           {#if r.it.paren}<p class="script paren2" style="font-size: {Math.round(13 * sc)}px">({r.it.paren})</p>{/if}
           <p class="script txt" style="font-size: {Math.round(18 * sc)}px">{textOf(r.it)}</p>

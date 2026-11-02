@@ -31,6 +31,7 @@ export function onKey(e: KeyboardEvent) {
   else if (k === 'ArrowDown') app.go(1);
   else if (k === 'ArrowLeft' && app.page !== 'edit') void app.stepTake(-1);
   else if (k === 'ArrowRight' && app.page !== 'edit') void app.stepTake(1);
+  else if (e.ctrlKey && (k === 'm' || k === 'M')) void app.toggleMuteCurrent();
   else if (k === 'f' || k === 'F') void app.toggleFav();
   else if (k === 'e' || k === 'E') openEditor();
   else if (mod && (k === 'i' || k === 'I')) app.drawer = app.drawer === 'inspector' ? null : 'inspector';
