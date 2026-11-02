@@ -14,8 +14,10 @@ use apc_sound::secrets::KeyedService;
 use crate::error::{AppError, Result};
 use crate::service::Service;
 
-/// Results per search page ("Load 12 more").
-pub const PAGE: usize = 12;
+/// Previews a bucket search adds per page ("Load more").
+pub const PAGE: usize = 5;
+/// Results per page of the free Epidemic search.
+pub const FREE_PAGE: usize = 10;
 
 /// Bucket a spotted cue belongs to, from its words (deterministic grouping of AI cues).
 pub fn category_of(c: &SoundCue, place: &str) -> String {
@@ -73,29 +75,60 @@ fn keyword_of(desc: &str) -> String {
         .to_lowercase()
 }
 
-/// "Spot script": AI sound spotting for one scene or all of them, grouped into buckets.
-/// Runs only when asked.
-pub fn spot(svc: &mut Service, scene: Option<&str>) -> Result<Value> {
-    let scenes: Vec<Scene> = match scene {
+/// Scenes that have script lines, and those of them not spotted yet (or changed since).
+pub fn spot_status(doc: &Document) -> (Vec<String>, Vec<String>) {
+    let with_lines: Vec<String> = doc
+        .scenes_in_order()
+        .into_iter()
+        .filter(|s| !doc.lines_of_scene(&s.id).is_empty())
+        .map(|s| s.id.clone())
+        .collect();
+    let pending = with_lines
+        .iter()
+        .filter(|id| !doc.scene_spotted(id))
+        .cloned()
+        .collect();
+    (with_lines, pending)
+}
+
+/// "Spot script": AI sound spotting (the script only, no audio), grouped into buckets.
+/// Runs only when asked: one AI call per scene. Without `scene` it spots the scenes not
+/// spotted yet or changed since, or every scene with `all` ("Re-spot"). A scene that
+/// fails is reported and the others go on.
+pub fn spot(
+    svc: &mut Service,
+    scene: Option<&str>,
+    all: bool,
+    progress: &dyn Fn(f64, &str),
+) -> Result<Value> {
+    let (with_lines, pending) = spot_status(svc.doc());
+    let ids: Vec<String> = match scene {
         Some(k) => vec![svc
             .doc()
             .find_scene(k)
-            .cloned()
+            .map(|s| s.id.clone())
             .ok_or_else(|| AppError::Params(format!("no scene '{k}'")))?],
-        None => svc.doc().scenes_in_order().into_iter().cloned().collect(),
+        None if all => with_lines.clone(),
+        None => pending,
     };
+    let scenes: Vec<Scene> = ids
+        .iter()
+        .filter_map(|id| svc.doc().scenes.get(id).cloned())
+        .filter(|s| !svc.doc().lines_of_scene(&s.id).is_empty())
+        .collect();
     let mut touched = 0;
-    for sc in &scenes {
-        let lines: Vec<String> = svc
-            .doc()
-            .lines_of_scene(&sc.id)
-            .iter()
-            .map(|l| l.id.clone())
-            .collect();
-        if lines.is_empty() {
+    let mut spotted = 0;
+    let mut failed: Vec<Value> = Vec::new();
+    for (i, sc) in scenes.iter().enumerate() {
+        progress(
+            i as f64 / scenes.len() as f64,
+            &format!("Scene {} ({} of {})", sc.number, i + 1, scenes.len()),
+        );
+        if let Err(e) = crate::sound::spot(svc, &sc.id) {
+            failed.push(json!({ "scene": sc.number, "error": e.to_string() }));
             continue;
         }
-        crate::sound::spot(svc, &sc.id)?;
+        spotted += 1;
         let cues: Vec<SoundCue> = svc
             .doc()
             .cues
@@ -133,10 +166,19 @@ pub fn spot(svc: &mut Service, scene: Option<&str>) -> Result<Value> {
                 ai_suggested: true,
                 order,
                 character: None,
+                search_offset: 0,
             });
             if !b.scene_ids.contains(&sc.id) {
                 b.scene_ids.push(sc.id.clone());
             }
+            // cues a re-spot replaced are gone
+            let live: Vec<String> = b
+                .cue_ids
+                .iter()
+                .filter(|id| svc.doc().cues.contains_key(*id))
+                .cloned()
+                .collect();
+            b.cue_ids = live;
             for c in cs {
                 if !b.cue_ids.contains(&c.id) {
                     b.cue_ids.push(c.id.clone());
@@ -159,7 +201,18 @@ pub fn spot(svc: &mut Service, scene: Option<&str>) -> Result<Value> {
             touched += 1;
         }
     }
-    Ok(json!({ "buckets": touched, "scenes": scenes.len() }))
+    if spotted == 0 && !failed.is_empty() {
+        return Err(AppError::Other(format!(
+            "spotting failed: {}",
+            failed[0]["error"].as_str().unwrap_or("unknown error")
+        )));
+    }
+    Ok(json!({
+        "buckets": touched,
+        "scenes": spotted,
+        "skipped": if scene.is_some() { 0 } else { with_lines.len().saturating_sub(scenes.len()) },
+        "failed": failed,
+    }))
 }
 
 fn scene_labels(doc: &Document, b: &SoundBucket) -> Vec<String> {
@@ -265,7 +318,12 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
     }
     let epidemic = svc.api_key(KeyedService::Epidemic).is_some();
     let elevenlabs = svc.api_key(KeyedService::Elevenlabs).is_some();
-    Ok(json!({ "buckets": out, "connected": { "epidemic": epidemic, "elevenlabs": elevenlabs } }))
+    let (scenes, pending) = spot_status(&doc);
+    Ok(json!({
+        "buckets": out,
+        "connected": { "epidemic": epidemic, "elevenlabs": elevenlabs },
+        "spot": { "scenes": scenes.len(), "pending": pending.len() },
+    }))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -277,6 +335,7 @@ pub fn create(
     length_min_s: Option<f64>,
     length_max_s: Option<f64>,
     exclude: Vec<String>,
+    previews: Vec<Preview>,
 ) -> Result<String> {
     if name.trim().is_empty() {
         return Err(AppError::Params("a bucket needs a name".into()));
@@ -309,7 +368,14 @@ pub fn create(
         ai_suggested: false,
         order: svc.doc().buckets.len() as u32,
         character: None,
+        search_offset: 0,
     };
+    let mut b = b;
+    for p in previews {
+        if !b.previews.iter().any(|x| x.remote_id == p.remote_id) {
+            b.previews.push(Preview { pinned: true, ..p });
+        }
+    }
     let id = b.id.clone();
     svc.exec(&Command::PutBucket { bucket: b })?;
     Ok(id)
@@ -415,54 +481,134 @@ pub fn search(
                 .filter_map(|id| svc.doc().assets.get(id))
                 .filter_map(|a| a.remote_id.clone())
                 .collect();
-            let offset = if more {
-                b.previews.len() + b.dismissed.len()
-            } else {
-                0
-            };
             if !more {
-                b.previews.clear();
+                // a fresh search replaces the results, not what was dropped in by hand
+                b.previews.retain(|p| p.pinned);
+                b.search_offset = 0;
             }
-            let results = ep.search_page(&term, PAGE * 2, offset)?;
             let mut added = 0;
-            for r in results {
-                let Some(rid) = r.remote_id.clone() else {
-                    continue;
-                };
-                let title = r.title.to_lowercase();
-                let excluded = b
-                    .exclude
-                    .iter()
-                    .any(|x| !x.is_empty() && title.contains(&x.to_lowercase()));
-                let too_short = b
-                    .length_min_s
-                    .map(|m| r.duration_s > 0.0 && r.duration_s < m)
-                    .unwrap_or(false);
-                let too_long = b.length_max_s.map(|m| r.duration_s > m).unwrap_or(false);
-                if excluded
-                    || too_short
-                    || too_long
-                    || b.dismissed.contains(&rid)
-                    || kept_remote.contains(&rid)
-                    || b.previews.iter().any(|p| p.remote_id == rid)
-                {
-                    continue;
+            let mut exhausted = false;
+            // read on until a page is filled: results the filters rule out don't count
+            'pages: for _ in 0..4 {
+                let ask = PAGE * 3;
+                let results = ep.search_page(&term, ask, b.search_offset)?;
+                let got = results.len();
+                for r in results {
+                    b.search_offset += 1;
+                    if let Some(p) = keep_result(&b, &kept_remote, r) {
+                        b.previews.push(p);
+                        added += 1;
+                        if added >= PAGE {
+                            break 'pages;
+                        }
+                    }
                 }
-                b.previews.push(Preview {
-                    provider: "epidemic".into(),
-                    remote_id: rid,
-                    title: r.title,
-                    duration_s: r.duration_s,
-                });
-                added += 1;
-                if added >= PAGE {
+                if got < ask {
+                    exhausted = true;
                     break;
                 }
             }
             svc.exec(&Command::PutBucket { bucket: b.clone() })?;
-            Ok(json!({ "added": added, "previews": b.previews }))
+            Ok(json!({ "added": added, "previews": b.previews, "more": !exhausted }))
         }
     }
+}
+
+/// A search result as a new preview, unless the bucket's filters or earlier choices rule
+/// it out (left-out words, length, dismissed, kept, already shown).
+fn keep_result(
+    b: &SoundBucket,
+    kept_remote: &[String],
+    r: apc_sound::SoundCandidate,
+) -> Option<Preview> {
+    let rid = r.remote_id?;
+    let title = r.title.to_lowercase();
+    let excluded = b
+        .exclude
+        .iter()
+        .any(|x| !x.is_empty() && title.contains(&x.to_lowercase()));
+    let too_short = b
+        .length_min_s
+        .map(|m| r.duration_s > 0.0 && r.duration_s < m)
+        .unwrap_or(false);
+    let too_long = b.length_max_s.map(|m| r.duration_s > m).unwrap_or(false);
+    if excluded
+        || too_short
+        || too_long
+        || b.dismissed.contains(&rid)
+        || kept_remote.contains(&rid)
+        || b.previews.iter().any(|p| p.remote_id == rid)
+    {
+        return None;
+    }
+    Some(Preview {
+        provider: "epidemic".into(),
+        remote_id: rid,
+        title: r.title,
+        duration_s: r.duration_s,
+        pinned: false,
+    })
+}
+
+/// Free search of Epidemic Sound (the search bar of Import › Sounds): results to audition
+/// and drag into a bucket. Nothing is stored or downloaded.
+pub fn search_free(svc: &mut Service, query: &str, offset: usize) -> Result<Value> {
+    let term = query.trim();
+    if term.is_empty() {
+        return Err(AppError::Params("type something to search for".into()));
+    }
+    let ep = EpidemicProvider::new(svc.api_key(KeyedService::Epidemic));
+    let results = ep.search_page(term, FREE_PAGE, offset)?;
+    let more = results.len() >= FREE_PAGE;
+    let doc = svc.doc();
+    let previews: Vec<Value> = results
+        .into_iter()
+        .filter_map(|r| {
+            let rid = r.remote_id?;
+            // where it already is, so a drop can say so
+            let buckets: Vec<String> = doc
+                .buckets
+                .values()
+                .filter(|b| {
+                    b.previews.iter().any(|p| p.remote_id == rid)
+                        || b.kept.iter().any(|id| {
+                            doc.assets.get(id).and_then(|a| a.remote_id.as_deref())
+                                == Some(rid.as_str())
+                        })
+                })
+                .map(|b| b.id.clone())
+                .collect();
+            Some(json!({
+                "provider": "epidemic", "remote_id": rid, "title": r.title,
+                "duration_s": r.duration_s, "buckets": buckets,
+            }))
+        })
+        .collect();
+    Ok(json!({ "results": previews, "next_offset": offset + FREE_PAGE, "more": more }))
+}
+
+/// Adds a search result to a bucket by hand (dropped in from the free search). It stays a
+/// preview (nothing is downloaded) and survives the bucket's own searches.
+pub fn add_preview(svc: &mut Service, bucket_id: &str, p: Preview) -> Result<Value> {
+    let mut b = bucket(svc, bucket_id)?;
+    only_sourced(&b)?;
+    let kept = b.kept.iter().any(|id| {
+        svc.doc()
+            .assets
+            .get(id)
+            .and_then(|a| a.remote_id.as_deref())
+            == Some(p.remote_id.as_str())
+    });
+    if kept {
+        return Ok(json!({ "added": false, "reason": "already kept in this bucket" }));
+    }
+    b.dismissed.retain(|d| d != &p.remote_id);
+    match b.previews.iter_mut().find(|x| x.remote_id == p.remote_id) {
+        Some(x) => x.pinned = true,
+        None => b.previews.insert(0, Preview { pinned: true, ..p }),
+    }
+    svc.exec(&Command::PutBucket { bucket: b })?;
+    Ok(json!({ "added": true }))
 }
 
 /// Downloads a preview into the library (licensed) and keeps it in the bucket.

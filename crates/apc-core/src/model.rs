@@ -836,6 +836,9 @@ pub struct Preview {
     pub title: String,
     #[serde(default)]
     pub duration_s: f64,
+    /// Added by hand (dropped in from a search); a fresh keyword search keeps it.
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 /// A named group of sounds for one or more scenes: its keywords are the search query.
@@ -872,6 +875,9 @@ pub struct SoundBucket {
     /// only (no search, no generation).
     #[serde(default)]
     pub character: Option<String>,
+    /// How far into the provider's results the keyword search has read ("Load more").
+    #[serde(default)]
+    pub search_offset: usize,
 }
 
 impl Entity for SoundBucket {
@@ -1035,6 +1041,39 @@ impl Document {
 
     pub fn setting(&self, key: &str) -> Option<&Value> {
         self.settings.get(key).map(|s| &s.value)
+    }
+
+    /// Fingerprint of what sound spotting reads of a scene (heading, location, lines), so
+    /// a scene is spotted again only when its script changed.
+    pub fn scene_script_hash(&self, scene_id: &str) -> String {
+        let mut h = blake3::Hasher::new();
+        if let Some(s) = self.scenes.get(scene_id) {
+            h.update(s.heading.as_bytes());
+            h.update(b"\0");
+            h.update(s.location.as_bytes());
+        }
+        for l in self.lines_of_scene(scene_id) {
+            h.update(b"\n");
+            h.update(l.id.as_bytes());
+            h.update(format!("|{:?}|", l.kind).as_bytes());
+            h.update(l.character.as_deref().unwrap_or("").as_bytes());
+            h.update(b"|");
+            h.update(l.text.as_bytes());
+        }
+        h.finalize().to_hex()[..16].to_string()
+    }
+
+    /// Setting key under which spotting records the scene hash it last read.
+    pub fn spot_key(scene_id: &str) -> String {
+        format!("spot:{scene_id}")
+    }
+
+    /// The scene was spotted and its script hasn't changed since.
+    pub fn scene_spotted(&self, scene_id: &str) -> bool {
+        self.setting(&Self::spot_key(scene_id))
+            .and_then(|v| v["hash"].as_str())
+            .map(|h| h == self.scene_script_hash(scene_id))
+            .unwrap_or(false)
     }
 }
 

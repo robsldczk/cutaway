@@ -161,6 +161,20 @@ pub enum SfxCmd {
         #[arg(long)]
         scene: String,
     },
+    /// Spot script into buckets: new and changed scenes (one AI call each), or all.
+    SpotScript {
+        #[arg(long)]
+        scene: Option<String>,
+        /// Re-spot every scene, not only new and changed ones.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Search Epidemic Sound (nothing is downloaded).
+    Search {
+        query: String,
+        #[arg(long, default_value_t = 0)]
+        offset: usize,
+    },
     /// Add files to the show library.
     Import { paths: Vec<PathBuf> },
 }
@@ -297,6 +311,20 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                 Cmd::Sfx {
                     cmd: SfxCmd::Spot { scene },
                 } => call(&mut sess, "spot_sound_effects", json!({ "scene": scene })),
+                Cmd::Sfx {
+                    cmd: SfxCmd::SpotScript { scene, all },
+                } => call(
+                    &mut sess,
+                    "spot_buckets",
+                    json!({ "scene": scene, "all": all }),
+                ),
+                Cmd::Sfx {
+                    cmd: SfxCmd::Search { query, offset },
+                } => call(
+                    &mut sess,
+                    "search_epidemic",
+                    json!({ "query": query, "offset": offset }),
+                ),
                 Cmd::Sfx {
                     cmd: SfxCmd::Import { paths },
                 } => call(
