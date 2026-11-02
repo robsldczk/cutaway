@@ -133,7 +133,7 @@ fn buckets_search_keep_dismiss_and_download_on_drop() {
         .unwrap();
     let bid = b["bucket_id"].as_str().unwrap().to_string();
     let previews = b["search"]["previews"].as_array().unwrap().clone();
-    assert_eq!(previews.len(), 12, "one page");
+    assert_eq!(previews.len(), 5, "one page");
     assert!(
         previews
             .iter()
@@ -145,7 +145,7 @@ fn buckets_search_keep_dismiss_and_download_on_drop() {
         "too short"
     );
 
-    // Load 12 more: no repeats
+    // Load more: no repeats
     let more = svc
         .call("bucket_search", &json!({ "bucket_id": bid, "more": true }))
         .unwrap();
@@ -155,11 +155,11 @@ fn buckets_search_keep_dismiss_and_download_on_drop() {
         .iter()
         .map(|p| p["remote_id"].as_str().unwrap().to_string())
         .collect();
-    assert_eq!(ids.len(), 24);
+    assert_eq!(ids.len(), 10);
     let mut uniq = ids.clone();
     uniq.sort();
     uniq.dedup();
-    assert_eq!(uniq.len(), 24, "no duplicates across pages");
+    assert_eq!(uniq.len(), 10, "no duplicates across pages");
 
     // dismiss one; download another (kept, gold)
     svc.call(
@@ -188,7 +188,7 @@ fn buckets_search_keep_dismiss_and_download_on_drop() {
     assert_eq!(foil["kept"].as_array().unwrap().len(), 1);
     assert_eq!(
         foil["previews"].as_array().unwrap().len(),
-        22,
+        8,
         "dismissed and kept are no longer previews"
     );
 

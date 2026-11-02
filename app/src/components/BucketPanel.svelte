@@ -42,7 +42,8 @@
       const r = await app.run(() => call<{ library: BucketSound[] }>('bucket_search', { bucket_id: bucket.id, provider: 'library', keywords }));
       library = r?.library ?? [];
     } else {
-      await app.run(() => call('bucket_search', { bucket_id: bucket.id, more, keywords }));
+      const r = await app.run(() => call<{ added: number }>('bucket_search', { bucket_id: bucket.id, more, keywords }));
+      if (more && r && !r.added) app.say('No more results for these keywords');
     }
     busy = null;
     await onchange();
@@ -202,7 +203,7 @@
       {:else}
         {#if connected.epidemic}<p class="muted note">Search to fill the bucket with previews.</p>{/if}
       {/each}
-      {#if bucket.previews.length}<button class="btn more" onclick={() => search(true)} disabled={!!busy}>{busy === 'more' ? 'Loading…' : 'Load 12 more'}</button>{/if}
+      {#if bucket.previews.length}<button class="btn more" onclick={() => search(true)} disabled={!!busy}>{busy === 'more' ? 'Loading…' : 'Load more'}</button>{/if}
     {/if}
   </div>
 </aside>

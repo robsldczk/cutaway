@@ -10,6 +10,11 @@ export default defineConfig({
   use: { baseURL: 'http://127.0.0.1:1421', viewport: { width: 1440, height: 900 } },
   webServer: [
     {
+      command: 'node tests/epidemic-standin.mjs',
+      url: 'http://127.0.0.1:7359/health',
+      reuseExistingServer: false,
+    },
+    {
       command: 'bash tests/serve-demo.sh',
       url: 'http://127.0.0.1:7358/health',
       timeout: 600_000,

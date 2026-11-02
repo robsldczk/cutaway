@@ -895,6 +895,12 @@ impl Command {
                     c.ai_suggested = true;
                     tx.put(&c)?;
                 }
+                // what the spotting read, so "Spot script" can skip unchanged scenes
+                let hash = tx.doc().scene_script_hash(scene_id);
+                tx.put(&Setting {
+                    id: Document::spot_key(scene_id),
+                    value: json!({ "hash": hash }),
+                })?;
                 Ok(json!({ "cues": cues.len() }))
             }
             Command::AttachCandidate { cue_id, asset_id } => {

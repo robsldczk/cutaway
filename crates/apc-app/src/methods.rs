@@ -381,9 +381,27 @@ pub struct BucketsP {
 
 #[derive(Deserialize, JsonSchema)]
 pub struct SpotBucketsP {
-    /// One scene, or every scene when absent.
+    /// One scene; when absent, the scenes not spotted yet or changed since.
     #[serde(default)]
     pub scene: Option<String>,
+    /// Re-spot every scene (one AI call per scene), not only new and changed ones.
+    #[serde(default)]
+    pub all: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct SearchEpidemicP {
+    pub query: String,
+    /// Results to skip (the `next_offset` of the previous page).
+    #[serde(default)]
+    pub offset: usize,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct BucketAddPreviewP {
+    pub bucket_id: String,
+    /// A result of `search_epidemic`.
+    pub preview: Preview,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -403,6 +421,9 @@ pub struct CreateBucketP {
     /// Search Epidemic Sound right away.
     #[serde(default)]
     pub search: bool,
+    /// Results of `search_epidemic` to start the bucket with (dropped in by hand).
+    #[serde(default)]
+    pub previews: Vec<Preview>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -433,7 +454,7 @@ pub struct BucketSearchP {
     /// "epidemic" (default) or "library".
     #[serde(default)]
     pub provider: Option<String>,
-    /// Next page ("Load 12 more").
+    /// Next page ("Load more").
     #[serde(default)]
     pub more: bool,
     /// New keywords (replace the bucket's).
@@ -664,7 +685,10 @@ registry! {
     "link_room", LinkRoomP, Write, true, "Link a director room file to the recordings it serves (kept on Redo match).";
     "suggest_character", SourceP, Read, true, "Suggest the character of a recording (its name, then AI name matching).";
     "buckets", BucketsP, Read, true, "Sound buckets (all, or a scene's) with keywords, kept sounds and previews.";
-    "spot_buckets", SpotBucketsP, Write, true, "Spot script: AI sound spotting grouped into buckets with keywords (a scene, or all).";
+    "spot_buckets", SpotBucketsP, Write, true, "Spot script: AI sound spotting (script only, one AI call per scene) grouped into buckets with keywords. A scene, the new and changed scenes, or all with `all`.";
+    "start_spotting", SpotBucketsP, Write, false, "Spot script in the background (the UI polls job_status).";
+    "search_epidemic", SearchEpidemicP, Read, true, "Search Epidemic Sound freely (10 per page). Nothing is stored or downloaded; add a result to a bucket with bucket_add_preview.";
+    "bucket_add_preview", BucketAddPreviewP, Write, true, "Add an Epidemic Sound result to a bucket by hand, as a preview a fresh search keeps (not downloaded).";
     "create_bucket", CreateBucketP, Write, true, "Create a sound bucket (name, keywords, scenes, length and leave-out filters).";
     "update_bucket", UpdateBucketP, Write, true, "Change a bucket's name, keywords, scenes or filters.";
     "delete_bucket", BucketP, Destructive, true, "Delete a bucket (its kept sounds stay in the library).";
@@ -1249,11 +1273,27 @@ impl Service {
             }
             "spot_buckets" => {
                 let p: SpotBucketsP = parse(params)?;
-                crate::buckets::spot(self, p.scene.as_deref())
+                crate::buckets::spot(self, p.scene.as_deref(), p.all, &|_, _| {})
+            }
+            "start_spotting" => {
+                let p: SpotBucketsP = parse(params)?;
+                let file = self.paths.file.clone();
+                let job = self.jobs.spawn("spotting", file, move |svc, progress| {
+                    crate::buckets::spot(svc, p.scene.as_deref(), p.all, progress)
+                });
+                Ok(json!({ "job_id": job }))
+            }
+            "search_epidemic" => {
+                let p: SearchEpidemicP = parse(params)?;
+                crate::buckets::search_free(self, &p.query, p.offset)
+            }
+            "bucket_add_preview" => {
+                let p: BucketAddPreviewP = parse(params)?;
+                crate::buckets::add_preview(self, &p.bucket_id, p.preview)
             }
             "create_bucket" => {
                 let p: CreateBucketP = parse(params)?;
-                let id = crate::buckets::create(self, &p.name, p.keywords, p.scenes, p.length_min_s, p.length_max_s, p.exclude)?;
+                let id = crate::buckets::create(self, &p.name, p.keywords, p.scenes, p.length_min_s, p.length_max_s, p.exclude, p.previews)?;
                 let found = if p.search { crate::buckets::search(self, &id, "epidemic", false, None).ok() } else { None };
                 Ok(json!({ "bucket_id": id, "search": found }))
             }

@@ -1,6 +1,8 @@
 <script lang="ts">
   // Import › Sounds (Round 2): the full bucket. Buckets are named groups whose keywords are
   // the search; gold = downloaded, outlined grey = preview. Click a bucket for its panel.
+  // Spot script (AI, script only) runs when asked; the search bar searches Epidemic Sound
+  // freely and its results drag onto a bucket or onto "New bucket".
   import { app } from '../lib/app.svelte';
   import { call } from '../lib/bridge';
   import Icon from '../components/Icon.svelte';
@@ -8,13 +10,22 @@
   import BucketPanel from '../components/BucketPanel.svelte';
   import KeywordField from '../components/KeywordField.svelte';
   import ImportTabs from '../components/ImportTabs.svelte';
-  import type { Bucket, BucketsView } from '../lib/types';
+  import EpidemicSearch from '../components/EpidemicSearch.svelte';
+  import { EPIDEMIC_DRAG, type Bucket, type BucketsView, type Preview, type SearchPage, type SearchResult } from '../lib/types';
   import { colorOf, solid } from '../theme';
 
   let sort = $state<'scene' | 'tag' | 'show'>('scene');
   let data = $state<BucketsView | null>(null);
   let creating = $state(false);
   let spotting = $state(false);
+  let spotMsg = $state('');
+  let spotMenu = $state(false);
+  let q = $state('');
+  let found = $state<{ query: string; results: SearchResult[]; next: number; more: boolean } | null>(null);
+  let searching = $state(false);
+  let dragging = $state(false);
+  /** The drop target under a dragged search result: a bucket id, or 'new'. */
+  let over = $state<string | null>(null);
   let nb = $state({ name: '', keywords: [] as string[], min: '', max: '', exclude: 'music, voices', scenes: '' });
 
   async function load() {
@@ -27,6 +38,10 @@
   });
 
   const open = $derived(data?.buckets.find((b) => b.id === app.openBucket) ?? null);
+  /** A side panel is showing (a bucket, or the search results). */
+  const side = $derived(!!open || !!found);
+  const spot = $derived(data?.spot ?? { scenes: 0, pending: 0 });
+  const spotted = $derived(spot.scenes - spot.pending);
   const sceneNo = $derived(app.view?.scene.number);
 
   function tiles(b: Bucket) {
@@ -49,11 +64,81 @@
     return out;
   }
 
-  async function spot() {
+  /** Spot script in the background: new and changed scenes, or every scene with `all`.
+   * One AI call per scene, so it runs only when asked. */
+  async function runSpot(all = false) {
+    spotMenu = false;
     spotting = true;
-    const r = await app.run(() => call<{ buckets: number }>('spot_buckets'));
+    spotMsg = '';
+    const r = await app.run(() => call<{ job_id: string }>('start_spotting', { all }));
+    const j = r ? await app.waitJob(r.job_id, (x) => (spotMsg = x.message)) : undefined;
     spotting = false;
-    if (r) app.say(`${r.buckets} bucket${r.buckets === 1 ? '' : 's'} from the script`);
+    spotMsg = '';
+    if (j?.state === 'failed') app.say(j.message);
+    else if (j?.result) {
+      const res = j.result as { buckets: number; scenes: number; failed: { scene: number; error: string }[] };
+      const failed = res.failed.length ? ` · scene ${res.failed.map((f) => f.scene).join(', ')} failed: ${res.failed[0].error}` : '';
+      app.say(res.scenes ? `${res.scenes} scene${res.scenes === 1 ? '' : 's'} spotted, ${res.buckets} bucket${res.buckets === 1 ? '' : 's'}${failed}` : `Nothing new to spot${failed}`);
+    }
+    await load();
+  }
+
+  function spotLabel(): string {
+    if (spotting) return spotMsg ? `Spotting ${spotMsg}…` : 'Spotting…';
+    if (!spotted) return 'Spot script';
+    if (spot.pending) return `Spot ${spot.pending} changed scene${spot.pending === 1 ? '' : 's'}`;
+    return 'Re-spot script';
+  }
+
+  async function runSearch(more = false) {
+    const query = more && found ? found.query : q.trim();
+    if (!query) return;
+    searching = true;
+    const r = await app.run(() => call<SearchPage>('search_epidemic', { query, offset: more && found ? found.next : 0 }));
+    searching = false;
+    if (!r) return;
+    app.openBucket = null;
+    found = { query, results: more && found ? [...found.results, ...r.results] : r.results, next: r.next_offset, more: r.more };
+  }
+
+  // ---- drops from the search results ----
+  function dragOver(e: DragEvent, target: string) {
+    if (!e.dataTransfer?.types.includes(EPIDEMIC_DRAG)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    over = target;
+  }
+
+  async function drop(e: DragEvent, b: Bucket | null) {
+    const raw = e.dataTransfer?.getData(EPIDEMIC_DRAG);
+    over = null;
+    dragging = false;
+    if (!raw) return;
+    e.preventDefault();
+    const p = JSON.parse(raw) as Preview;
+    let into: string | null = null;
+    if (b) {
+      const r = await app.run(() => call<{ added: boolean; reason?: string }>('bucket_add_preview', { bucket_id: b.id, preview: p }));
+      if (r) app.say(r.added ? `Added to ${b.name}` : `${p.title}: ${r.reason}`);
+      if (r?.added) into = b.id;
+    } else {
+      const name = found?.query ?? p.title;
+      const r = await app.run(() =>
+        call<{ bucket_id: string }>('create_bucket', {
+          name,
+          keywords: [name.toLowerCase()],
+          scenes: sceneNo ? [String(sceneNo)] : [],
+          exclude: ['music', 'voices'],
+          previews: [p],
+        }),
+      );
+      if (r) app.say(`New bucket “${name}”`);
+      into = r?.bucket_id ?? null;
+    }
+    if (into && found) {
+      const id = into;
+      found.results = found.results.map((x) => (x.remote_id === p.remote_id && !x.buckets.includes(id) ? { ...x, buckets: [...x.buckets, id] } : x));
+    }
     await load();
   }
 
@@ -89,7 +174,7 @@
   }
 </script>
 
-<div class="bar" class:wide={!open}>
+<div class="bar" class:wide={!side}>
   <ImportTabs />
   <span class="vr" aria-hidden="true"></span>
   <div class="seg" role="group" aria-label="Sort buckets">
@@ -97,16 +182,40 @@
       <button class="tab" class:on={sort === k} onclick={() => (sort = k as typeof sort)}>{l}</button>
     {/each}
   </div>
-  <span class="grow"></span>
-  <button class="btn ic" onclick={spot} disabled={spotting || !app.view}><Icon name="sparkle" size={14} />{spotting ? 'Spotting…' : 'Spot script'}</button>
+  <form class="sbox" role="search" onsubmit={(e) => { e.preventDefault(); void runSearch(); }}>
+    <Icon name="search" size={14} />
+    <input class="sin" bind:value={q} disabled={!data?.connected.epidemic} placeholder={data?.connected.epidemic ? 'Search Epidemic Sound' : 'Connect Epidemic Sound in Settings to search'} aria-label="Search Epidemic Sound" />
+    {#if searching}<span class="spin"></span>{/if}
+  </form>
+  <div class="split">
+    <button class="btn ic" class:joined={spotted > 0} onclick={() => (spot.pending ? runSpot() : (spotMenu = !spotMenu))} disabled={spotting || !spot.scenes} title="Claude reads the script (not the audio) and proposes buckets: one call per scene">
+      <Icon name="sparkle" size={14} />{spotLabel()}
+    </button>
+    {#if spotted > 0}<button class="btn caret" aria-label="More spotting options" aria-expanded={spotMenu} disabled={spotting} onclick={() => (spotMenu = !spotMenu)}><Icon name="chevron" size={13} /></button>{/if}
+    {#if spotMenu}
+      <button class="backdrop" aria-label="Close menu" onclick={() => (spotMenu = false)}></button>
+      <div class="menu glass" role="menu">
+        {#if spot.pending}<button role="menuitem" onclick={() => runSpot()}>Spot {spot.pending} new or changed scene{spot.pending === 1 ? '' : 's'}<span class="muted">{spot.pending} AI call{spot.pending === 1 ? '' : 's'}</span></button>{/if}
+        <button role="menuitem" onclick={() => runSpot(true)}>Re-spot all {spot.scenes} scenes<span class="muted">{spot.scenes} AI calls · cues you kept or accepted stay</span></button>
+      </div>
+    {/if}
+  </div>
   <button class="btn primary ic" onclick={startNew}><Icon name="plus" size={14} />New bucket</button>
 </div>
 
-<main class="grid" class:wide={!open} aria-label="Buckets">
+<main class="grid" class:wide={!side} aria-label="Buckets">
+  {#if found}
+    <article class="bk drop" class:over={over === 'new'} class:hint={dragging} aria-label="Drop here for a new bucket" ondragover={(e) => dragOver(e, 'new')} ondragleave={() => over === 'new' && (over = null)} ondrop={(e) => drop(e, null)} data-testid="new-bucket-drop">
+      <Icon name="plus" size={18} />
+      <span class="nm2">New bucket</span>
+      <span class="muted dn">Drop a sound here to start “{found.query}”</span>
+    </article>
+  {/if}
   {#each data?.buckets ?? [] as b (b.id)}
     {@const here = !!app.sceneId && b.scene_ids.includes(app.sceneId)}
     {@const col = b.character ? solid(colorOf(b.color_index ?? 0).rgb) : null}
-    <article class="bk glass" class:sel={b.id === app.openBucket} class:here aria-label="Bucket {b.name}" data-testid="bucket-card">
+    {@const takes = !b.character}
+    <article class="bk glass" class:sel={b.id === app.openBucket} class:here class:over={over === b.id} class:hint={dragging && takes} aria-label="Bucket {b.name}" data-testid="bucket-card" ondragover={(e) => takes && dragOver(e, b.id)} ondragleave={() => over === b.id && (over = null)} ondrop={(e) => takes && drop(e, b)}>
       <button class="cover" aria-label="Open {b.name}" onclick={() => (app.openBucket = app.openBucket === b.id ? null : b.id)}></button>
       <div class="hd">
         {#if col}<span class="ctag" style="background: {col}">{b.name.replace(/ · vocals$/, '')}</span><span class="ellip nm2 muted">vocals</span><span class="chip outline tn">{b.kept.length}</span>
@@ -140,12 +249,14 @@
   {/if}
 
   {#if data && !data.buckets.length && !creating}
-    <p class="muted empty-note">No buckets yet. <b>Spot script</b> proposes buckets from the script, or start one with <b>New bucket</b>.</p>
+    <p class="muted empty-note">No buckets yet. <b>Spot script</b> has Claude read the script and propose buckets, the search bar finds sounds on Epidemic Sound to drag in, or start one with <b>New bucket</b>.</p>
   {/if}
 </main>
 
 {#if open && data}
   <BucketPanel bucket={open} connected={data.connected} onchange={load} />
+{:else if found}
+  <EpidemicSearch query={found.query} results={found.results} more={found.more} busy={searching} onmore={() => runSearch(true)} onclose={() => (found = null)} ondragging={(on) => { dragging = on; if (!on) over = null; }} />
 {/if}
 
 <style>
@@ -175,8 +286,94 @@
   .grid.wide {
     right: 28px;
   }
-  .grow {
+  .sbox {
     flex: 1;
+    min-width: 180px;
+    max-width: 420px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: var(--radius-pill);
+    background: var(--glass-fill-1);
+    box-shadow: inset 0 0 0 1px var(--glass-outline);
+    color: var(--text-3);
+  }
+  .sin {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: 0;
+    outline: none;
+    color: var(--text-strong);
+    font: inherit;
+    font-size: 13px;
+  }
+  .sbox:focus-within {
+    box-shadow: inset 0 0 0 1.5px var(--text-3);
+  }
+  .split {
+    position: relative;
+    display: flex;
+    margin-left: auto;
+  }
+  .split .joined {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .caret {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    padding: 0 8px;
+    margin-left: 1px;
+  }
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    cursor: default;
+  }
+  .menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 21;
+    display: flex;
+    flex-direction: column;
+    min-width: 260px;
+    padding: 6px;
+    border-radius: 16px;
+    background: var(--bar-strong);
+  }
+  .menu button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    text-align: left;
+    font-size: 13px;
+  }
+  .menu button:hover {
+    background: var(--glass-fill-2);
+  }
+  .menu .muted {
+    font-size: 11px;
+  }
+  .spin {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--text-4);
+    border-top-color: transparent;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   .vr {
     width: 1px;
@@ -210,6 +407,34 @@
     box-shadow:
       inset 0 0 0 1px rgb(var(--sfx-rgb) / 0.5),
       var(--glass-shadow);
+  }
+  .bk.hint {
+    outline: 1.5px dashed rgb(var(--sfx-rgb) / 0.7);
+    outline-offset: -1.5px;
+  }
+  .bk.over {
+    box-shadow:
+      inset 0 0 0 2px var(--sfx),
+      0 18px 50px rgb(var(--shadow-rgb) / 0.35);
+  }
+  .drop {
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 120px;
+    text-align: center;
+    color: var(--text-3);
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px rgb(var(--ink-rgb) / 0.3);
+  }
+  .drop.hint {
+    box-shadow: none;
+  }
+  .drop .nm2 {
+    flex: none;
+  }
+  .dn {
+    font-size: 12px;
   }
   .cover {
     position: absolute;

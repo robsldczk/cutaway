@@ -374,6 +374,22 @@ export interface Preview {
   remote_id: string;
   title: string;
   duration_s: number;
+  /** Dropped in by hand from the free search; a fresh keyword search keeps it. */
+  pinned?: boolean;
+}
+
+/** A result of the free Epidemic Sound search, with the buckets it already sits in. */
+export interface SearchResult extends Preview {
+  buckets: string[];
+}
+
+/** Drag type of a free-search result (a `Preview` as JSON) on its way into a bucket. */
+export const EPIDEMIC_DRAG = 'application/x-cutaway-epidemic';
+
+export interface SearchPage {
+  results: SearchResult[];
+  next_offset: number;
+  more: boolean;
 }
 
 export interface Bucket {
@@ -397,6 +413,8 @@ export interface Bucket {
 export interface BucketsView {
   buckets: Bucket[];
   connected: { epidemic: boolean; elevenlabs: boolean };
+  /** Scenes with script lines, and those not spotted yet or changed since. */
+  spot: { scenes: number; pending: number };
 }
 
 /** A bucket sound dragged onto the timeline (a kept asset, or a preview to download). */
