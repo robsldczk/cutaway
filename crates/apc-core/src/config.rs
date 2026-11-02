@@ -1,4 +1,4 @@
-//! Project configuration (`[ai]`, `[sound.*]`, `[pacing]`, `[export]`), stored in the
+//! Project configuration (`[ai]`, `[sound.*]`, `[pacing]`, `[playback]`, `[export]`), stored in the
 //! episode as the `config` setting and editable as TOML.
 
 use schemars::JsonSchema;
@@ -97,6 +97,25 @@ impl Default for PacingConfig {
     }
 }
 
+/// How the editor hears the cut. Never applied to bounces or exports.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(default)]
+pub struct PlaybackConfig {
+    /// Level each recording to `target_lufs` and limit the output, so a hot mic or a loud
+    /// sound doesn't blast.
+    pub level: bool,
+    pub target_lufs: f64,
+}
+
+impl Default for PlaybackConfig {
+    fn default() -> Self {
+        PlaybackConfig {
+            level: true,
+            target_lufs: -23.0,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(default)]
 pub struct ExportConfig {
@@ -173,6 +192,7 @@ pub struct ProjectConfig {
     pub ai: AiConfig,
     pub sound: SoundConfig,
     pub pacing: PacingConfig,
+    pub playback: PlaybackConfig,
     pub export: ExportConfig,
     pub analysis: AnalysisConfig,
 }
@@ -237,6 +257,10 @@ mod tests {
         assert_eq!(c.ai.model, "claude-sonnet-5-5");
         assert_eq!(c.ai.effort, "medium");
         assert_eq!(c.sound.generate.variations, 3);
+        assert!(c.playback.level, "playback leveling is on by default");
+        let old: ProjectConfig =
+            serde_json::from_value(serde_json::json!({ "pacing": {} })).unwrap();
+        assert!(old.playback.level, "projects saved before it get it too");
         let t = c.to_toml().unwrap();
         assert!(t.contains("[ai]"));
         assert_eq!(ProjectConfig::from_toml(&t).unwrap(), c);

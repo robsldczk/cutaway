@@ -17,6 +17,9 @@
     if (!v) return;
     await app.cmd({ cmd: 'set_scene_tightness', scene_id: v.scene.id, tightness: 2 ** -tight });
   }
+  async function level(on: boolean) {
+    await app.method('set_config', { key: 'playback.level', value: on });
+  }
   async function roomTone(on: boolean) {
     await app.method('set_config', { key: 'pacing.room_tone', value: on });
   }
@@ -44,6 +47,11 @@
     <label for="tight">Scene tightness</label>
     <div class="ctl"><input id="tight" type="range" min="-1.5" max="3.3" step="0.05" bind:value={tight} onchange={setTight} /><span class="val">×{(2 ** +tight).toFixed(2)}</span></div>
     <span class="hint2">Right is punchier: divides every default pause and spacer of this scene and deepens overlaps. Pauses you set by hand are kept.</span>
+    <span class="lab">Playback level</span>
+    <div class="ctl">
+      <label class="chk"><input type="checkbox" checked={app.status?.playback_level ?? true} onchange={(e) => level((e.currentTarget as HTMLInputElement).checked)} data-testid="playback-level" /> level recordings and limit loud peaks</label>
+    </div>
+    <span class="hint2">Evens out roles recorded at different levels, so a hot mic doesn't blast. Playback only: bounces and exports stay as recorded.</span>
     <span class="lab">Room tone</span>
     <div class="ctl">
       <label class="chk"><input type="checkbox" checked={app.status?.room_tone ?? true} onchange={(e) => roomTone((e.currentTarget as HTMLInputElement).checked)} /> play room tone under scenes</label>

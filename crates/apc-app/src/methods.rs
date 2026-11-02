@@ -1505,6 +1505,7 @@ impl Service {
             "can_redo": self.bus.can_redo()?,
             "ai_provider": self.config().ai.provider,
             "room_tone": self.config().pacing.room_tone,
+            "playback_level": self.config().playback.level,
             "breath_gap_s": self.config().pacing.breath_gap_s,
             "ai_warning": ai_warning,
             "jobs": self.jobs.list(),

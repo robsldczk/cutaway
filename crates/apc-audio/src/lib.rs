@@ -1,8 +1,9 @@
 //! Cutaway audio: the play schedule built from the timeline, a mixer shared by real-time
-//! playback and offline render, and the cpal output engine.
+//! playback and offline render, the cpal output engine and playback leveling.
 
 pub mod engine;
 pub mod error;
+pub mod level;
 pub mod mixer;
 pub mod offline;
 pub mod schedule;
