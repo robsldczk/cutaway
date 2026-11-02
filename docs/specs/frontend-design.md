@@ -144,7 +144,7 @@ Lanes are grouped, top to bottom, and each group is visually separated by color 
 
 **Script strip:** the script runs along the top of the timeline, so you see which action line you are scoring.
 
-*(Changed in implementation, M11 / D53–D58: the Edit page works as a minimal NLE. Fixed time scale; a playhead you drag (silent scrub) in a ruler with a cycle strip on top; a word row under the sentences that stays when groups collapse; collapsed groups preview their clips. Clips draw their own audio with word markers, have trim handles on both edges and fade handles on the corners. Dialogue splits into parts (⌘T); clips can be muted (⌃M, kept in place) or ripple-deleted (⌫ with Ripple on, restorable). A Lock switch and a lock per clip: unlocked dialogue moves freely in time and leaves the ripple chain. ←/→ select clips here, , and . step through words; the full key list is in the help overlay.)*
+*(Changed in implementation, M11 / D54–D59: the Edit page works as a minimal NLE. Fixed time scale; a playhead you drag (silent scrub) in a ruler with a cycle strip on top; a word row under the sentences that stays when groups collapse; collapsed groups preview their clips. Clips draw their own audio with word markers, have trim handles on both edges and fade handles on the corners. Dialogue splits into parts (⌘T); clips can be muted (⌃M, kept in place) or ripple-deleted (⌫ with Ripple on, restorable). A Lock switch and a lock per clip: unlocked dialogue moves freely in time and leaves the ripple chain. ←/→ select clips here, , and . step through words; the full key list is in the help overlay.)*
 
 ## Transport
 
