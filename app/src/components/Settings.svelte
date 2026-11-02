@@ -58,6 +58,10 @@
     </div>
     <span class="lab">Connections</span>
     <div class="ctl col"><Connections /></div>
+    <span class="lab">Developer</span>
+    <div class="ctl">
+      <label class="chk"><input type="checkbox" checked={app.dev} onchange={(e) => app.setDev((e.currentTarget as HTMLInputElement).checked)} data-testid="dev-switch" /> show the Dev page (transcript under the hood, marks, re-analysis per character)</label>
+    </div>
     <span class="lab">AI</span>
     <div class="ctl col">
       <span>Provider: {app.status?.ai_provider}{app.status?.ai_warning ? ' (rules: ' + app.status.ai_warning + ')' : ''}</span>

@@ -363,40 +363,40 @@ Rules that hold throughout:
 - A re-analysis replaces results only inside its scope. User favorites survive.
 
 **10.1 Sentences and the scene timeline** (`apc-analysis::sentences`, `::timeline`)
-- [ ] Merge Parakeet fragments per mic into sentences (pause ≤ 0.7 s, no sentence end; caps 40 words / 15 s). Each sentence keeps its word range, so every word keeps its exact timing.
-- [ ] Per scene and actor session: the actor's session-mic sentences in the scene's stretch, interleaved by time with the session's director-mic sentences. IDs `s…` (session mic) and `d…` (director mic).
-- [ ] Doubles: the same speech on both mics is kept once. Actor speech always from the session mic, director speech always from the director mic (level relative to each mic's median decides which it is).
-- [ ] Scene stretch on a mic: from the matcher's takes for that scene (−30 s … +15 s), or the gap between the neighbouring scenes' takes when the scene has none.
+- [x] Merge Parakeet fragments per mic into sentences (pause ≤ 0.7 s, no sentence end; caps 40 words / 15 s). Each sentence keeps its word range, so every word keeps its exact timing.
+- [x] Per scene and actor session: the actor's session-mic sentences in the scene's stretch, interleaved by time with the session's director-mic sentences. IDs `s…` (session mic) and `d…` (director mic).
+- [x] Doubles: the same speech on both mics is kept once. Actor speech always from the session mic, director speech always from the director mic (level relative to each mic's median decides which it is).
+- [x] Scene stretch on a mic: from the matcher's takes for that scene (−30 s … +15 s), or the gap between the neighbouring scenes' takes when the scene has none.
 
 **10.2 Take rescue** (`AiTask::TakeRescue`, prompt v1)
-- [ ] Plain-text input: the scene script (`L1 SARA: …`, all characters) and the recording (`s43 SARA [= L3]: …`, `s45 SARA [?]: …`, `d44 DIRECTOR: …`, `— 12 s —` for long pauses). Optional marks from Rob ("s45–s47: take of L3, misheard").
-- [ ] Output by ID: `{"rescues": [{"id", "line", "read_as", "confidence", "from"?, "to"?}]}`. Timecodes never come from Claude: ID → sentence → words → word timings → edges snapped to the audio.
-- [ ] Hard checks: only `s` IDs marked `[?]`, only the mic owner's lines in this scene, not bleed, no overlap with a take, confidence high or medium.
-- [ ] Mock provider: looser fuzzy match of `[?]` sentences against the owner's lines (tests stay offline).
-- [ ] Runs inside `analyze` after the matcher's takes, so notes and picks see rescued takes.
+- [x] Plain-text input: the scene script (`L1 SARA: …`, all characters) and the recording (`s43 SARA [= L3]: …`, `s45 SARA [?]: …`, `d44 DIRECTOR: …`, `— 12 s —` for long pauses). Optional marks from Rob ("s45–s47: take of L3, misheard").
+- [x] Output by ID: `{"rescues": [{"id", "line", "read_as", "confidence", "from"?, "to"?}]}`. Timecodes never come from Claude: ID → sentence → words → word timings → edges snapped to the audio.
+- [x] Hard checks: only `s` IDs marked `[?]`, only the mic owner's lines in this scene, not bleed, no overlap with a take, confidence high or medium.
+- [x] Mock provider: looser fuzzy match of `[?]` sentences against the owner's lines (tests stay offline).
+- [x] Runs inside `analyze` after the matcher's takes, so notes and picks see rescued takes.
 
 **10.3 Scoped re-analysis** (dev switch)
-- [ ] `AnalysisScope { characters, line_ids, ranges }`: the deterministic part runs as before (cheap, transcripts cached); AI calls, takes, notes and unmatched are limited to the scope.
-- [ ] `AnalysisPayload.source_scope`: notes and unmatched are replaced only for those sources.
-- [ ] Methods: `analyze_scope` (sync) / `start_analysis` with a scope (job). CLI: `cutaway align --character SARA`, `--line ID`.
+- [x] `AnalysisScope { characters, line_ids, ranges }`: the deterministic part runs as before (cheap, transcripts cached); AI calls, takes, notes and unmatched are limited to the scope.
+- [x] `AnalysisPayload.source_scope`: notes and unmatched are replaced only for those sources.
+- [x] Methods: `analyze_scope` (sync) / `start_analysis` with a scope (job). CLI: `cutaway align --character SARA`, `--line ID`.
 
 **10.4 Dev panel: under the hood** (new `dev` page behind the dev switch)
-- [ ] `dev_transcript` view: per actor session, every sentence with mic, speaker, time, text and what it became (matcher take of L…, rescued take of L…, near miss, unmatched, bleed, director note/cue).
-- [ ] Three columns, scrolling together: full transcript · rescued by Claude · script position. Search, scene/character filter, click to play.
-- [ ] Rerun buttons: this character, this line's takes.
+- [x] `dev_transcript` view: per actor session, every sentence with mic, speaker, time, text and what it became (matcher take of L…, rescued take of L…, near miss, unmatched, bleed, director note/cue).
+- [x] Three columns, scrolling together: full transcript · rescued by Claude · script position. Search, scene/character filter, click to play.
+- [x] Rerun buttons: this character, this line's takes.
 
 **10.5 Marks: link to the script and send to Claude**
-- [ ] `DevMark` entity (source, t0..t1, kind: missed take / wrong line / not a take / edges / other, optional line, note, status, proposal). Commands `add_mark`, `update_mark`, `delete_mark`.
-- [ ] Select sentences, link them to a script line, add a note. "Send" runs the rescue for that stretch only, with the mark as a hint; the proposal shows before/after; Apply is one command (`apply_mark`), Discard keeps the mark.
+- [x] `DevMark` entity (source, t0..t1, kind: missed take / wrong line / not a take / edges / other, optional line, note, status, proposal). Commands `add_mark`, `update_mark`, `delete_mark`.
+- [x] Select sentences, link them to a script line, add a note. "Send" runs the rescue for that stretch only, with the mark as a hint; the proposal shows before/after; Apply is one command (`apply_mark`), Discard keeps the mark.
 
 **10.6 Learning section**
-- [ ] Pick a dialogue-heavy scene; Rob marks everything wrong or missing, then marks the scene reviewed. Reviewed scenes are the reference set.
-- [ ] `cutaway eval` / `dev_eval`: runs variants (merge pause, bleed margin, match threshold, rescue on/off, Rob's examples in the prompt) on the reference scene and a held-out scene; found / wrong / minutes per variant.
-- [ ] What it learns: settings (adopted by Rob), up to 5 worked examples from his marks in the rescue prompt, and a show glossary of misheard words (heard → script) used by the matcher and Claude. Changes go into DECISIONS.md.
+- [x] Pick a dialogue-heavy scene; Rob marks everything wrong or missing, then marks the scene reviewed. Reviewed scenes are the reference set.
+- [x] `cutaway eval` / `dev_eval`: runs variants (merge pause, bleed margin, match threshold, rescue on/off, Rob's examples in the prompt) on the reference scene and a held-out scene; found / wrong / minutes per variant.
+- [x] What it learns: settings (adopted by Rob), up to 5 worked examples from his marks in the rescue prompt, and a show glossary of misheard words (heard → script) used by the matcher and Claude. Changes go into DECISIONS.md.
 
 **10.7 Verification**
-- [ ] Unit tests (merge, mapping back, doubles, director never a take, validation), mock rescue on the fixture, scoped apply keeps out-of-scope data, Playwright smoke test of the dev panel.
-- [ ] Copy of Tarmac-EP02 with Claude: rescue numbers in the progress log.
+- [x] Unit tests (merge, mapping back, doubles, director never a take, validation), mock rescue on the fixture, scoped apply keeps out-of-scope data, Playwright smoke test of the dev panel.
+- [x] Copy of Tarmac-EP02 with Claude (Sara): rescue numbers in the progress log. Full episode with Claude: not run yet (about 15–25 min).
 
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
@@ -439,3 +439,4 @@ Rules that hold throughout:
 - 2026-10-31 End of run: RUN_REPORT written. Next run starts with: push + PR, first Windows CI result, Parakeet recall on the fixture (VAD chunking), Epidemic/MCP sound providers, single-take audition in the box editor.
 - 2026-10-31 dev pushed to origin (7d3ffc4..513913f) after the run, at Rob's request.
 - 2026-10-31 M9 done (second run): the four Round 2 screens implemented and wired (Import › Files, Import › Sounds, Edit docked and full screen) on a new bucket/match/lane-mix backend. Download-on-drop checked end to end against a local mock of the Epidemic API; light theme checked on all four screens. Playwright 5/5, check.sh green.
+- 2026-11-02 Fixes from Rob's first real session pushed (mixer sample-exact, bleed relative to the mic, short-line roles, Claude CLI lookup, CLI replies over 64 KiB, loudness matching off for playback). M10 done: sentences and scene timeline, take rescue (plain-text scene input, ids back to words), scoped re-analysis (character, line) in app/CLI/MCP, dev marks with proposals, Dev page (under the hood, link and send, learn with dry-run variants, examples, glossary). Sara on a copy of Ep2 with Claude: 6 rescue calls of 5–14 s, 6 takes rescued, 72 takes (was 42 before the bleed fix). check.sh green, Playwright 7/7.

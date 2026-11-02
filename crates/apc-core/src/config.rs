@@ -114,6 +114,54 @@ impl Default for ExportConfig {
     }
 }
 
+/// A word the recogniser keeps mishearing, and what the script says.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, JsonSchema)]
+#[serde(default)]
+pub struct GlossaryEntry {
+    pub heard: String,
+    pub script: String,
+}
+
+/// The dev panel's learning set: the scenes Rob reviewed against.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, JsonSchema)]
+#[serde(default)]
+pub struct LearnConfig {
+    /// The session mic the learning set belongs to.
+    pub source_id: String,
+    pub reference_scene: String,
+    pub holdout_scene: String,
+    /// Scenes Rob went through completely (`source_id/scene_id`): what is not marked
+    /// there is right.
+    pub reviewed: Vec<String>,
+}
+
+/// Matching settings the learning section can tune.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(default)]
+pub struct AnalysisConfig {
+    /// Speech fragments closer than this merge into one sentence (seconds).
+    pub merge_gap_s: f64,
+    /// A take more than this far under the mic's typical take level is bleed (dB).
+    pub bleed_margin_db: f64,
+    /// Added to the matcher's similarity thresholds (negative is looser).
+    pub match_offset: f64,
+    /// Words the recogniser mishears; fixed before matching and told to the AI.
+    pub glossary: Vec<GlossaryEntry>,
+    pub learn: LearnConfig,
+}
+
+impl Default for AnalysisConfig {
+    fn default() -> Self {
+        AnalysisConfig {
+            merge_gap_s: 0.7,
+            bleed_margin_db: 10.0,
+            match_offset: 0.0,
+            glossary: vec![],
+            learn: LearnConfig::default(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, JsonSchema)]
 #[serde(default)]
 pub struct ProjectConfig {
@@ -121,6 +169,7 @@ pub struct ProjectConfig {
     pub sound: SoundConfig,
     pub pacing: PacingConfig,
     pub export: ExportConfig,
+    pub analysis: AnalysisConfig,
 }
 
 impl ProjectConfig {

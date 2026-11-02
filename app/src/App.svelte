@@ -19,13 +19,14 @@
   import Arrange from './pages/Arrange.svelte';
   import Edit from './pages/Edit.svelte';
   import Import from './pages/Import.svelte';
+  import Dev from './pages/Dev.svelte';
 
   let root: HTMLDivElement | undefined = $state();
   let wAcc = 0;
   let wLast = 0;
 
   function onWheel(e: WheelEvent) {
-    if (app.overlay || app.page === 'edit' || app.page === 'import') return;
+    if (app.overlay || app.page === 'edit' || app.page === 'import' || app.page === 'dev') return;
     const t = e.target as HTMLElement;
     if (t.closest('[role="slider"]') || t.closest('aside') || t.tagName === 'INPUT') return;
     e.preventDefault();
@@ -93,6 +94,9 @@
     <Welcome />
   {:else if app.page === 'import' && app.status}
     <Import />
+    <Header />
+  {:else if app.page === 'dev' && app.status}
+    <Dev />
     <Header />
   {:else if app.view}
     {#if app.page === 'options'}<Options />{:else if app.page === 'arrange'}<Arrange />{:else}<Edit />{/if}

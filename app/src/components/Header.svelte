@@ -3,16 +3,17 @@
   import { brand } from '../lib/brand';
   import Icon from './Icon.svelte';
 
-  const pages: { id: Page; label: string; key: string }[] = [
+  const base: { id: Page; label: string; key: string }[] = [
     { id: 'import', label: 'Import', key: '' },
     { id: 'options', label: 'Options', key: '1' },
     { id: 'arrange', label: 'Arrange', key: '2' },
     { id: 'edit', label: 'Edit', key: '3' },
   ];
+  const pages = $derived(app.dev ? [...base, { id: 'dev' as Page, label: 'Dev', key: '' }] : base);
   const sc = $derived(app.view?.scene);
   const saving = $derived(app.busy);
   /** Import and Edit have no scene rail: the header starts at the edge (Round 2). */
-  const wide = $derived(app.page === 'import' || app.page === 'edit');
+  const wide = $derived(app.page === 'import' || app.page === 'edit' || app.page === 'dev');
   const ready = $derived(!!app.view);
   let menu = $state(false);
 </script>
@@ -37,7 +38,7 @@
         </select>
         Sc. {sc.number} · {sc.place}<Icon name="chevron" size={10} stroke={2.4} />
       </label>
-    {:else if sc && app.page !== 'import'}<span class="muted2">Sc. {sc.number} · {sc.place}{sc.time_of_day ? ` · ${sc.time_of_day}` : ''}</span>{/if}
+    {:else if sc && app.page !== 'import' && app.page !== 'dev'}<span class="muted2">Sc. {sc.number} · {sc.place}{sc.time_of_day ? ` · ${sc.time_of_day}` : ''}</span>{/if}
     <span class="dot" class:saving title={saving ? 'Saving…' : 'Saved'}></span>
   </div>
   <nav class="glass switch" aria-label="Pages">
@@ -48,7 +49,7 @@
   <div class="right">
     {#if app.page === 'import'}
       <button class="pillbtn" onclick={() => app.toggleFullBucket()} disabled={!ready}>{#if app.importTab === 'sounds'}<Icon name="back" size={13} />Back to Edit{:else}Edit{/if} <span class="kb">⇧B</span></button>
-    {:else if app.page !== 'edit'}
+    {:else if app.page !== 'edit' && app.page !== 'dev'}
       <label class="size">Size<input type="range" min="0.8" max="1.3" step="0.05" bind:value={app.scale} aria-label="Box size" /></label>
     {/if}
     <button class="icb round" onclick={() => (app.overlay = 'settings')} aria-label="Settings" title="Settings">

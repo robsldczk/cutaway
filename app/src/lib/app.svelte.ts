@@ -3,7 +3,7 @@
 import { call, BridgeError } from './bridge';
 import type { EditView, ItemView, Job, SceneView, Status } from './types';
 
-export type Page = 'import' | 'options' | 'arrange' | 'edit';
+export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'dev';
 export type ImportTab = 'files' | 'sounds';
 export type Tool = 'pointer' | 'split' | 'fade' | 'gain' | 'marquee';
 export type Overlay = null | 'help' | 'editor' | 'settings' | 'history' | 'export';
@@ -35,6 +35,15 @@ function remember(r: RecentEpisode) {
   }
 }
 
+/** The developer switch (dev panel, scoped re-analysis), remembered per viewer. */
+function storedDev(): boolean {
+  try {
+    return localStorage.getItem('cutaway.dev') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function storedTheme(): Theme {
   try {
     return localStorage.getItem('cutaway.theme') === 'light' ? 'light' : 'dark';
@@ -46,6 +55,7 @@ function storedTheme(): Theme {
 class AppState {
   /** Dark first; the choice is remembered per viewer. */
   theme = $state<Theme>(storedTheme());
+  dev = $state(storedDev());
   status = $state<Status | null>(null);
   view = $state<SceneView | null>(null);
   edit = $state<EditView | null>(null);
@@ -233,6 +243,16 @@ class AppState {
     const r = await this.run(() => call<T>(name, params));
     if (refresh) await this.refresh();
     return r;
+  }
+
+  setDev(on: boolean) {
+    this.dev = on;
+    try {
+      localStorage.setItem('cutaway.dev', on ? '1' : '0');
+    } catch {
+      /* private mode: the switch lasts for this session */
+    }
+    if (!on && this.page === 'dev') this.page = 'options';
   }
 
   setPage(p: Page) {

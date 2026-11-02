@@ -84,11 +84,16 @@ pub struct Hit {
 pub struct AlignOptions {
     /// A pause longer than this splits windows (seconds).
     pub max_gap: f64,
+    /// Added to every similarity threshold (negative is looser).
+    pub threshold_offset: f64,
 }
 
 impl Default for AlignOptions {
     fn default() -> Self {
-        AlignOptions { max_gap: 1.6 }
+        AlignOptions {
+            max_gap: 1.6,
+            threshold_offset: 0.0,
+        }
     }
 }
 
@@ -139,7 +144,7 @@ fn candidates(
         if n == 0 {
             continue;
         }
-        let thr = threshold(n);
+        let thr = threshold(n) + opts.threshold_offset;
         let weight = 1.0 + 0.04 * n.min(10) as f64;
         for i in 0..w {
             let lo = n.saturating_sub(3).max(1);

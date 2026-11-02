@@ -108,7 +108,7 @@ impl Jobs {
         let id_for_work = id_cell.clone();
         let id = self.spawn("analysis", file, move |svc, progress| {
             let jid = id_for_work.lock().map(|g| g.clone()).unwrap_or_default();
-            let scope = scope.unwrap_or_else(apc_analysis::AnalysisScope::everything);
+            let scope = scope.unwrap_or_else(|| svc.configured(apc_analysis::AnalysisScope::everything()));
             let marks = scope.marks.len();
             let r = svc.analyze_with(scope, &|p| {
                 progress(p.fraction, &p.message);

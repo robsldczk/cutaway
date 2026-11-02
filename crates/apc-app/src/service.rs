@@ -465,21 +465,47 @@ impl Service {
 
     /// Runs the whole analysis and applies it as one undoable command.
     pub fn analyze(&mut self, progress: &dyn Fn(apc_analysis::Progress)) -> Result<MatchReport> {
-        self.analyze_with(apc_analysis::AnalysisScope::everything(), progress)
+        let scope = self.configured(apc_analysis::AnalysisScope::everything());
+        self.analyze_with(scope, progress)
+    }
+
+    /// A scope with the project's matching settings, glossary and rescue examples.
+    pub fn configured(
+        &self,
+        mut scope: apc_analysis::AnalysisScope,
+    ) -> apc_analysis::AnalysisScope {
+        let cfg = self.config();
+        scope.rescue = scope.rescue && cfg.ai.rescue;
+        scope.tuning = apc_analysis::pipeline::Tuning {
+            merge_gap_s: cfg.analysis.merge_gap_s,
+            bleed_margin_db: cfg.analysis.bleed_margin_db,
+            match_offset: cfg.analysis.match_offset,
+            glossary: cfg
+                .analysis
+                .glossary
+                .iter()
+                .map(|g| (g.heard.clone(), g.script.clone()))
+                .collect(),
+        };
+        scope.examples = cfg.ai.rescue_examples.clone();
+        for g in &cfg.analysis.glossary {
+            scope.examples.push(format!(
+                "The speech recogniser often hears “{}” where the script says “{}”.",
+                g.heard, g.script
+            ));
+        }
+        scope
     }
 
     /// Runs the analysis for a scope (some characters, some lines, or dev-panel marks).
     /// Marks get their proposals stored; everything else is applied as one undo step.
     pub fn analyze_with(
         &mut self,
-        mut scope: apc_analysis::AnalysisScope,
+        scope: apc_analysis::AnalysisScope,
         progress: &dyn Fn(apc_analysis::Progress),
     ) -> Result<MatchReport> {
         self.bus.refresh()?;
         self.prepare_asr(progress)?;
-        let cfg = self.config();
-        scope.rescue = scope.rescue && cfg.ai.rescue;
-        scope.examples = cfg.ai.rescue_examples.clone();
         let (ai, warn) = self.ai_runner();
         let asr = self.asr_provider();
         let out = apc_analysis::analyze_scoped(

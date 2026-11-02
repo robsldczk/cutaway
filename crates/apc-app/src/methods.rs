@@ -552,6 +552,14 @@ pub struct SendMarksP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct DevEvalP {
+    /// A character's session mic.
+    pub source_id: String,
+    /// Scenes to measure on (reviewed ones count; what is not marked there is right).
+    pub scene_ids: Vec<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct PlaySourceP {
     pub source_id: String,
     /// Source-file seconds.
@@ -595,6 +603,8 @@ registry! {
     "apply_mark", MarkIdP, Write, true, "Apply a mark's proposal (adds and removes takes). One undoable step.";
     "discard_mark", MarkIdP, Write, true, "Drop a mark's proposal; the mark stays.";
     "play_source", PlaySourceP, Read, false, "Play a stretch of a source file (dev panel).";
+    "dev_learn", SourceIdP, Read, true, "Dev panel learning: scenes to review, worked-example candidates from the marks, misheard-word (glossary) candidates, current matching settings.";
+    "dev_eval", DevEvalP, Write, true, "Dev panel learning: try the matching settings variants on these scenes of one session (nothing is applied) and score them against the marks. Runs in the background; returns a job id.";
     "match_report", NoParams, Read, true, "The last match report (Markdown).";
     "list_lines", SceneP, Read, true, "Lines of a scene in timeline order with their selected take and take count.";
     "list_takes", LineP, Read, true, "Takes of a line with type, notes, pick and timing.";
@@ -804,20 +814,22 @@ impl Service {
             "job_status" => Ok(serde_json::to_value(self.jobs.list())?),
             "start_analysis" => {
                 let p: AnalysisScopeP = parse(params)?;
-                let scope = (!p.characters.is_empty() || !p.line_ids.is_empty()).then(|| apc_analysis::AnalysisScope {
-                    characters: p.characters,
-                    line_ids: p.line_ids,
-                    ..apc_analysis::AnalysisScope::everything()
+                let scope = (!p.characters.is_empty() || !p.line_ids.is_empty()).then(|| {
+                    self.configured(apc_analysis::AnalysisScope {
+                        characters: p.characters,
+                        line_ids: p.line_ids,
+                        ..apc_analysis::AnalysisScope::everything()
+                    })
                 });
                 Ok(json!({ "job_id": self.jobs.start_analysis(self.paths.file.clone(), scope) }))
             }
             "analyze_scope" => {
                 let p: AnalysisScopeP = parse(params)?;
-                let scope = apc_analysis::AnalysisScope {
+                let scope = self.configured(apc_analysis::AnalysisScope {
                     characters: p.characters,
                     line_ids: p.line_ids,
                     ..apc_analysis::AnalysisScope::everything()
-                };
+                });
                 let r = self.analyze_with(scope, &|_| {})?;
                 Ok(json!({
                     "takes_found": r.takes_found, "lines_matched": r.lines_matched,
@@ -868,11 +880,11 @@ impl Service {
                     .iter()
                     .map(|id| self.doc().marks.get(id).cloned().ok_or_else(|| AppError::Params(format!("no mark '{id}'"))))
                     .collect::<Result<_>>()?;
-                let scope = apc_analysis::AnalysisScope {
+                let scope = self.configured(apc_analysis::AnalysisScope {
                     marks,
                     manual: p.manual,
                     ..apc_analysis::AnalysisScope::everything()
-                };
+                });
                 Ok(json!({ "job_id": self.jobs.start_analysis(self.paths.file.clone(), Some(scope)) }))
             }
             "apply_mark" => {
@@ -885,6 +897,17 @@ impl Service {
                 m.proposal = None;
                 m.status = MarkStatus::Discarded;
                 Ok(self.exec(&Command::PutMark { mark: m })?.result)
+            }
+            "dev_learn" => {
+                let p: SourceIdP = parse(params)?;
+                crate::dev::learn_view(self, &p.source_id)
+            }
+            "dev_eval" => {
+                let p: DevEvalP = parse(params)?;
+                let file = self.paths.file.clone();
+                Ok(json!({ "job_id": self.jobs.spawn("eval", file, move |svc, progress| {
+                    crate::dev::eval(svc, &p.source_id, &p.scene_ids, progress)
+                }) }))
             }
             "play_source" => {
                 let p: PlaySourceP = parse(params)?;

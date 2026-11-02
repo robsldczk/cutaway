@@ -74,6 +74,58 @@ pub struct MatchReport {
     pub markdown: String,
 }
 
+/// Matching settings (from `[analysis]` in the project config; the learning section
+/// tries variants of them).
+#[derive(Debug, Clone)]
+pub struct Tuning {
+    pub merge_gap_s: f64,
+    pub bleed_margin_db: f64,
+    pub match_offset: f64,
+    /// Misheard words: (heard, script), whole words. Fixed in the transcript before
+    /// matching when both have the same number of words.
+    pub glossary: Vec<(String, String)>,
+}
+
+impl Default for Tuning {
+    fn default() -> Self {
+        Tuning {
+            merge_gap_s: MergeOptions::default().max_gap,
+            bleed_margin_db: RELATIVE_BLEED_DB,
+            match_offset: 0.0,
+            glossary: vec![],
+        }
+    }
+}
+
+/// Replaces misheard words in a transcript (word for word, so timings stay).
+pub fn apply_glossary(tr: &mut Transcript, glossary: &[(String, String)]) -> usize {
+    let mut fixed = 0;
+    for (heard, script) in glossary {
+        let h = apc_core::text::norm_words(heard);
+        let sc = apc_core::text::norm_words(script);
+        if h.is_empty() || h.len() != sc.len() || h == sc {
+            continue;
+        }
+        let mut i = 0;
+        while i + h.len() <= tr.words.len() {
+            if tr.words[i..i + h.len()]
+                .iter()
+                .zip(&h)
+                .all(|(w, x)| &w.w == x)
+            {
+                for (k, x) in sc.iter().enumerate() {
+                    tr.words[i + k].w = x.clone();
+                }
+                fixed += 1;
+                i += h.len();
+            } else {
+                i += 1;
+            }
+        }
+    }
+    fixed
+}
+
 /// What a run covers. Empty means the whole episode.
 #[derive(Debug, Clone, Default)]
 pub struct AnalysisScope {
@@ -89,6 +141,7 @@ pub struct AnalysisScope {
     pub rescue: bool,
     /// Worked examples from earlier corrections, for the rescue prompt.
     pub examples: Vec<String>,
+    pub tuning: Tuning,
 }
 
 impl AnalysisScope {
@@ -386,7 +439,11 @@ pub fn analyze_scoped(
         })
     };
     let units = units_of(doc);
-    let opts = AlignOptions::default();
+    let opts = AlignOptions {
+        threshold_offset: scope.tuning.match_offset,
+        ..AlignOptions::default()
+    };
+    let margin = scope.tuning.bleed_margin_db;
     let mut flagged: Vec<String> = Vec::new();
     let hotwords: Vec<String> = doc.characters.values().map(|c| c.label.clone()).collect();
 
@@ -522,6 +579,7 @@ pub fn analyze_scoped(
         let path = sources[k].path.clone();
         let t = transcript_cached(p, paths, &sources[k].src, &path, &hotwords)?;
         sources[k].tr = t.shifted(-sources[k].src.offset_s);
+        apply_glossary(&mut sources[k].tr, &scope.tuning.glossary);
     }
 
     // Scope: which characters' sessions take part beyond the deterministic pass.
@@ -556,7 +614,10 @@ pub fn analyze_scoped(
                 .is_some_and(|s| scoped_sessions.contains(s))
     };
     let want_rescue = scope.rescue || !scope.marks.is_empty();
-    let merge = MergeOptions::default();
+    let merge = MergeOptions {
+        max_gap: scope.tuning.merge_gap_s,
+        ..MergeOptions::default()
+    };
     let sents: Vec<Vec<Sentence>> = sources
         .iter()
         .map(|d| {
@@ -621,7 +682,7 @@ pub fn analyze_scoped(
         levels.sort_by(f64::total_cmp);
         let median = levels.get(levels.len() / 2).copied();
         quiet_by_source.insert(k, median);
-        let quiet = |db: f64| db < BLEED_DB || median.is_some_and(|m| db < m - RELATIVE_BLEED_DB);
+        let quiet = |db: f64| db < BLEED_DB || median.is_some_and(|m| db < m - margin);
         for t in mine.iter_mut() {
             t.bleed = quiet(t.db);
         }
@@ -1516,8 +1577,8 @@ fn propose_marks(
         } else {
             let (mics, mic_words) = mics_of(sources, k, &role, sents, levels);
             let median = quiet_by_source.get(&k).copied().flatten();
-            let quiet =
-                |db: f64| db < BLEED_DB || median.is_some_and(|x| db < x - RELATIVE_BLEED_DB);
+            let margin = scope.tuning.bleed_margin_db;
+            let quiet = |db: f64| db < BLEED_DB || median.is_some_and(|x| db < x - margin);
             let (lo, hi) = stretch(units, &mine, sc, n_scenes)
                 .map(|(a, b)| (a.min(t0 - 30.0), b.max(t1 + 15.0)))
                 .unwrap_or((t0 - 60.0, t1 + 30.0));
@@ -1693,4 +1754,34 @@ fn markdown(doc: &Document, takes: &[Take], unmatched: &[Unmatched], r: &MatchRe
         out.push_str(&format!("- {} {}\n", fmt_t(u.t0), u.text));
     }
     out
+}
+
+#[cfg(test)]
+mod glossary_tests {
+    use super::*;
+
+    #[test]
+    fn glossary_fixes_misheard_words_in_place() {
+        let mut t = Transcript::from_segments(
+            vec![(
+                1.0,
+                3.0,
+                "a little late to get a tricky though".into(),
+                None,
+            )],
+            "t",
+        );
+        let t0 = t.words[6].t0;
+        let n = apply_glossary(
+            &mut t,
+            &[
+                ("tricky".into(), "Turkey".into()),
+                ("two words".into(), "one".into()),
+            ],
+        );
+        assert_eq!(n, 1);
+        assert_eq!(t.words[6].w, "turkey");
+        assert_eq!(t.words[6].raw, "tricky", "what was heard stays visible");
+        assert_eq!(t.words[6].t0, t0);
+    }
 }

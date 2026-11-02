@@ -155,3 +155,37 @@ fn marks_propose_and_apply_and_the_director_mic_is_refused() {
         .iter()
         .any(|s| !s["lines"].as_array().unwrap().is_empty()));
 }
+
+#[test]
+fn eval_scores_settings_variants_against_the_marks() {
+    with_mock();
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo::create(dir.path(), "test", true).unwrap();
+    let doc = svc.doc().clone();
+    // a take Rob says is not a take: the current settings must count it as wrong
+    let t = doc
+        .takes
+        .values()
+        .find(|t| doc.lines[&t.line_id].character.is_some())
+        .unwrap()
+        .clone();
+    let scene = doc.lines[&t.line_id].scene_id.clone();
+    svc.call(
+        "put_mark",
+        &json!({ "source_id": t.source_id, "t0": t.t0, "t1": t.t1, "kind": "not_a_take" }),
+    )
+    .unwrap();
+    let r = apc_app::dev::eval(&mut svc, &t.source_id, &[scene], &|_, _| {}).unwrap();
+    let vs = r["variants"].as_array().unwrap();
+    assert!(vs.len() >= 5, "{r}");
+    let cur = &vs[0]["scenes"][0];
+    assert_eq!(cur["wrong"], 1, "{cur}");
+    assert_eq!(cur["missed"], 0, "{cur}");
+    assert!(cur["found"].as_u64().unwrap() >= 1);
+    // nothing was applied
+    assert_eq!(svc.doc().takes.len(), doc.takes.len());
+    let learn = svc
+        .call("dev_learn", &json!({ "source_id": t.source_id }))
+        .unwrap();
+    assert!(!learn["scenes"].as_array().unwrap().is_empty());
+}
