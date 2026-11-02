@@ -446,6 +446,48 @@ Rules that hold throughout: every change is a command (UI, CLI and MCP share the
 - [x] Playwright: zoom stays fixed when a clip moves, trim handle, mute greys the line in Arrange.
 - [x] DECISIONS entries, "Changed in implementation" note in frontend-design.md, progress log.
 
+### M12: Throughline import and story context (Rob, 2026-11-02, branch `throughline`)
+Why: Rob writes in Throughline. Its `.thrl` export is the script plus what the writers know about it (beat titles and summaries, acts, who is in a scene, setting groups and descriptions, character bios, the emotional arc). Cutaway should import it directly and use that knowledge where it helps: in the AI calls and on screen. Decisions in D61.
+
+Rules that hold throughout:
+- A `.thrl` file becomes the same `ParsedScript` a Fountain file does: versioning, the ID-keeping diff, alignment and export don't change. Fountain and `.thrl` versions can follow each other.
+- Story context is per episode (Rob). The newest import wins: its non-empty fields replace the old ones, empty fields don't erase.
+- Context is read-only in Cutaway; it's edited in Throughline and re-imported. Sparks, relationships, recycled cards, writer assignment and author contact details are ignored.
+- Every change is a command (one undo step); UI, CLI and MCP share the methods.
+
+**12.1 `.thrl` import** (`apc-core::thrl`)
+- [x] Detect by content (gzip magic or JSON with `version`), decompress (`flate2`), refuse a `minVersion` newer than the reader knows (1.12).
+- [x] Story order from `storyOrder` (older files: computed from `sequence`/`stackedOn`/`stackOrder` as the format guide says). Act cards are skipped; each beat is a scene.
+- [x] Heading `INT. SETTING - TIME` from `intExt`, the beat's setting and `timeOfDay`, split like a Fountain heading. `beat.sceneNumber` as the forced number.
+- [x] TipTap blocks as Throughline's own Fountain export writes them: action (a blank line starts a new unit), cue with extension, dialogue (blank lines dropped, a `…` line splits), parenthetical (splits), transition, `paragraph` by `screenplayType` else action; `versionBlock` → only the active children. Underline/italic/bold become Fountain emphasis, as in the export.
+- [x] Title page: title, credit, authors, draft date (no contact details).
+- [x] `script::read_script_file(path)` picks the parser; `store_version_file` keeps the real extension (`Script/v002 Name.thrl`); the MCP `script/N` resource renders a `.thrl` version as Fountain text.
+- [x] `split_heading` handles `INT./EXT.`.
+- [x] Import page and the script file picker accept `.thrl`.
+
+**12.2 Story context in the document**
+- [x] `ParsedScene` gains `title`, `act`, `cast`, `tone`, `beat_id`; `ParsedScript` gains `story` (characters with summary/want/need/flaw/notes, settings with description and parent).
+- [x] Fountain fills the same fields: synopses (`=`) → synopsis, top-level sections (`#`) → act, carried to the following scenes.
+- [x] `Scene` gains `title`, `synopsis`, `act`, `cast`, `tone`, `beat_id`; `Character` gains `profile`; `Location` gains `description` and `parent`.
+- [x] `apply_version` writes scene context from the script, merges `story` newest-wins (names matched to cues exactly, without a leading "THE", or by alias), and reports it in the change summary (`story.characters_updated`, `locations_updated`, `unknown_characters`).
+- [x] Scene identity across versions: kept lines first, then the Throughline beat ID, then the heading.
+- [x] `import_story` (command `ImportStoryContext`): takes only the context from a `.thrl` (e.g. the pilot's character bios into EP02), no script change.
+
+**12.3 On screen**
+- [x] Scene list: the beat title under the scene number, act dividers, the synopsis as tooltip.
+- [x] Inspector: a Scene section (title, act, synopsis, cast, setting with its description and parent) and the current line's character profile.
+- [x] Room tone: a setting without its own room tone uses its parent's (Canteen → TARMAC).
+
+**12.4 In the AI calls** (behind `ai.story_context`, on by default)
+- [x] `sound_spot` v2: the scene's title, act, synopsis, tone, cast (with one-line profiles) and setting description and parent. The prompt treats context as background: no cues the scene text doesn't support.
+- [x] `name_match` v2: one-line character profiles, so full names and nicknames in file names match.
+- [x] Mock provider accepts the new inputs; context stays small (no per-take calls get it, see D53).
+
+**12.5 Verification**
+- [x] Unit tests: synthetic `.thrl` (gzip and plain), story order fallback, version blocks, splitting rules, newest-wins merge, context-only import, beat-ID scene identity, parent room tone, Fountain synopses/sections.
+- [x] Fixture test (skips without the files): EP02 `.thrl` gives the same lines as Throughline's Fountain export of the same draft; in the app, importing the `.thrl` over the Fountain export changes 0 lines.
+- [ ] (Rob) Manual: import the EP02 `.thrl` in the app, then the pilot's context; check the scene list, inspector and a spotting run.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -492,3 +534,4 @@ Rules that hold throughout: every change is a command (UI, CLI and MCP share the
 - 2026-11-02 M11 done on branch `editor` (worktree `../cutaway-editor`, so the session on `dev` is not disturbed): fixed time scale, playhead scrub and follow, real dialogue splits by source time, clip mute and ripple delete in every view and export, trim and fade handles, per-piece waveforms from the cached peaks, lock to script (pinned clips leave the ripple chain), collapsed group previews, word row, multi-select and Logic keys. 61 core tests (8 new), schedule and FCPXML/SRT mute tests, Playwright 13/13 (6 new in `editor.spec.ts`), check.sh green.
 - 2026-11-02 Branch `epidemic` (D60): Spot script on demand (new and changed scenes, or re-spot all; background job with progress), Epidemic bucket pages of 5 with a stored offset, free Epidemic search bar with drag into buckets or a new bucket (pinned previews). CLI `sfx spot-script`, `sfx search`. Playwright gets an Epidemic stand-in (`app/tests/epidemic-standin.mjs`) and keys in memory. check.sh green, Playwright 8/8. Not verified against the real Epidemic API (needs Rob's key).
 - 2026-11-02 `editor` (M11, D54–D59) and `epidemic` (D60) merged into `dev`; the epidemic hand-off fixes (spotting per scene makes buckets, bucket edits on the latest document, exact "more", re-spot tidies) and the toast moved off the top bars. check.sh green, Playwright 14/14; pushed to origin/dev.
+- 2026-11-02 M12 done (D61) on branch `throughline` (worktree `../cutaway-throughline`, because another session works in the main folder on `dev`): native `.thrl` reader (gzip JSON, format up to 1.12) giving the same parsed script as Fountain, story context per episode (scene title/summary/act/cast/arc, character bios, setting descriptions and groups) merged newest-wins, `import_story` for bios from another file (the pilot's), scene list titles and act dividers, inspector story section, parent room tone, story context in spotting and file-name matching (prompts v2, `ai.story_context`). EP02: the `.thrl` matches Throughline's Fountain export line for line. Fixed on the way: `!CUT TO:` parsed as a transition, a flaky dev-panel eval test. check.sh green.

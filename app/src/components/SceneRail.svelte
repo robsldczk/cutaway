@@ -2,23 +2,27 @@
   import { app } from '../lib/app.svelte';
   let open = $state(false);
   const scenes = $derived(app.view?.scenes ?? []);
+  // an act label above the first scene of each act (only in the open list)
+  const actStart = (i: number) => !!scenes[i].act && (i === 0 || scenes[i - 1].act !== scenes[i].act);
+  const tip = (s: (typeof scenes)[number]) => [s.title, s.heading, s.synopsis].filter(Boolean).join('\n');
 </script>
 
 <nav class="glass rail" aria-label="Scenes" class:open>
   <button class="toggle" onclick={() => (open = !open)} aria-label={open ? 'Collapse scene list' : 'Expand scene list'} title="Scene list">
     {open ? '‹' : '›'}
   </button>
-  {#each scenes as s (s.id)}
+  {#each scenes as s, i (s.id)}
+    {#if open && actStart(i)}<div class="act ellip">{s.act}</div>{/if}
     <button
       class="sc"
       class:cur={s.id === app.sceneId}
-      aria-label="Scene {s.number}{s.id === app.sceneId ? ', current' : ''}{s.flagged ? `, ${s.flagged} flagged` : ''}"
-      title="{s.heading}"
+      aria-label="Scene {s.number}{s.title ? `, ${s.title}` : ''}{s.id === app.sceneId ? ', current' : ''}{s.flagged ? `, ${s.flagged} flagged` : ''}"
+      title={tip(s)}
       onclick={() => app.loadScene(s.id)}
     >
       <span class="num">{s.number}</span>
       {#if open}
-        <span class="info"><span class="ellip h">{s.place || s.heading}</span><span class="st">{s.lines_with_takes}/{s.lines} lines{s.flagged ? ` · ${s.flagged} flagged` : ''}</span></span>
+        <span class="info"><span class="ellip h">{s.title || s.place || s.heading}</span><span class="st ellip">{s.title && s.place ? `${s.place} · ` : ''}{s.lines_with_takes}/{s.lines} lines{s.flagged ? ` · ${s.flagged} flagged` : ''}</span></span>
       {/if}
       {#if s.flagged}<span class="fl"></span>{/if}
     </button>
@@ -93,6 +97,14 @@
     font-size: 10.5px;
     color: var(--text-4);
     font-weight: 400;
+  }
+  .act {
+    margin: 6px 10px 0;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: var(--name-tracking);
+    text-transform: uppercase;
+    color: var(--text-4);
   }
   .fl {
     position: absolute;

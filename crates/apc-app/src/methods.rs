@@ -82,6 +82,11 @@ pub struct ImportScriptP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct PathP {
+    pub path: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct ImportAudioP {
     /// Files or folders.
     pub paths: Vec<String>,
@@ -613,7 +618,8 @@ registry! {
     "create_demo", CreateShowP, Write, false, "Create the synthetic demo session in parent/name, analyze it and open it.";
     "project_status", NoParams, Read, true, "Progress, match rate, flagged items, undo state and AI provider of the open episode.";
     "list_scenes", NoParams, Read, true, "Scenes with heading, place, line counts and flagged items.";
-    "import_script", ImportScriptP, Write, true, "Import a Fountain/Throughline script as the next version (vNNN). Returns the change summary.";
+    "import_script", ImportScriptP, Write, true, "Import a script as the next version (vNNN): Fountain, or a Throughline .thrl project with its story context (scene titles and summaries, acts, cast, settings, character bios). Returns the change summary.";
+    "import_story", PathP, Write, true, "Take only the story context (character bios, setting descriptions and groups) from a Throughline .thrl file, e.g. the pilot's bios into a later episode. The script stays as it is; non-empty fields replace the stored ones.";
     "import_audio", ImportAudioP, Write, true, "Import role and room recordings (files or folders) and assign roles automatically.";
     "roles", NoParams, Read, true, "Every source file with its role, character and confidence.";
     "confirm_roles", ConfirmRolesP, Write, true, "Set or correct file roles. Corrections are remembered as show aliases.";
@@ -808,6 +814,10 @@ impl Service {
             "import_script" => {
                 let p: ImportScriptP = parse(params)?;
                 self.import_script(Path::new(&p.path), p.name.as_deref())
+            }
+            "import_story" => {
+                let p: PathP = parse(params)?;
+                self.import_story(Path::new(&p.path))
             }
             "import_audio" => {
                 let p: ImportAudioP = parse(params)?;

@@ -1,5 +1,6 @@
-//! Script versions: store each import as `Script/vNNN <name>.fountain`, diff it against
-//! the current version and keep line IDs (and their takes and picks) for unchanged lines.
+//! Script versions: store each import as `Script/vNNN <name>.fountain` (or `.thrl`), diff
+//! it against the current version and keep line IDs (and their takes and picks) for
+//! unchanged lines. Story context (scene titles, synopses, bios) merges newest-wins.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
@@ -7,7 +8,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::bus::Tx;
-use crate::error::Result;
+use crate::error::{CoreError, Result};
 use crate::fountain::{ParsedScript, ParsedUnit};
 use crate::ids::new_id;
 use crate::model::{
@@ -15,6 +16,7 @@ use crate::model::{
     Unmatched,
 };
 use crate::project::EpisodePaths;
+use crate::story::StorySummary;
 use crate::text::{display_tokens, norm_word};
 
 /// One line in the change summary.
@@ -38,6 +40,8 @@ pub struct ChangeSummary {
     pub scenes_removed: Vec<String>,
     pub takes_to_unmatched: usize,
     pub takes_to_rematch: usize,
+    #[serde(default)]
+    pub story: StorySummary,
 }
 
 impl ChangeSummary {
@@ -53,8 +57,53 @@ impl ChangeSummary {
             self.scenes_removed.len(),
             self.takes_to_rematch,
             self.takes_to_unmatched
-        )
+        ) + &story_text(&self.story)
     }
+}
+
+fn story_text(s: &StorySummary) -> String {
+    let mut parts = Vec::new();
+    if !s.characters_updated.is_empty() {
+        parts.push(format!("{} character notes", s.characters_updated.len()));
+    }
+    if !s.locations_updated.is_empty() {
+        parts.push(format!("{} settings", s.locations_updated.len()));
+    }
+    let mut out = String::new();
+    if !parts.is_empty() {
+        out = format!("; story context: {} updated", parts.join(", "));
+    }
+    if !s.unknown_characters.is_empty() {
+        out.push_str(&format!(
+            "; no script character for {}",
+            s.unknown_characters.join(", ")
+        ));
+    }
+    out
+}
+
+/// Reads a script file: a Throughline `.thrl` project (by content) or Fountain text.
+pub fn read_script_file(path: &Path) -> Result<ParsedScript> {
+    let bytes = std::fs::read(path)?;
+    if crate::thrl::looks_like_thrl(&bytes) {
+        return crate::thrl::parse(&bytes);
+    }
+    let text = String::from_utf8(bytes).map_err(|_| {
+        CoreError::invalid(format!(
+            "{} is neither a Fountain text nor a Throughline project",
+            path.display()
+        ))
+    })?;
+    Ok(crate::fountain::parse(&text))
+}
+
+/// A script file as Fountain text (a `.thrl` project is rendered).
+pub fn script_text(path: &Path) -> Result<String> {
+    let bytes = std::fs::read(path)?;
+    if crate::thrl::looks_like_thrl(&bytes) {
+        return Ok(crate::fountain::render(&crate::thrl::parse(&bytes)?));
+    }
+    String::from_utf8(bytes).map_err(|e| CoreError::invalid(e.to_string()))
 }
 
 /// Copies a script into `Script/` as the next version. Old versions are never overwritten.
@@ -69,9 +118,15 @@ pub fn store_version_file(
         .chars()
         .map(|c| if "/\\:*?\"<>|".contains(c) { '_' } else { c })
         .collect();
-    let file_name = format!("v{number:03} {safe}.fountain");
+    let bytes = std::fs::read(src)?;
+    let ext = if crate::thrl::looks_like_thrl(&bytes) {
+        "thrl"
+    } else {
+        "fountain"
+    };
+    let file_name = format!("v{number:03} {safe}.{ext}");
     let dest = paths.script.join(&file_name);
-    std::fs::copy(src, &dest)?;
+    std::fs::write(&dest, &bytes)?;
     let hash = crate::media::hash_file(&dest)?;
     Ok((format!("Script/{file_name}"), hash))
 }
@@ -148,7 +203,7 @@ fn align(old: &[String], new: &[String]) -> Vec<Op> {
     ops
 }
 
-fn title_case(s: &str) -> String {
+pub fn title_case(s: &str) -> String {
     s.split_whitespace()
         .map(|w| {
             let mut c = w.chars();
@@ -285,16 +340,26 @@ pub fn apply_version(
             .filter(|(id, _)| !taken.contains(id))
             .max_by_key(|(_, c)| *c)
             .map(|(id, _)| id);
+        let by_beat = || {
+            let beat = sc.story.beat_id.as_deref()?;
+            doc.scenes
+                .values()
+                .find(|s| s.story.beat_id.as_deref() == Some(beat) && !taken.contains(&s.id))
+                .map(|s| s.id.clone())
+        };
         let by_heading = || {
             doc.scenes
                 .values()
                 .find(|s| s.heading == sc.heading && !taken.contains(&s.id))
                 .map(|s| s.id.clone())
         };
-        let id = by_vote.or_else(by_heading).unwrap_or_else(|| {
-            summary.scenes_added.push(sc.heading.clone());
-            new_id("sc")
-        });
+        let id = by_vote
+            .or_else(by_beat)
+            .or_else(by_heading)
+            .unwrap_or_else(|| {
+                summary.scenes_added.push(sc.heading.clone());
+                new_id("sc")
+            });
         taken.insert(id.clone());
         scene_ids.push(id);
     }
@@ -313,6 +378,7 @@ pub fn apply_version(
                 label: title_case(&name),
                 aliases: Vec::new(),
                 color_index: next_color,
+                profile: Default::default(),
             })?;
             next_color += 1;
         }
@@ -324,9 +390,12 @@ pub fn apply_version(
                 id: lid,
                 name: sc.location.clone(),
                 room_tone: Default::default(),
+                description: String::new(),
+                parent: None,
             })?;
         }
     }
+    summary.story = crate::story::merge(tx, &parsed.story)?;
 
     // Lines.
     let mut orders: Vec<Vec<String>> = vec![Vec::new(); parsed.scenes.len()];
@@ -468,6 +537,7 @@ pub fn apply_version(
             time_of_day: title_case(&sc.time_of_day),
             order,
             tightness: old.map(|s| s.tightness).unwrap_or(1.0),
+            story: crate::story::merge_scene(old.map(|s| &s.story), &sc.story),
         })?;
     }
     for s in doc.scenes.values() {

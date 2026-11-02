@@ -4,6 +4,10 @@
   import Drawer from './Drawer.svelte';
   const it = $derived(app.cur);
   const t = $derived(it && it.takes.length ? it.takes[it.take_index ?? 0] : undefined);
+  const story = $derived(app.view?.story);
+  const who = $derived(it?.character ? app.view?.characters.find((c) => c.id === it.character) : undefined);
+  const mood = (x: number) => (x <= -0.6 ? 'low point' : x < -0.15 ? 'going badly' : x <= 0.15 ? 'even' : x < 0.6 ? 'going well' : 'high point');
+  const hasStory = $derived(!!story && !!(story.title || story.synopsis || story.act || story.cast.length || story.setting_description || story.setting_parent));
 </script>
 
 <Drawer title="Inspector">
@@ -26,6 +30,22 @@
   {:else}
     <p class="muted">No take selected.</p>
   {/if}
+  {#if who?.profile}
+    <h3>{who.label}</h3>
+    <p class="prose">{who.profile}</p>
+  {/if}
+  {#if story && hasStory}
+    <h3>Scene{story.title ? `: ${story.title}` : ''}</h3>
+    <dl>
+      {#if story.act}<dt>Act</dt><dd>{story.act}</dd>{/if}
+      {#if story.synopsis}<dt>Writers’ summary</dt><dd class="prose">{story.synopsis}</dd>{/if}
+      {#if story.cast.length}<dt>In the scene</dt><dd>{story.cast.join(', ')}</dd>{/if}
+      {#if story.tone != null}<dt>Story arc</dt><dd>{mood(story.tone)} ({story.tone > 0 ? '+' : ''}{story.tone.toFixed(2)})</dd>{/if}
+      <dt>Setting</dt><dd>{story.setting}{story.setting_parent ? ` · part of ${story.setting_parent}` : ''}</dd>
+      {#if story.setting_description}<dd class="prose">{story.setting_description}</dd>{/if}
+      {#if story.parent_description}<dd class="prose">{story.setting_parent}: {story.parent_description}</dd>{/if}
+    </dl>
+  {/if}
 </Drawer>
 
 <style>
@@ -47,5 +67,16 @@
   }
   .warn {
     color: var(--warn);
+  }
+  h3 {
+    margin: 22px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--glass-outline);
+    font-size: var(--fs-ui);
+    font-weight: 600;
+    color: var(--text-1);
+  }
+  .prose {
+    white-space: pre-line;
   }
 </style>

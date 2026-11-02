@@ -289,6 +289,50 @@ pub struct SpotScene {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct SoundSpotInput {
     pub scene: SpotScene,
+    /// What the writers know about the scene (background only, see the prompt).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<SpotContext>,
+}
+
+fn is_blank(s: &str) -> bool {
+    s.trim().is_empty()
+}
+
+/// Story context for spotting; empty fields are left out to keep the call small.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, JsonSchema)]
+#[serde(default)]
+pub struct SpotContext {
+    #[serde(skip_serializing_if = "is_blank")]
+    pub title: String,
+    #[serde(skip_serializing_if = "is_blank")]
+    pub act: String,
+    /// The writers' summary of the scene.
+    #[serde(skip_serializing_if = "is_blank")]
+    pub synopsis: String,
+    /// -1 (lowest point of the story) … +1 (highest).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tone: Option<f64>,
+    /// Characters present, also the silent ones, with a one-line note each.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub cast: Vec<CastNote>,
+    #[serde(skip_serializing_if = "is_blank")]
+    pub setting: String,
+    /// The larger place the setting belongs to (Canteen → TARMAC base).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub part_of: Option<String>,
+}
+
+impl SpotContext {
+    pub fn is_empty(&self) -> bool {
+        self == &SpotContext::default()
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct CastNote {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "is_blank")]
+    pub note: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema)]
@@ -361,6 +405,9 @@ pub struct NameMatchInput {
     pub files: Vec<String>,
     pub characters: Vec<String>,
     pub aliases: std::collections::BTreeMap<String, String>,
+    /// The writers' one-line notes per character (full names, roles).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub character_notes: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema)]

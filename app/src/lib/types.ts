@@ -130,12 +130,31 @@ export interface SceneSummary {
   lines: number;
   lines_with_takes: number;
   flagged: number;
+  /** Beat title from the writers (empty for plain Fountain). */
+  title: string;
+  act: string;
+  synopsis: string;
 }
 
 export interface CharacterView {
   id: string;
   label: string;
   color_index: number;
+  /** The writers' notes in one line. */
+  profile: string;
+}
+
+/** Story context of the open scene (from Throughline or Fountain synopses). */
+export interface SceneStoryView {
+  title: string;
+  act: string;
+  synopsis: string;
+  cast: string[];
+  tone: number | null;
+  setting: string;
+  setting_description: string;
+  setting_parent: string | null;
+  parent_description: string;
 }
 
 export interface UnmatchedView {
@@ -168,6 +187,7 @@ export interface SceneView {
   unmatched: UnmatchedView[];
   scenes: SceneSummary[];
   characters: CharacterView[];
+  story: SceneStoryView;
   rev: number;
   can_undo: boolean;
   can_redo: boolean;

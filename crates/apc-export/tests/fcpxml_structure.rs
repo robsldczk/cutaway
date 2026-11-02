@@ -103,6 +103,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
                 label: ch.to_string(),
                 aliases: vec![],
                 color_index: i,
+                profile: Default::default(),
             },
         );
     }
@@ -213,6 +214,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             time_of_day: "Day".into(),
             order: vec!["l1".into(), "l2".into()],
             tightness: 1.0,
+            story: Default::default(),
         },
     );
     d.assets.insert(

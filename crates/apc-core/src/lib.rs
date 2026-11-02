@@ -17,7 +17,9 @@ pub mod model;
 pub mod project;
 pub mod script;
 pub mod store;
+pub mod story;
 pub mod text;
+pub mod thrl;
 pub mod timeline;
 
 pub use bus::{Change, CommandBus, Executed, Tx};

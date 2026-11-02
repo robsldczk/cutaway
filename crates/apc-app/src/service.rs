@@ -289,10 +289,9 @@ impl Service {
         Some(a)
     }
 
-    /// Imports a script as the next version.
+    /// Imports a script (Fountain or Throughline `.thrl`) as the next version.
     pub fn import_script(&mut self, path: &Path, name: Option<&str>) -> Result<Value> {
-        let text = std::fs::read_to_string(path)?;
-        let parsed = apc_core::fountain::parse(&text);
+        let parsed = apc_core::script::read_script_file(path)?;
         let number = self
             .doc()
             .script_versions
@@ -318,6 +317,19 @@ impl Service {
             title: parsed.title.clone(),
         };
         let r = self.exec(&Command::ImportScriptVersion { version, parsed })?;
+        Ok(r.result)
+    }
+
+    /// Takes only the story context (character bios, settings) from a script file.
+    pub fn import_story(&mut self, path: &Path) -> Result<Value> {
+        let story = apc_core::script::read_script_file(path)?.story;
+        if story.is_empty() {
+            return Err(AppError::Params(format!(
+                "{} holds no story context (characters or settings)",
+                path.display()
+            )));
+        }
+        let r = self.exec(&Command::ImportStoryContext { story })?;
         Ok(r.result)
     }
 
@@ -403,11 +415,22 @@ impl Service {
         aliases: &BTreeMap<String, String>,
     ) -> Option<apc_analysis::roles::RoleGuess> {
         let (runner, _) = self.ai_runner();
+        let character_notes = if self.config().ai.story_context {
+            self.doc()
+                .characters
+                .values()
+                .map(|c| (c.id.clone(), c.profile.summary.clone()))
+                .filter(|(_, s)| !s.trim().is_empty())
+                .collect()
+        } else {
+            Default::default()
+        };
         let out = runner
             .run(&apc_ai::NameMatchInput {
                 files: vec![file.into()],
                 characters: characters.to_vec(),
                 aliases: aliases.clone(),
+                character_notes,
             })
             .ok()?
             .output?;

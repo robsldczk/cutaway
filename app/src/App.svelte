@@ -43,7 +43,7 @@
   const AUDIO = /\.(wav|bwf|aif|aiff|mp3|flac|m4a)$/i;
 
   async function dropped(paths: string[]) {
-    const scripts = paths.filter((p) => /\.(fountain|txt)$/i.test(p));
+    const scripts = paths.filter((p) => /\.(fountain|thrl|txt)$/i.test(p));
     const audio = paths.filter((p) => AUDIO.test(p));
     for (const s of scripts) await app.method('import_script', { path: s });
     if (!audio.length) return;

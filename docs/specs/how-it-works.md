@@ -12,6 +12,8 @@ Turn raw, unslated session recordings into script-matched, adjustable rough cuts
 | Room track | One continuous WAV (BWF) | Director mic. Isolated, timecoded. Contains direction and possibly cue reading. |
 | Script | Throughline file (Fountain based, proprietary flavor) | Parsed as Fountain, extensions kept as metadata. |
 
+*(Changed in implementation, D61: a Throughline `.thrl` export is gzipped JSON, not Fountain. Cutaway reads it natively into the same parsed script, and keeps its story context (beat titles and summaries, acts, cast per scene, setting groups, character bios) per episode. Fountain files still work.)*
+
 Session language: English. Takes are not slated and not cut. Take structure is derived from the script.
 
 ## Pipeline
