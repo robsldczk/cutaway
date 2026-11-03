@@ -233,7 +233,7 @@ Not commands (no undo, own safety): `undo`, `redo`, `save_version`, `revert` (ma
 |---|---|---|
 | `line_match` | `{segments:[{index,t0,t1,text}], candidates:[{line_id,character,text}]}` | `{matches:[{index, line_id: string or null, take_type: "full"/"partial"/"pickup"/"adlib", confidence: 0..1}]}` |
 | `room_classify` | `{segments:[{id,t0,t1,text}], scene_script:[{line_id,kind,character,text}]}` | `{segments:[{id, class:"cue_reading"/"direction"/"feedback"/"chatter"}]}` |
-| `note_condense` (v2, D71) | `{gaps:[{gap_id, previous: {take_id, character, line_text} or null, next: same or null, text}]}` | `{notes:[{gap_id, summary (1–2 sentences), tags:[string]}]}` |
+| `note_condense` (v2, D73) | `{gaps:[{gap_id, previous: {take_id, character, line_text} or null, next: same or null, text}]}` | `{notes:[{gap_id, summary (1–2 sentences), tags:[string]}]}` |
 | `pick_detect` | `{takes:[{take_id, take_no, line_text, feedback_text}]}` | `{picks:[{take_id, strength: 0/1/2, refers_to: take_id or null}]}` |
 | `sound_spot` | `{scene:{id, heading, location, items:[{line_id, kind, character, text}]}}` | `{cues:[{description, anchor_line_id, anchor_word: int or null, cue_type, tags, priority 1..3}]}` |
 | `sound_tag` | `{file_name, duration_s, cue_description?}` | `{category, tags:[string]}` |

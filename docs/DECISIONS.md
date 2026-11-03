@@ -399,7 +399,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - The Edit page's clip selection never follows the playhead (Rob): only its scene-strip highlight and paging do.
 - **Options not taken:** a project config value through the command bus (it's how this viewer watches, not part of the cut, and should carry across episodes).
 
-### D71 Room talk between takes, read whole (Rob, 2026-11-03)
+### D73 Room talk between takes, read whole (Rob, 2026-11-03)
 - **Rob:** the director notes were cluttered keywords. Everything said in the room before a take, chatter included, should go to Claude as one text and come back as one or two full sentences saying what the people meant. Direction and feedback are fluid: the talk between two takes belongs to both.
 - **Found:**
   - Each take got the room speech in a 30 s window before it (direction) and an 8 s window after it (feedback).

@@ -26,7 +26,7 @@ use crate::sessions::{group_sessions, pair_rooms_by_name, FileSpan, NamedFile};
 use crate::wordmap::{coverage, map_words};
 
 /// Feedback window after a take, direction window before it (seconds). The room talk
-/// between two takes is both windows together, read as one (DECISIONS.md D71).
+/// between two takes is both windows together, read as one (DECISIONS.md D73).
 pub const FEEDBACK_WINDOW_S: f64 = 8.0;
 pub const DIRECTION_WINDOW_S: f64 = 60.0;
 /// Room gaps sent to Claude in one call.
