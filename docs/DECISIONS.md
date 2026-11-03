@@ -421,3 +421,22 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - Every shown word keeps the heard word indexes it stands for, so the box editor's word delete and restore still act on the heard words.
   - Used on Options (text and karaoke), Arrange, the Edit page (strip, clip labels, snap labels) and the box editor (comp words and take lanes). The Inspector and the Dev page keep showing what was heard; exports (SRT) are unchanged.
 - **Trade-off:** an ad-lib that isn't in the script doesn't show as text.
+
+### D73 Room talk between takes, read whole (Rob, 2026-11-03)
+- **Rob:** the director notes were cluttered keywords. Everything said in the room before a take, chatter included, should go to Claude as one text and come back as one or two full sentences saying what the people meant. Direction and feedback are fluid: the talk between two takes belongs to both.
+- **Found:**
+  - Each take got the room speech in a 30 s window before it (direction) and an 8 s window after it (feedback).
+  - `note_condense` v1 asked Claude for "a few words" per side.
+  - The fallback, and the mock, turned the text into keywords.
+  - Talk that was classed as chatter, or fell outside the windows, was lost.
+- **Choice:**
+  - **Gaps.** After the takes are final (dropped takes removed), each session's room talk is cut at its takes, in session time across every mic. A gap holds the non-cue-reading speech in the first 8 s after the previous take plus the last **60 s** before the next one (Rob: a minute limit), chatter included. There is also a gap before a session's first take and one after its last.
+  - **`note_condense` v2** gets whole gaps (text plus the character and line of the take on each side), batched 40 per call, and returns one `summary` of one or two full sentences plus tags. Validation refuses a summary over 80 words, so a copied transcript is caught.
+  - **Shared storage.** A gap's summary is written to `direction` of the take after it and to `feedback` of the take before it, with the gap text in `direction_raw` / `feedback_raw`. The data model and file format stay unchanged, and the cut list and FCPXML keep their columns.
+  - **Fallback** (no AI answer): keyword hits only, as "After the take: …. For the next: …." or a short quote, with the take flagged "notes condensed by rules".
+  - **UI.** The Options page's Direction and Feedback boxes became one room strip per line. It holds the line's takes and one take either side, in recording order, with the talk between them. The current take sits on the centre line, the talk on both sides is bright, further steps fade, and changing takes slides the strip (Rob). Other lines' takes show as "CHARACTER · first words". The raw transcript appears only with the developer switch on (Rob), in the strip and in the Inspector. The take list subtitle shows the first sentence of the take's direction.
+  - Pick detection still reads the 8 s after each take, and room classification is unchanged.
+- **Options not taken:**
+  - Keeping a separate direction and feedback summary per take. This splits a single conversation, and Rob asked for it read whole.
+  - Sending the whole gap with no limit. A lunch break between takes would swamp the note.
+  - A new gap entity in the document. The take fields already hold both sides, and a new collection would need format and command changes for no visible gain.

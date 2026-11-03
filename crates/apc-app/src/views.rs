@@ -1,5 +1,7 @@
 //! View models for the UI. Read-only: the UI never mutates state directly.
 
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
 use serde::Serialize;
 
 use apc_core::commands::default_take;
@@ -79,6 +81,26 @@ pub struct PieceView {
     pub muted: bool,
 }
 
+/// One step of the room strip next to a line, in recording order.
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RoomItem {
+    /// What the room said between two takes (or before a session's first, after its last).
+    Talk {
+        key: String,
+        summary: String,
+        raw: String,
+    },
+    Take {
+        key: String,
+        /// This line's take ("Take 2"), or another line's ("SARA · Where were…").
+        label: String,
+        own: bool,
+    },
+    /// Takes of other lines left out between two stretches.
+    Break { key: String },
+}
+
 #[derive(Serialize)]
 pub struct ItemView {
     pub kind: &'static str,
@@ -116,6 +138,8 @@ pub struct ItemView {
     pub gain_db: f64,
     pub low_confidence: bool,
     pub adlib: bool,
+    /// The line's takes and one take either side, with the room talk between them.
+    pub room: Vec<RoomItem>,
     // spacers
     pub spacer_enabled: bool,
     pub spacer_duration_s: Option<f64>,
@@ -233,6 +257,117 @@ pub fn scene_summaries(doc: &Document) -> Vec<SceneSummary> {
         .collect()
 }
 
+/// Every take in recording order, per session (session time = file time − sync offset).
+struct RecordingOrder<'a> {
+    sessions: Vec<Vec<&'a Take>>,
+    /// Take id → (session, position).
+    at: HashMap<&'a str, (usize, usize)>,
+}
+
+impl<'a> RecordingOrder<'a> {
+    fn of(doc: &'a Document) -> Self {
+        let mut by: BTreeMap<Option<String>, Vec<(f64, &Take)>> = BTreeMap::new();
+        for t in doc.takes.values() {
+            let src = doc.sources.get(&t.source_id);
+            let off = src.map(|s| s.offset_s).unwrap_or(0.0);
+            by.entry(src.and_then(|s| s.session_id.clone()))
+                .or_default()
+                .push((t.t0 - off, t));
+        }
+        let mut sessions = Vec::new();
+        let mut at = HashMap::new();
+        for mut list in by.into_values() {
+            list.sort_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.id.cmp(&b.1.id)));
+            for (i, (_, t)) in list.iter().enumerate() {
+                at.insert(t.id.as_str(), (sessions.len(), i));
+            }
+            sessions.push(list.into_iter().map(|(_, t)| t).collect());
+        }
+        RecordingOrder { sessions, at }
+    }
+
+    /// The room strip of a line: its takes and their neighbours in recording order, with
+    /// the talk between them. A gap's note is stored on both takes around it; the take
+    /// after it (its direction) is read first.
+    fn strip(&self, doc: &Document, own: &[&Take]) -> Vec<RoomItem> {
+        let mut want: BTreeSet<(usize, usize)> = BTreeSet::new();
+        for t in own {
+            if let Some(&(s, i)) = self.at.get(t.id.as_str()) {
+                for j in i.saturating_sub(1)..=(i + 1).min(self.sessions[s].len() - 1) {
+                    want.insert((s, j));
+                }
+            }
+        }
+        let own_ids: HashSet<&str> = own.iter().map(|t| t.id.as_str()).collect();
+        let id_at = |s: usize, i: Option<usize>| {
+            i.and_then(|i| self.sessions[s].get(i))
+                .map(|t| t.id.as_str())
+                .unwrap_or("")
+        };
+        let talk = |s: usize, i: usize, summary: &str, raw: &str| RoomItem::Talk {
+            key: format!("{}>{}", id_at(s, i.checked_sub(1)), id_at(s, Some(i))),
+            summary: summary.to_string(),
+            raw: raw.to_string(),
+        };
+        let mut out = Vec::new();
+        let mut last: Option<(usize, usize)> = None;
+        for &(s, i) in &want {
+            let t = self.sessions[s][i];
+            if i > 0 && last == Some((s, i - 1)) {
+                out.push(talk(s, i, &t.direction, &t.direction_raw));
+            } else {
+                if let Some((ls, li)) = last {
+                    let lt = self.sessions[ls][li];
+                    out.push(talk(ls, li + 1, &lt.feedback, &lt.feedback_raw));
+                    out.push(RoomItem::Break {
+                        key: format!("br-{}", t.id),
+                    });
+                }
+                out.push(talk(s, i, &t.direction, &t.direction_raw));
+            }
+            let label = if own_ids.contains(t.id.as_str()) {
+                format!("Take {}", t.take_no)
+            } else {
+                take_label(doc, t)
+            };
+            out.push(RoomItem::Take {
+                key: t.id.clone(),
+                label,
+                own: own_ids.contains(t.id.as_str()),
+            });
+            last = Some((s, i));
+        }
+        if let Some((ls, li)) = last {
+            let lt = self.sessions[ls][li];
+            out.push(talk(ls, li + 1, &lt.feedback, &lt.feedback_raw));
+        }
+        out.retain(|r| !matches!(r, RoomItem::Talk { summary, raw, .. } if summary.is_empty() && raw.is_empty()));
+        out
+    }
+}
+
+/// Another line's take in the room strip: who, and the start of the line.
+fn take_label(doc: &Document, t: &Take) -> String {
+    let Some(line) = doc.lines.get(&t.line_id) else {
+        return format!("Take {}", t.take_no);
+    };
+    let who = line
+        .character
+        .as_ref()
+        .map(|c| doc.characters.get(c).map_or(c, |x| &x.label).clone())
+        .unwrap_or_default();
+    let words: Vec<&str> = line.text.split_whitespace().collect();
+    let mut text = words.iter().take(4).copied().collect::<Vec<_>>().join(" ");
+    if words.len() > 4 {
+        text.push('…');
+    }
+    if who.is_empty() {
+        text
+    } else {
+        format!("{who} · {text}")
+    }
+}
+
 fn take_view(svc: &mut Service, t: &Take, is_default: bool) -> TakeView {
     let src = svc.doc().sources.get(&t.source_id).cloned();
     let src_len = src.as_ref().map(|s| s.duration_s).unwrap_or(0.0);
@@ -308,6 +443,7 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
         .iter()
         .map(|l| l.id.clone())
         .collect();
+    let order = RecordingOrder::of(&doc);
     let mut items = Vec::new();
     let mut prev_script_idx: Option<usize> = None;
     for li in &layout.items {
@@ -400,6 +536,7 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
             edits: b.edits.clone(),
             gain_db: b.gain_db,
             adlib: line.adlib,
+            room: order.strip(&doc, &takes),
             spacer_enabled: sp.map(|s| s.enabled).unwrap_or(false),
             spacer_duration_s: sp.and_then(|s| s.duration_s),
         });
@@ -702,6 +839,76 @@ pub fn bucket(doc: &Document, scene_id: Option<&str>) -> Vec<CueView> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    fn take(id: &str, line: &str, source: &str, t0: f64, direction: &str, feedback: &str) -> Take {
+        let mut t: Take = serde_json::from_value(serde_json::json!({
+            "id": id, "line_id": line, "source_id": source, "take_no": 1,
+            "take_type": "full", "t0": t0, "t1": t0 + 3.0,
+        }))
+        .unwrap();
+        t.direction = direction.into();
+        t.feedback = feedback.into();
+        t
+    }
+
+    fn source(id: &str, offset_s: f64) -> SourceFile {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "path": id, "original_name": id, "stored": "referenced", "hash": id,
+            "size": 0, "role": "character", "session_id": "s1", "offset_s": offset_s,
+        }))
+        .unwrap()
+    }
+
+    fn kinds(strip: &[RoomItem]) -> Vec<String> {
+        strip
+            .iter()
+            .map(|r| match r {
+                RoomItem::Talk { summary, .. } => format!("~{summary}"),
+                RoomItem::Take { key, own, .. } => format!("{key}{}", if *own { "*" } else { "" }),
+                RoomItem::Break { .. } => "|".into(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn room_strip_follows_the_recording_with_shared_gaps() {
+        let mut doc = Document::default();
+        for s in [source("paul", 0.0), source("sara", 1.0)] {
+            doc.sources.insert(s.id.clone(), s);
+        }
+        // L1 is taken twice, with other lines around it; gap notes sit on both sides
+        for t in [
+            take("a", "L0", "paul", 0.0, "", "g1"),
+            take("b", "L1", "paul", 10.0, "g1", "g2"),
+            take("c", "L2", "sara", 21.0, "g2", "g3"),
+            take("d", "L3", "paul", 30.0, "g3", "g4"),
+            take("e", "L2", "sara", 41.0, "g4", "g5"),
+            take("f", "L1", "paul", 50.0, "g5", ""),
+        ] {
+            doc.takes.insert(t.id.clone(), t);
+        }
+        let order = RecordingOrder::of(&doc);
+        let own: Vec<&Take> = vec![&doc.takes["b"], &doc.takes["f"]];
+        assert_eq!(
+            kinds(&order.strip(&doc, &own)),
+            vec!["a", "~g1", "b*", "~g2", "c", "~g3", "|", "~g4", "e", "~g5", "f*"]
+        );
+        // keys are the gap itself, whichever take a strip reaches it from
+        let keys = |own: Vec<&Take>| -> Vec<String> {
+            order
+                .strip(&doc, &own)
+                .into_iter()
+                .filter_map(|r| match r {
+                    RoomItem::Talk { key, .. } => Some(key),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert!(keys(vec![&doc.takes["b"]]).contains(&"b>c".to_string()));
+        assert!(keys(vec![&doc.takes["c"]]).contains(&"b>c".to_string()));
+    }
+
     #[test]
     fn sound_names_drop_folders_ids_and_counters() {
         assert_eq!(

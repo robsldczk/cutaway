@@ -112,11 +112,8 @@ fn best_sentence(text: &str) -> String {
     }
 }
 
-/// Rule-based condensing used by the mock provider.
-pub fn condense_direction(text: &str) -> String {
-    if text.trim().is_empty() {
-        return String::new();
-    }
+/// Instruction keywords in room talk ("quieter", "to yourself").
+fn direction_keywords(text: &str) -> Vec<&'static str> {
     let low = text.to_lowercase();
     let mut parts: Vec<&str> = Vec::new();
     if low.contains("quieter") || low.contains("softer") {
@@ -137,6 +134,9 @@ pub fn condense_direction(text: &str) -> String {
     if low.contains("annoyed") {
         parts.push("annoyed");
     }
+    if low.contains("curious") {
+        parts.push("curious");
+    }
     if low.contains("present") || low.contains("excited") {
         parts.push("present it");
     }
@@ -146,6 +146,38 @@ pub fn condense_direction(text: &str) -> String {
     if low.contains("faster") || low.contains("quicker") {
         parts.push("faster");
     }
+    parts
+}
+
+/// A reaction keyword in room talk ("liked it", "technical problem").
+fn feedback_keyword(text: &str) -> Option<&'static str> {
+    let low = text.to_lowercase();
+    match pick_strength(text) {
+        2 => return Some("the pick"),
+        1 => return Some("liked it"),
+        _ => {}
+    }
+    if low.contains("malfunction") || low.contains("technical") || low.contains("pop") {
+        return Some("technical problem");
+    }
+    if low.contains("too fast") {
+        return Some("too fast");
+    }
+    if low.contains("too slow") {
+        return Some("too slow");
+    }
+    if low.contains("one more") || low.contains("again") {
+        return Some("one more");
+    }
+    None
+}
+
+/// Rule-based condensing used by the mock provider.
+pub fn condense_direction(text: &str) -> String {
+    if text.trim().is_empty() {
+        return String::new();
+    }
+    let parts = direction_keywords(text);
     if !parts.is_empty() {
         return parts.join(", ");
     }
@@ -156,25 +188,37 @@ pub fn condense_feedback(text: &str) -> String {
     if text.trim().is_empty() {
         return String::new();
     }
-    let low = text.to_lowercase();
-    match pick_strength(text) {
-        2 => return "the pick".into(),
-        1 => return "liked it".into(),
-        _ => {}
+    match feedback_keyword(text) {
+        Some(k) => k.into(),
+        None => few_words(&best_sentence(text), 5),
     }
-    if low.contains("malfunction") || low.contains("technical") || low.contains("pop") {
-        return "technical problem".into();
+}
+
+/// Rule-based note on the room talk between two takes: the reaction to the previous
+/// take and the setup for the next. Claude interprets the talk; this is the mock and
+/// the fallback when it can't.
+pub fn condense_gap(text: &str, has_previous: bool, has_next: bool) -> String {
+    if text.trim().is_empty() {
+        return String::new();
     }
-    if low.contains("too fast") {
-        return "too fast".into();
+    let fb = feedback_keyword(text).filter(|_| has_previous);
+    let dir = Some(direction_keywords(text))
+        .filter(|d| has_next && !d.is_empty())
+        .map(|d| d.join(", "));
+    let mut out: Vec<String> = Vec::new();
+    if let Some(fb) = fb {
+        out.push(format!("After the take: {fb}."));
     }
-    if low.contains("too slow") {
-        return "too slow".into();
+    if let Some(dir) = dir {
+        out.push(format!("For the next: {dir}."));
     }
-    if low.contains("one more") || low.contains("again") {
-        return "one more".into();
+    if out.is_empty() {
+        out.push(format!(
+            "Room: \u{201c}{}\u{201d}",
+            few_words(&best_sentence(text), 8)
+        ));
     }
-    few_words(&best_sentence(text), 5)
+    out.join(" ")
 }
 
 const SPOT_RULES: &[(&[&str], &str, SpotCueType, u8)] = &[
@@ -626,25 +670,21 @@ impl AiProvider for MockProvider {
             }
             AiTask::NoteCondense => {
                 let input: NoteCondenseInput = parse(&req.input)?;
-                let notes: Vec<CondensedNote> = input
-                    .takes
+                let notes: Vec<GapNote> = input
+                    .gaps
                     .iter()
-                    .map(|t| {
-                        let mut tags = tags_of(&t.direction_text);
-                        for x in tags_of(&t.feedback_text) {
-                            if !tags.contains(&x) {
-                                tags.push(x);
+                    .map(|g| {
+                        let mut tags = tags_of(&g.text);
+                        if g.previous.is_some() {
+                            match pick_strength(&g.text) {
+                                2 => tags.push("pick".into()),
+                                1 => tags.push("liked".into()),
+                                _ => {}
                             }
                         }
-                        match pick_strength(&t.feedback_text) {
-                            2 => tags.push("pick".into()),
-                            1 => tags.push("liked".into()),
-                            _ => {}
-                        }
-                        CondensedNote {
-                            take_id: t.take_id.clone(),
-                            direction: condense_direction(&t.direction_text),
-                            feedback: condense_feedback(&t.feedback_text),
+                        GapNote {
+                            gap_id: g.gap_id.clone(),
+                            summary: condense_gap(&g.text, g.previous.is_some(), g.next.is_some()),
                             tags,
                         }
                     })
@@ -752,6 +792,70 @@ mod tests {
             condense_feedback("We had a technical malfunction here, but"),
             "technical problem"
         );
+    }
+
+    #[test]
+    fn gap_notes_read_both_ways() {
+        let t = "I like that. Can you give me one more a little quieter to yourself?";
+        assert_eq!(
+            condense_gap(t, true, true),
+            "After the take: liked it. For the next: quieter, to yourself."
+        );
+        assert_eq!(
+            condense_gap(t, false, true),
+            "For the next: quieter, to yourself."
+        );
+        assert_eq!(condense_gap(t, true, false), "After the take: liked it.");
+        assert_eq!(
+            condense_gap("That was the one I liked.", true, true),
+            "After the take: the pick."
+        );
+        assert_eq!(
+            condense_gap("Okay, let's start with the lab scene.", false, true),
+            "Room: \u{201c}Okay, let's start with the lab scene\u{201d}"
+        );
+        assert_eq!(condense_gap("  ", true, true), "");
+    }
+
+    #[test]
+    fn mock_answers_every_gap() {
+        let input = NoteCondenseInput {
+            gaps: vec![
+                RoomGap {
+                    gap_id: "g1".into(),
+                    previous: None,
+                    next: Some(GapTake {
+                        take_id: "t1".into(),
+                        character: "PAUL".into(),
+                        line_text: "Lunch.".into(),
+                    }),
+                    text: "Okay, a little quieter, to yourself.".into(),
+                },
+                RoomGap {
+                    gap_id: "g2".into(),
+                    previous: Some(GapTake {
+                        take_id: "t1".into(),
+                        character: "PAUL".into(),
+                        line_text: "Lunch.".into(),
+                    }),
+                    next: None,
+                    text: "I think that that one was the right one.".into(),
+                },
+            ],
+        };
+        let req = AiRequest {
+            task: AiTask::NoteCondense,
+            prompt: String::new(),
+            prompt_version: 2,
+            input: serde_json::to_value(&input).unwrap(),
+            text: None,
+            output_schema: Value::Null,
+        };
+        let out: NoteCondenseOutput =
+            serde_json::from_value(MockProvider::new().run(&req).unwrap()).unwrap();
+        assert_eq!(out.notes.len(), 2);
+        assert_eq!(out.notes[0].summary, "For the next: quieter, to yourself.");
+        assert!(out.notes[1].tags.contains(&"pick".to_string()));
     }
 
     #[test]

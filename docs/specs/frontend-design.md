@@ -98,6 +98,7 @@ Pick the take per line while the rest of the scene stays in place.
 - Flipping takes slides the box in from the side.
 - **Take pills** below the box: one pill per take (`1`, `2 ★`, …), the selected one filled with its shade, the others glass with a shade underline. Partial takes get a dashed outline.
 - **Notes aside** (right of the box, 220 px): Direction and Feedback, each a small upper-case label and a 14 px note; below them a muted meta line (`3.4 s · match 94% · partial`). Hidden below 1100 px (then shown under the box).
+  - *Changed in implementation (D73):* Direction and Feedback became one **room strip** ("In the room"). It lists the line's takes and one take either side in recording order, with the room talk between them as sentences. The current take sits on the centre line, the talk on both sides of it is at full strength, and further steps fade. Changing takes slides the strip. The raw transcript shows only with the developer switch on.
 - **Time chip** (left of the box): the scene time of the playhead.
 
 **Gaps and action lines**

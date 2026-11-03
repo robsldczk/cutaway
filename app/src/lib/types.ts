@@ -38,6 +38,12 @@ export interface TakeView {
   ai_flag: string | null;
 }
 
+/** One step of the room strip, in recording order. */
+export type RoomItem =
+  | { kind: 'talk'; key: string; summary: string; raw: string }
+  | { kind: 'take'; key: string; label: string; own: boolean }
+  | { kind: 'break'; key: string };
+
 export interface LayoutWord {
   idx: number;
   text: string;
@@ -119,6 +125,8 @@ export interface ItemView {
   gain_db: number;
   low_confidence: boolean;
   adlib: boolean;
+  /** The line's takes and one take either side, with the room talk between them. */
+  room: RoomItem[];
   spacer_enabled: boolean;
   spacer_duration_s: number | null;
 }
