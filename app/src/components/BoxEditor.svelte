@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { app } from '../lib/app.svelte';
-  import { clamp } from '../lib/format';
+  import { clamp, firstSentence } from '../lib/format';
   import { charColor, charLabel, rgba, shade } from '../lib/colors';
   import Waveform from './Waveform.svelte';
   import type { CompSegment, ItemView, TakeView } from '../lib/types';
@@ -402,7 +402,7 @@
         {@const used = usedBars(t)}
         <div class="lane">
           <button class="lbl" onclick={() => app.cmd({ cmd: 'select_take', line_id: it.line_id, take_id: t.id })} aria-label="Use whole take {i + 1}" title="Use the whole take" style="box-shadow: inset 3px 0 0 {rgba(lsh, 0.95)}">
-            <span class="t2">{src === t.id ? '▶ ' : ''}T{i + 1}{t.favorite ? ' ★' : ''}{i === k ? ' · picked' : ''}</span><span class="sub ellip">{t.direction || t.feedback || t.heard}</span>
+            <span class="t2">{src === t.id ? '▶ ' : ''}T{i + 1}{t.favorite ? ' ★' : ''}{i === k ? ' · picked' : ''}</span><span class="sub ellip">{firstSentence(t.direction || t.feedback) || t.heard}</span>
           </button>
           <div class="area take" data-testid="take-lane" onmousedown={(e) => laneDown(e, i)} role="button" tabindex="-1" style="background: {rgba(lsh, src === t.id ? 0.1 : 0.05)}{src === t.id ? `; box-shadow: inset 0 0 0 1.5px ${rgba(lsh, 0.9)}` : ''}{t.partial ? '; outline: 1px dashed rgb(var(--ink-rgb) / 0.3); outline-offset: -1px' : ''}">
             <Waveform peaks={t.peaks} fill={rgba(lsh, used.length ? 0.72 : 0.42)} />
