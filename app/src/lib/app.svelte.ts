@@ -351,10 +351,17 @@ class AppState {
     await this.loadScene(this.sceneId);
   }
 
+  /** The last command still on its way (undo and redo wait for it). */
+  private inflight: Promise<unknown> = Promise.resolve();
+
   async cmd(c: Record<string, unknown>) {
-    const r = await this.run(() => call('command', c));
-    await this.refresh();
-    return r;
+    const done = (async () => {
+      const r = await this.run(() => call('command', c));
+      await this.refresh();
+      return r;
+    })();
+    this.inflight = done.catch(() => {});
+    return done;
   }
 
   async method<T = unknown>(name: string, params: object = {}, refresh = true): Promise<T | undefined> {
@@ -460,11 +467,14 @@ class AppState {
     await this.cmd({ cmd: 'nudge_gap', line_id: c.line_id, delta_s: d });
   }
 
+  // a drop holds its preview until its command lands, so ⌘Z right after it must wait
   async undo() {
+    await this.inflight;
     await this.method('undo');
   }
 
   async redo() {
+    await this.inflight;
     await this.method('redo');
   }
 
