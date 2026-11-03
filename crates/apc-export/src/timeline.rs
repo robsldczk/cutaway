@@ -109,7 +109,9 @@ impl EpisodeTimeline {
             tl.add_scene(doc, scene, &layout, offset);
             offset += layout.duration_s + SCENE_GAP_S;
         }
-        tl.duration_s = (offset - SCENE_GAP_S).max(0.0);
+        // a last line's tail can ring past its scene's layout
+        let rung = tl.scenes.iter().map(|s| s.end_s).fold(0.0, f64::max);
+        tl.duration_s = (offset - SCENE_GAP_S).max(rung).max(0.0);
         tl
     }
 
@@ -119,12 +121,13 @@ impl EpisodeTimeline {
             let Some(line) = doc.lines.get(&item.item_id) else {
                 continue;
             };
-            if line.kind != LineKind::Dialogue || item.pieces.is_empty() {
+            if line.kind != LineKind::Dialogue || item.audio.is_empty() {
                 continue;
             }
             let take = item.take_id.as_ref().and_then(|t| doc.takes.get(t));
-            let n = item.pieces.len();
-            for (k, p) in item.pieces.iter().enumerate() {
+            // what is heard: the line with its lead-in and tail handles
+            let n = item.audio.len();
+            for (k, p) in item.audio.iter().enumerate() {
                 let piece_take = doc.takes.get(&p.take_id);
                 self.clips.push(TimelineClip {
                     scene_id: scene.id.clone(),

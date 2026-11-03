@@ -447,9 +447,12 @@ fn bounce_matches_layout_length() {
         &paths.exports,
     )
     .unwrap();
-    let layout = apc_core::timeline::layout_scene(&doc, &doc.scenes["sc1"], &Default::default());
+    let pacing = apc_core::timeline::Pacing::default();
+    let layout = apc_core::timeline::layout_scene(&doc, &doc.scenes["sc1"], &pacing);
+    // the layout plus at most the last line's tail
+    let over = len - layout.duration_s;
     assert!(
-        (len - layout.duration_s).abs() < 0.010,
+        over > -0.010 && over < pacing.handle_out_s + 0.010,
         "{len} vs {}",
         layout.duration_s
     );

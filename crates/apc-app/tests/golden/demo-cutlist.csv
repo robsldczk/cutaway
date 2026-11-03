@@ -1,6 +1,6 @@
 scene,line,character,take,source,source_in,source_out,timeline_in,timeline_out,direction,feedback,text
-S1,S1.2,PAUL,T2,Paul.wav,10:00:09.930,10:00:12.410,00:00:00.000,00:00:02.480,quieter,the pick,So the machine finally works.
-S1,S1.3,SARA,T2,Sara.wav,10:00:49.930,10:00:51.720,00:00:02.780,00:00:04.570,"Again, more curious",,Does it make coffee?
-S1,S1.4,PAUL,T2,Paul.wav,10:00:22.940,10:00:23.560,00:00:04.870,00:00:05.490,annoyed,liked it,Lunch.
-S2,S2.1,SARA,T1,Sara.wav,10:00:53.920,10:00:56.760,00:00:07.490,00:00:10.330,,liked it,I brought sandwiches for everyone.
-S2,S2.2,PAUL,T1,Paul.wav,10:00:31.930,10:00:35.030,00:00:10.630,00:00:13.730,I like that,the pick,We can send things through time now.
+S1,S1.2,PAUL,T2,Paul.wav,10:00:09.930,10:00:12.560,00:00:00.000,00:00:02.630,quieter,the pick,So the machine finally works.
+S1,S1.3,SARA,T2,Sara.wav,10:00:49.830,10:00:51.870,00:00:02.680,00:00:04.720,"Again, more curious",,Does it make coffee?
+S1,S1.4,PAUL,T2,Paul.wav,10:00:22.840,10:00:23.710,00:00:04.770,00:00:05.640,annoyed,liked it,Lunch.
+S2,S2.1,SARA,T1,Sara.wav,10:00:53.920,10:00:56.910,00:00:07.490,00:00:10.480,,liked it,I brought sandwiches for everyone.
+S2,S2.2,PAUL,T1,Paul.wav,10:00:31.830,10:00:35.180,00:00:10.530,00:00:13.880,I like that,the pick,We can send things through time now.

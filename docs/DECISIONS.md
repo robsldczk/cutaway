@@ -398,3 +398,15 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - On: unchanged behaviour. Off: the poll no longer moves `curId`, the Edit page doesn't page along, and Space plays from the current box again (the playhead has left it).
   - The Edit page's clip selection never follows the playhead (Rob): only its scene-strip highlight and paging do.
 - **Options not taken:** a project config value through the command bus (it's how this viewer watches, not part of the cut, and should carry across episodes).
+
+### D71 Lead-in, tail and edge fade, heard and exported (Rob, 2026-11-03)
+- **Rob:** lines start and stop too hard and sometimes click; wants adjustable handles (a run-up of some milliseconds before a line starts and after it ends) as a global setting, applied to exports too.
+- **Found:** a line's clip started and ended exactly on its edges (the detected take edges plus trims) with a fixed 5 ms fade, not configurable.
+- **Choice:**
+  - Three project config values under `[pacing]`: `handle_in_ms = 100`, `handle_out_ms = 150`, `edge_fade_ms = 20`. Sliders in Settings; `set_config` from the CLI and MCP.
+  - The layout doesn't change. `layout_scene` fills a new `LayoutItem::audio`: a copy of `pieces` whose first piece starts earlier in the source (and on the timeline) and whose last ends later. Pauses, word times, the box length and every editing command keep working on `pieces`; playback, bounce and FCPXML use `audio`. A handle overlaps the pause (and the neighbour's handle), so the rhythm of the cut stays as it was.
+  - A handle stops 40 ms short of any other word on the same recording (from any take), so a word trimmed off stays off, a word a trim cuts through isn't re-opened, and the next take's speech doesn't leak in. It also stops at the file's edges and at the scene start.
+  - The edge fade sits at the outer edge of the handle.
+- **Trade-off:** the Edit page draws clips at their edit edges, not with the handles; the handles are heard but not drawn.
+- **Trade-off:** the first line of a scene starts at scene time 0, so it gets no lead-in (only its edge fade). Moving every scene's start later would shift every time in the cut.
+- **Options not taken:** lengthening the clips themselves (would push every pause out by lead-in + tail); a longer fade alone (fades into the first consonant instead of running up to it); per-line handles (Rob asked for one global value; trims still adjust single lines).

@@ -9,6 +9,9 @@
   // so right is tighter (×2 = half the pauses, twice the overlap).
   let tight = $state(Math.log2(1 / (app.view?.tightness ?? 1)));
   let model = $state('');
+  let leadIn = $state(app.status?.handle_in_ms ?? 100);
+  let tail = $state(app.status?.handle_out_ms ?? 150);
+  let edgeFade = $state(app.status?.edge_fade_ms ?? 20);
 
   async function setBreath() {
     await app.method('set_config', { key: 'pacing.breath_gap_s', value: +breath });
@@ -16,6 +19,9 @@
   async function setTight() {
     if (!v) return;
     await app.cmd({ cmd: 'set_scene_tightness', scene_id: v.scene.id, tightness: 2 ** -tight });
+  }
+  async function setPacing(key: string, value: number) {
+    await app.method('set_config', { key: `pacing.${key}`, value: +value });
   }
   async function level(on: boolean) {
     await app.method('set_config', { key: 'playback.level', value: on });
@@ -47,6 +53,14 @@
     <label for="tight">Scene tightness</label>
     <div class="ctl"><input id="tight" type="range" min="-1.5" max="3.3" step="0.05" bind:value={tight} onchange={setTight} /><span class="val">×{(2 ** +tight).toFixed(2)}</span></div>
     <span class="hint2">Right is punchier: divides every default pause and spacer of this scene and deepens overlaps. Pauses you set by hand are kept.</span>
+    <label for="leadin">Lead-in</label>
+    <div class="ctl"><input id="leadin" type="range" min="0" max="500" step="10" bind:value={leadIn} onchange={() => setPacing('handle_in_ms', leadIn)} data-testid="lead-in" /><span class="val">{leadIn} ms</span></div>
+    <label for="tail">Tail</label>
+    <div class="ctl"><input id="tail" type="range" min="0" max="500" step="10" bind:value={tail} onchange={() => setPacing('handle_out_ms', tail)} data-testid="tail" /><span class="val">{tail} ms</span></div>
+    <span class="hint2">Audio before and after every line, so it doesn't start or stop hard. Stops short of other words on the recording; the timing of the cut doesn't move. Heard and exported.</span>
+    <label for="edgefade">Edge fade</label>
+    <div class="ctl"><input id="edgefade" type="range" min="1" max="100" step="1" bind:value={edgeFade} onchange={() => setPacing('edge_fade_ms', edgeFade)} data-testid="edge-fade" /><span class="val">{edgeFade} ms</span></div>
+    <span class="hint2">Fades every line in and out over this long, at the outer edge of its lead-in and tail. Longer is softer.</span>
     <span class="lab">Playback level</span>
     <div class="ctl">
       <label class="chk"><input type="checkbox" checked={app.status?.playback_level ?? true} onchange={(e) => level((e.currentTarget as HTMLInputElement).checked)} data-testid="playback-level" /> level recordings and limit loud peaks</label>

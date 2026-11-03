@@ -1507,6 +1507,9 @@ impl Service {
             "room_tone": self.config().pacing.room_tone,
             "playback_level": self.config().playback.level,
             "breath_gap_s": self.config().pacing.breath_gap_s,
+            "handle_in_ms": self.config().pacing.handle_in_ms,
+            "handle_out_ms": self.config().pacing.handle_out_ms,
+            "edge_fade_ms": self.config().pacing.edge_fade_ms,
             "ai_warning": ai_warning,
             "jobs": self.jobs.list(),
         }))

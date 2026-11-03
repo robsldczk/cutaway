@@ -220,6 +220,10 @@ export interface Status {
   /** Recordings play leveled and limited (never exported). */
   playback_level: boolean;
   breath_gap_s: number;
+  /** Lead-in and tail around every line, and the fade at its edges (heard and exported). */
+  handle_in_ms: number;
+  handle_out_ms: number;
+  edge_fade_ms: number;
   jobs: Job[];
   /** The show the episode lives in (studio mode), or null for a standalone episode. */
   show: { name: string; root: string; episode: string | null; colors: string[] } | null;
