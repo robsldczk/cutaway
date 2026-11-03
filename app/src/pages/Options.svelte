@@ -6,6 +6,7 @@
   import { base, charColor, charLabel, itemShade, mix, rgba, shade, solid } from '../lib/colors';
   import { openEditor } from '../lib/keys';
   import type { ItemView } from '../lib/types';
+  import { lineText, lineWords, type ShownWord } from '../lib/words';
 
   const sc = $derived(app.scale);
   let activeEl: HTMLDivElement | undefined = $state();
@@ -64,8 +65,7 @@
   }
 
   function textOf(it: ItemView): string {
-    if (it.takes.length === 0 || it.words.length === 0 || it.dropped) return it.text;
-    return it.words.filter((w) => !w.deleted).map((w) => w.text).join(' ');
+    return it.takes.length === 0 ? it.text : lineText(it);
   }
 
   const cur = $derived(app.cur);
@@ -76,11 +76,14 @@
   const live = $derived(!!cur && (app.playing || (app.pos > cur.start_s + 0.01 && app.pos < cur.end_s)));
   const R = $derived(Math.round(32 * sc));
 
-  function wordStyle(w: { start_s: number; end_s: number; deleted: boolean; muted: boolean }) {
+  // the script's words, timed by what was heard
+  const curWords = $derived(cur ? lineWords(cur) : []);
+
+  function wordStyle(w: ShownWord) {
     if (w.deleted) return 'color: var(--text-dim); text-decoration: line-through';
     if (w.muted) return 'color: var(--text-dim)';
-    if (!live || w.end_s < app.pos) return 'color: var(--text-strong)';
-    if (w.start_s <= app.pos) return `transform: scale(1.22); color: var(--text-strong); text-shadow: 0 0 22px ${rgba(sh, 0.95)}`;
+    if (!live || w.end < app.pos) return 'color: var(--text-strong)';
+    if (w.start <= app.pos) return `transform: scale(1.22); color: var(--text-strong); text-shadow: 0 0 22px ${rgba(sh, 0.95)}`;
     return 'color: rgb(var(--ink-rgb) / 0.42)';
   }
 
@@ -141,10 +144,10 @@
               </div>
               {#if cur.paren}<p class="script paren" style="font-size: {Math.round(14 * sc)}px">({cur.paren})</p>{/if}
               <p class="script line" style="font-size: {Math.round(24 * sc)}px" data-testid="current-text">
-                {#if cur.words.length}
+                {#if curWords.length}
                   <!-- the space between words keeps line wrapping (Svelte trims plain whitespace here) -->
                   <!-- eslint-disable-next-line svelte/no-useless-mustaches -->
-                  {#each cur.words as w (w.idx)}<span class="wd" style={wordStyle(w)}>{w.text}</span>{" "}{/each}
+                  {#each curWords as w (w.j)}<span class="wd" style={wordStyle(w)}>{w.text}</span>{" "}{/each}
                 {:else}
                   <span style="color: var(--text-4)">{cur.text}</span>
                 {/if}

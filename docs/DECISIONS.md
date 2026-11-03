@@ -410,3 +410,14 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Trade-off:** the Edit page draws clips at their edit edges, not with the handles; the handles are heard but not drawn.
 - **Trade-off:** the first line of a scene starts at scene time 0, so it gets no lead-in (only its edge fade). Moving every scene's start later would shift every time in the cut.
 - **Options not taken:** lengthening the clips themselves (would push every pause out by lead-in + tail); a longer fade alone (fades into the first consonant instead of running up to it); per-line handles (Rob asked for one global value; trims still adjust single lines).
+
+### D72 The editor reads the script, timed by what was heard (Rob, 2026-11-03)
+- **Rob:** transcription errors show in the boxes; the editor should see the script's real words, and the word highlight should carry on through a mismatch. Change nothing in the analysis.
+- **Choice:**
+  - Display only, in the UI (`app/src/lib/words.ts`). The take words, the matching and the stored data are untouched.
+  - Each script word takes the time of the heard words matched to it. A run of script words nothing was matched to is spread (by length) over the unmatched heard words between its neighbours; if nothing was heard there, it is squeezed in between them (at least 60 ms a word, taken from the neighbours' halves). If the editor deleted what was heard there, the script words show as deleted.
+  - Which script words a recording covers: the matched span, widened by the unmatched words heard before and after it (a misheard first or last word). A partial take doesn't show the words it never reached.
+  - Heard words nothing in the script stands for (a repeat, an ad-lib) ride on the word before them: the highlight covers them and a delete reaches them.
+  - Every shown word keeps the heard word indexes it stands for, so the box editor's word delete and restore still act on the heard words.
+  - Used on Options (text and karaoke), Arrange, the Edit page (strip, clip labels, snap labels) and the box editor (comp words and take lanes). The Inspector and the Dev page keep showing what was heard; exports (SRT) are unchanged.
+- **Trade-off:** an ad-lib that isn't in the script doesn't show as text.

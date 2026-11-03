@@ -67,6 +67,8 @@ Rules:
 | 4 | Action lines (spacers) | Small glass pills between boxes, one line, low contrast |
 | 5 | Timecode, match score, file, full room transcript | Hidden; shown in the inspector on demand |
 
+*Changed in implementation (D72):* boxes, strips, word lanes and the playing-word highlight show the **script's** words, not the recognizer's. Matched words keep their timing; words it missed or misheard are spread over the time they were spoken in, so the highlight runs on cleanly. Repeats and ad-libs ride on the word before them. The Inspector and the Dev page still show what was heard.
+
 ## Screen layout (all pages)
 
 | Area | Content |

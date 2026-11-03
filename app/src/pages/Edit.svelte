@@ -17,6 +17,7 @@
   import EditInspector from '../components/EditInspector.svelte';
   import SceneBucket from '../components/SceneBucket.svelte';
   import type { DragSound, ItemView, LayoutPart, PieceView, PlacementView } from '../lib/types';
+  import { lineText, lineWords, type ShownWord } from '../lib/words';
 
   const HEAD = 168; // lane header (160) + gap
   const CYC = 10; // cycle strip at the top of the ruler
@@ -54,6 +55,9 @@
   const vis1 = $derived((scrollX + viewW) / px + 1);
 
   const lines = $derived(app.lines.filter((l) => l.pieces.length > 0 || l.parts.some((p) => p.dropped)));
+  // what the word lanes show: the script's words, timed by what was heard
+  const shown = $derived(new Map(lines.map((l) => [l.line_id, lineWords(l).filter((w) => !w.deleted)])));
+  const shownOf = (l: ItemView): ShownWord[] => shown.get(l.line_id) ?? [];
   const actions = $derived((v?.items ?? []).filter((i) => i.kind === 'spacer'));
   const roles = $derived((v?.characters ?? []).filter((c) => app.lines.some((l) => l.character === c.id)));
   const sfxLayers = $derived(Math.max(1, ...(ev?.placements.filter((p) => p.lane === 'sfx').map((p) => p.layer + 1) ?? [1])));
@@ -285,7 +289,7 @@
       if (d <= 10 && (!best || d < best.d)) best = { t: tt, line_id, word, label, d };
     };
     for (const a of actions) consider(a.start_s, a.line_id, null, a.text);
-    for (const l of lines) for (const w of l.words) if (!w.deleted && w.script_idx != null) consider(w.start_s, l.line_id, w.script_idx, `${charLabel(v, l.character)} · “${w.text}”`);
+    for (const l of lines) for (const w of l.words) if (!w.deleted && w.script_idx != null) consider(w.start_s, l.line_id, w.script_idx, `${charLabel(v, l.character)} · “${l.tokens[w.script_idx] ?? w.text}”`);
     return best;
   }
 
@@ -857,15 +861,14 @@
   });
   const left = $derived(app.editInspector ? 284 : 20);
   const right = $derived(app.editBucket ? 404 : 60);
-  const lineText = (l: ItemView) => l.words.filter((w) => !w.deleted).map((w) => w.text).join(' ') || l.text;
-  const partText = (l: ItemView, i: number) => l.words.filter((w) => !w.deleted && w.part === i).map((w) => w.text).join(' ');
+  const partText = (l: ItemView, i: number) => lineText(l, i);
   const flat = Array.from({ length: 60 }, (_, i) => 0.18 + 0.1 * Math.abs(Math.sin(i * 1.7)));
   const firstKept = (l: ItemView) => kept(l)[0]?.index ?? -1;
   const lastKept = (l: ItemView) => kept(l).at(-1)?.index ?? -1;
   /** Which group a sound belongs to (for the collapsed preview). */
   const groupOf = (p: PlacementView): LaneGroup => (p.lane === 'dialogue' ? 'dialogue' : p.lane === 'sfx' ? 'sfx' : p.lane === 'music' ? 'music' : 'ambience');
   /** Words that fit their own width get their text; the rest only a tick. */
-  const fits = (w: { text: string; start_s: number; end_s: number }) => (w.end_s - w.start_s) * px >= w.text.length * 5.6 + 6;
+  const fits = (w: ShownWord) => (w.end - w.start) * px >= w.text.length * 5.6 + 6;
 </script>
 
 {#snippet edges(s: EditSel, fadeIn: number | null, fadeOut: number | null, len: number, sel: boolean, k: string)}
@@ -935,9 +938,9 @@
           {/each}
           {#each lines as l (l.line_id)}
             {@const c = charColor(v, l.character).rgb}
-            {#each l.words.filter((w) => !w.deleted && w.end_s >= vis0 && w.start_s <= vis1) as w (w.idx)}
-              {@const on = app.pos >= w.start_s && app.pos < w.end_s}
-              <span class="wd" class:on class:wm={w.muted} style="left: {x(w.start_s)}px; width: {Math.max(1, x(w.end_s - w.start_s))}px; border-color: {rgba(c, 0.8)}; {on ? `background: ${rgba(c, 0.55)}` : ''}" title={w.text} data-testid="strip-word">{fits(w) ? w.text : ''}</span>
+            {#each shownOf(l).filter((w) => w.end >= vis0 && w.start <= vis1) as w (w.j)}
+              {@const on = app.pos >= w.start && app.pos < w.end}
+              <span class="wd" class:on class:wm={w.muted} style="left: {x(w.start)}px; width: {Math.max(1, x(w.end - w.start))}px; border-color: {rgba(c, 0.8)}; {on ? `background: ${rgba(c, 0.55)}` : ''}" title={w.text} data-testid="strip-word">{fits(w) ? w.text : ''}</span>
             {/each}
           {/each}
           <div class="ph top-ph" style="left: {x(app.pos)}px"><span role="slider" tabindex="-1" aria-label="Playhead" aria-valuenow={app.pos} onmousedown={scrubDown}></span></div>
@@ -997,8 +1000,8 @@
                       {#each l.pieces.filter((pc) => pc.part === pt.index) as pc, pi (pi)}
                         <div class="pc" style="left: {x(pc.start_s - g.a)}px; width: {x(pc.len_s)}px"><Waveform peaks={piecePeaks(l, pc)} fill={rgba(c, 0.75)} gain={app.waveGain} /></div>
                       {/each}
-                      {#each l.words.filter((w) => !w.deleted && w.part === pt.index) as w (w.idx)}
-                        <span class="wk" style="left: {x(w.start_s - g.a)}px; width: {x(w.end_s - w.start_s)}px">{fits(w) ? w.text : ''}</span>
+                      {#each shownOf(l).filter((w) => w.part === pt.index) as w (w.j)}
+                        <span class="wk" style="left: {x(w.start - g.a)}px; width: {x(w.end - w.start)}px">{fits(w) ? w.text : ''}</span>
                       {/each}
                       <span class="cl ellip">{pt.muted ? 'Muted · ' : ''}{first ? lineText(l) : partText(l, pt.index)}</span>
                       {#if first}
