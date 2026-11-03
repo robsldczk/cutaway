@@ -159,7 +159,7 @@
   }
 
   function wheel(e: WheelEvent) {
-    if (!(e.metaKey || e.ctrlKey)) return;
+    if (!(e.metaKey || e.ctrlKey || e.altKey)) return;
     e.preventDefault();
     const r = scroller!.getBoundingClientRect();
     zoomBack = null;

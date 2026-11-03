@@ -86,7 +86,7 @@ Pick the take per line while the rest of the scene stays in place.
 - Other lines are smaller glass boxes (24 px radius, 18 px dialogue) colored by their take's shade, fading with distance from the current line (−12 % opacity per step, minimum 35 %). Their header shows the name and `★ 2/3` (favorite, take position). Click selects; double-click opens the box editor.
 - The edges of a box with several takes show one or two stacked slivers.
 - The column fades out at the top and bottom (mask).
-- Scrolling the wheel steps line by line.
+- Scrolling the wheel steps line by line. Shift + wheel flies through the lines (one per 30 px of scroll, no rate limit).
 
 **The current box**
 - A deck: up to three cards of the next takes sit behind the box, offset 16 px to the right each and slightly shorter, showing their take number.
@@ -286,7 +286,7 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 
 | Key | Action |
 |---|---|
-| Up / Down, scroll | Previous / next line |
+| Up / Down, scroll | Previous / next line (⇧ scroll: fast) |
 | Shift+Up / Shift+Down | Extend the passage selection |
 | Left / Right | Previous / next take |
 | Space | Play / stop |
@@ -307,6 +307,7 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 | ⌘Z / ⌘⇧Z | Undo / redo |
 | ⌘S | Save version |
 | Option+Left/Right | Nudge selected clip 10 ms (Edit page; Shift+Option 100 ms) |
+| ⌥ scroll (or ⌘ scroll) | Zoom the timeline around the mouse (Edit page) |
 | ? | Keyboard help |
 | ⌘ scroll / ⇧ scroll | Zoom / move the scene map |
 
