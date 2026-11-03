@@ -52,6 +52,11 @@
       <label class="chk"><input type="checkbox" checked={app.status?.playback_level ?? true} onchange={(e) => level((e.currentTarget as HTMLInputElement).checked)} data-testid="playback-level" /> level recordings and limit loud peaks</label>
     </div>
     <span class="hint2">Evens out roles recorded at different levels, so a hot mic doesn't blast. Playback only: bounces and exports stay as recorded.</span>
+    <span class="lab">Follow playhead</span>
+    <div class="ctl">
+      <label class="chk"><input type="checkbox" checked={app.follow} onchange={(e) => app.setFollow((e.currentTarget as HTMLInputElement).checked)} data-testid="follow-setting" /> the current box moves with the playhead while playing</label>
+    </div>
+    <span class="hint2">Off, the box stays where you put it and Space plays from it again. Same as Follow in the header; never changes your selection on the Edit page.</span>
     <span class="lab">Room tone</span>
     <div class="ctl">
       <label class="chk"><input type="checkbox" checked={app.status?.room_tone ?? true} onchange={(e) => roomTone((e.currentTarget as HTMLInputElement).checked)} /> play room tone under scenes</label>

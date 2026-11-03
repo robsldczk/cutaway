@@ -140,7 +140,7 @@
   $effect(() => {
     const t = app.pos;
     const el = scroller;
-    if (!app.playing || !el || scrubbing) return;
+    if (!app.playing || !app.follow || !el || scrubbing) return;
     const xx = t * px;
     const vw = viewW - HEAD;
     if (xx < el.scrollLeft || xx > el.scrollLeft + vw - 40) el.scrollLeft = Math.max(0, xx - vw * 0.1);

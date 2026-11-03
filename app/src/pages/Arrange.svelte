@@ -309,7 +309,7 @@
             {@const lf = fx(r.it, tr.a + app.locator - r.it.start_s)}
             {@const pf = fx(r.it, tr.a + app.pos - r.it.start_s)}
             <span class="vline" style="background: var(--locator); left: {lf * 100}%"></span><span class="flag" style="left: {lf * 100}%"></span>
-            {#if app.playing || app.pos > r.it.start_s}<span class="vline phead" style="left: {pf * 100}%"></span>{/if}
+            {#if app.pos > r.it.start_s && app.pos <= r.it.end_s}<span class="vline phead" style="left: {pf * 100}%"></span>{/if}
           {/if}
           <span class="hdl" role="slider" tabindex="-1" aria-label="Clip start" aria-valuenow={h} onmousedown={(e) => grabTrim(e, r.it, 'h')} title="Drag to trim the head, or out to lengthen it" style="left: calc({h * 100}% - 5px); background: {hc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>
           <span class="hdl" role="slider" tabindex="-1" aria-label="Clip end" aria-valuenow={tl} onmousedown={(e) => grabTrim(e, r.it, 't')} title="Drag to trim the tail, or out to lengthen it" style="left: calc({tl * 100}% - 5px); background: {tc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>

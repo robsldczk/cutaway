@@ -389,3 +389,12 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - Nothing is stored or exported: only the gains handed to the engine change. `MixSettings::default()` keeps leveling off, which is what bounces use, and FCPXML never sees it.
 - **Trade-off:** with leveling on, dialogue sits at the target while placed sounds don't move, so the dialogue-to-sound balance heard in the app can differ from an export of the same mix (by the source offset, up to ±12 dB). Turn leveling off to hear the export as it will be.
 - **Options not taken:** per-take matching on the timeline (flattens the performance); measuring whole source files (session WAVs carry bleed, director talk and long silences); a master-bus AGC (keeps the roles unbalanced and pumps); storing the toggle in local UI state (the shared command path keeps UI, CLI and MCP alike, as with room tone).
+
+### D70 Follow playhead, on by default (Rob, 2026-11-03)
+- **Rob:** while playing, the box highlight should move with the playhead, or stay where it is so playback can start from there again; a global switch at the top, on by default, also in settings.
+- **Found:** Options and Arrange always moved the current box with the playhead (the playhead poll set `curId`), with no way to switch it off; the Edit page always paged along.
+- **Choice:**
+  - `app.follow`, a per-viewer preference in local storage (`cutaway.follow`, like the theme), default on. A **Follow** pill in the header on Options, Arrange and Edit, and the same switch in Settings.
+  - On: unchanged behaviour. Off: the poll no longer moves `curId`, the Edit page doesn't page along, and Space plays from the current box again (the playhead has left it).
+  - The Edit page's clip selection never follows the playhead (Rob): only its scene-strip highlight and paging do.
+- **Options not taken:** a project config value through the command bus (it's how this viewer watches, not part of the cut, and should carry across episodes).
