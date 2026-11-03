@@ -13,7 +13,7 @@ pub fn prompt(task: AiTask) -> Prompt {
     let (version, text) = match task {
         AiTask::LineMatch => (1, include_str!("../prompts/line_match.v1.md")),
         AiTask::RoomClassify => (1, include_str!("../prompts/room_classify.v1.md")),
-        AiTask::NoteCondense => (1, include_str!("../prompts/note_condense.v1.md")),
+        AiTask::NoteCondense => (2, include_str!("../prompts/note_condense.v2.md")),
         AiTask::PickDetect => (1, include_str!("../prompts/pick_detect.v1.md")),
         AiTask::SoundSpot => (2, include_str!("../prompts/sound_spot.v2.md")),
         AiTask::SoundTag => (1, include_str!("../prompts/sound_tag.v1.md")),

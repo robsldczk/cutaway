@@ -177,30 +177,39 @@ impl AiTaskIo for RoomClassifyInput {
 }
 
 // ---- note_condense ----
+/// A take on one side of a stretch of room talk.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct TakeNotes {
+pub struct GapTake {
     pub take_id: String,
+    pub character: String,
     pub line_text: String,
-    pub direction_text: String,
-    pub feedback_text: String,
+}
+
+/// Everything the room said between two takes of a session (or before the first, or
+/// after the last), chatter included.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct RoomGap {
+    pub gap_id: String,
+    /// The take the talk follows.
+    pub previous: Option<GapTake>,
+    /// The take the talk leads into.
+    pub next: Option<GapTake>,
+    pub text: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct NoteCondenseInput {
-    pub takes: Vec<TakeNotes>,
+    pub gaps: Vec<RoomGap>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct CondensedNote {
-    pub take_id: String,
-    /// A few words: what was asked before the take ("quieter, to yourself").
-    /// Models leave out empty notes now and then, so missing means none.
+pub struct GapNote {
+    pub gap_id: String,
+    /// One or two full sentences on what the room meant. Models leave out empty notes
+    /// now and then, so missing means none.
     #[serde(default)]
-    pub direction: String,
-    /// A few words: the reaction after it ("liked it").
-    #[serde(default)]
-    pub feedback: String,
+    pub summary: String,
     #[serde(default)]
     pub tags: Vec<String>,
 }
@@ -208,21 +217,18 @@ pub struct CondensedNote {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NoteCondenseOutput {
-    pub notes: Vec<CondensedNote>,
+    pub notes: Vec<GapNote>,
 }
 
 impl Validate for NoteCondenseOutput {
     fn validate(&self) -> Result<(), String> {
-        // short notes are asked for; longer ones are fine (Rob), only a copied
-        // transcript is refused
+        // one or two sentences are asked for; only a copied transcript is refused
         for n in &self.notes {
-            for (k, v) in [("direction", &n.direction), ("feedback", &n.feedback)] {
-                if v.split_whitespace().count() > 40 {
-                    return Err(format!(
-                        "{k} of {} reads like a transcript, not a note",
-                        n.take_id
-                    ));
-                }
+            if n.summary.split_whitespace().count() > 80 {
+                return Err(format!(
+                    "the note of {} reads like a transcript, not a summary",
+                    n.gap_id
+                ));
             }
         }
         Ok(())

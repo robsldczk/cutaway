@@ -316,11 +316,10 @@ mod tests {
     }
 
     #[test]
-    fn notes_without_feedback_parse() {
+    fn notes_without_summary_parse() {
         let o: crate::task::NoteCondenseOutput =
-            serde_json::from_str(r#"{"notes": [{"take_id": "t1", "direction": "go for it"}]}"#)
-                .unwrap();
-        assert_eq!(o.notes[0].feedback, "");
+            serde_json::from_str(r#"{"notes": [{"gap_id": "g1"}]}"#).unwrap();
+        assert_eq!(o.notes[0].summary, "");
         assert!(o.notes[0].tags.is_empty());
     }
 

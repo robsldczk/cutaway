@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
-use apc_ai::mock::{condense_direction, condense_feedback, pick_strength};
+use apc_ai::mock::{condense_gap, pick_strength};
 use apc_ai::task::*;
 use apc_ai::AiRunner;
 use apc_core::project::EpisodePaths;
@@ -25,9 +25,12 @@ use crate::sentences::{sentences, MergeOptions, Mic, Sentence};
 use crate::sessions::{group_sessions, pair_rooms_by_name, FileSpan, NamedFile};
 use crate::wordmap::{coverage, map_words};
 
-/// Feedback window after a take, direction window before it (seconds).
+/// Feedback window after a take, direction window before it (seconds). The room talk
+/// between two takes is both windows together, read as one (DECISIONS.md D71).
 pub const FEEDBACK_WINDOW_S: f64 = 8.0;
-pub const DIRECTION_WINDOW_S: f64 = 30.0;
+pub const DIRECTION_WINDOW_S: f64 = 60.0;
+/// Room gaps sent to Claude in one call.
+const GAPS_PER_CALL: usize = 40;
 /// Takes quieter than this on their own mic are bleed, whatever the mic's gain.
 /// (Stage 0 used −38 dB, which fit its fixture's gain but drops real takes from mics
 /// recorded a few dB lower; see DECISIONS.md D44.)
@@ -945,7 +948,6 @@ pub fn analyze_scoped(
         by_unit.entry(raw[ti].unit).or_default().push(ti);
     }
     let mut takes: Vec<Take> = Vec::new();
-    let mut take_of_raw: HashMap<usize, usize> = HashMap::new();
     let mut after_texts: HashMap<String, Vec<String>> = HashMap::new();
     let mut readers: HashMap<usize, AudioReader> = HashMap::new();
     for (unit_i, list) in by_unit.iter_mut() {
@@ -955,41 +957,12 @@ pub fn analyze_scoped(
         for (n, &ti) in list.iter().enumerate() {
             let r = &raw[ti];
             let d = &sources[r.source];
-            let mut t = build_take(r, u, line, d, (n + 1) as u32, &mut readers);
+            let t = build_take(r, u, line, d, (n + 1) as u32, &mut readers);
             after_texts.insert(
                 t.id.clone(),
                 r.after.iter().map(|&i| room[i].text.clone()).collect(),
             );
-            t.direction_raw = r
-                .before
-                .iter()
-                .map(|&i| room[i].text.as_str())
-                .collect::<Vec<_>>()
-                .join(" ");
-            t.feedback_raw = r
-                .after
-                .iter()
-                .map(|&i| room[i].text.as_str())
-                .collect::<Vec<_>>()
-                .join(" ");
-            t.note_ids = r
-                .before
-                .iter()
-                .chain(r.after.iter())
-                .map(|&i| room[i].id.clone())
-                .collect();
-            take_of_raw.insert(ti, takes.len());
             takes.push(t);
-        }
-    }
-    for (ti, k) in &take_of_raw {
-        for &ri in raw[*ti].before.iter().chain(raw[*ti].after.iter()) {
-            if !room[ri].take_ids.contains(&takes[*k].id) {
-                room[ri].take_ids.push(takes[*k].id.clone());
-            }
-            room[ri]
-                .line_id
-                .get_or_insert_with(|| takes[*k].line_id.clone());
         }
     }
 
@@ -1013,7 +986,7 @@ pub fn analyze_scoped(
         say(
             "notes",
             si as f64 / scenes_with_takes.len().max(1) as f64,
-            "Condensing notes and finding picks".into(),
+            "Checking matches and finding picks".into(),
         );
         let idx: Vec<usize> = (0..takes.len())
             .filter(|&i| &scene_of_line(&takes[i].line_id) == scene_id)
@@ -1209,50 +1182,6 @@ pub fn analyze_scoped(
                 .unwrap_or_else(|| pick_strength(&fb));
             takes[i].pick = strength;
         }
-
-        // Notes.
-        let input = NoteCondenseInput {
-            takes: idx
-                .iter()
-                .map(|&i| TakeNotes {
-                    take_id: takes[i].id.clone(),
-                    line_text: line_text(&takes[i]),
-                    direction_text: takes[i].direction_raw.clone(),
-                    feedback_text: takes[i].feedback_raw.clone(),
-                })
-                .collect(),
-        };
-        let notes = match p.ai.run(&input) {
-            Ok(out) => {
-                if out.output.is_none() {
-                    flagged.extend(out.flagged);
-                }
-                out.output
-            }
-            Err(e) => {
-                flagged.push(format!("note_condense: {e}"));
-                None
-            }
-        };
-        for &i in &idx {
-            match notes
-                .as_ref()
-                .and_then(|o| o.notes.iter().find(|n| n.take_id == takes[i].id))
-            {
-                Some(n) => {
-                    takes[i].direction = n.direction.clone();
-                    takes[i].feedback = n.feedback.clone();
-                    takes[i].tags = n.tags.clone();
-                }
-                None => {
-                    takes[i].direction = condense_direction(&takes[i].direction_raw);
-                    takes[i].feedback = condense_feedback(&takes[i].feedback_raw);
-                    takes[i]
-                        .ai_flag
-                        .get_or_insert_with(|| "notes condensed by rules".into());
-                }
-            }
-        }
     }
 
     // Takes the AI rejected go to the unmatched bin.
@@ -1280,6 +1209,116 @@ pub fn analyze_scoped(
         l.sort_by(|&a, &b| takes[a].t0.total_cmp(&takes[b].t0));
         for (n, &i) in l.iter().enumerate() {
             takes[i].take_no = (n + 1) as u32;
+        }
+    }
+
+    // 9. Room talk between takes, read by Claude as one conversation per gap. A gap is
+    // the feedback of the take before it and the direction of the take after it.
+    let clock: HashMap<String, (Option<String>, f64)> = sources
+        .iter()
+        .map(|d| (d.src.id.clone(), (d.src.session_id.clone(), d.src.offset_s)))
+        .collect();
+    let gaps = room_gaps(&takes, &room, &clock);
+    let raws: Vec<String> = gaps.iter().map(|g| gap_text(&room, g)).collect();
+    let in_scope = |t: &Take| line_scope.is_empty() || line_scope.contains(&t.line_id);
+    let gap_take = |i: usize| {
+        let t = &takes[i];
+        let line = doc.lines.get(&t.line_id);
+        GapTake {
+            take_id: t.id.clone(),
+            character: line
+                .and_then(|l| l.character.as_ref())
+                .map(|c| doc.characters.get(c).map_or(c, |x| &x.label).clone())
+                .unwrap_or_default(),
+            line_text: line.map(|l| l.text.clone()).unwrap_or_default(),
+        }
+    };
+    let asked: Vec<RoomGap> = gaps
+        .iter()
+        .zip(&raws)
+        .filter(|(g, text)| {
+            !text.is_empty() && g.prev.iter().chain(&g.next).any(|&i| in_scope(&takes[i]))
+        })
+        .map(|(g, text)| RoomGap {
+            gap_id: g.id.clone(),
+            previous: g.prev.map(gap_take),
+            next: g.next.map(gap_take),
+            text: text.clone(),
+        })
+        .collect();
+    let mut gap_notes: HashMap<String, (String, Vec<String>)> = HashMap::new();
+    let mut by_rules: BTreeSet<String> = BTreeSet::new();
+    let calls = asked.len().div_ceil(GAPS_PER_CALL);
+    for (ci, chunk) in asked.chunks(GAPS_PER_CALL).enumerate() {
+        say(
+            "notes",
+            ci as f64 / calls as f64,
+            "Reading the room talk between takes".into(),
+        );
+        let out = match p.ai.run(&NoteCondenseInput {
+            gaps: chunk.to_vec(),
+        }) {
+            Ok(out) => {
+                if out.output.is_none() {
+                    flagged.extend(out.flagged);
+                }
+                out.output
+            }
+            Err(e) => {
+                flagged.push(format!("note_condense: {e}"));
+                None
+            }
+        };
+        for g in chunk {
+            let note = match out
+                .as_ref()
+                .and_then(|o| o.notes.iter().find(|n| n.gap_id == g.gap_id))
+            {
+                Some(n) => (n.summary.clone(), n.tags.clone()),
+                None => {
+                    by_rules.insert(g.gap_id.clone());
+                    let rules = condense_gap(&g.text, g.previous.is_some(), g.next.is_some());
+                    (rules, vec![])
+                }
+            };
+            gap_notes.insert(g.gap_id.clone(), note);
+        }
+    }
+    for (g, raw) in gaps.iter().zip(&raws) {
+        let (note, tags) = gap_notes.get(&g.id).cloned().unwrap_or_default();
+        for (k, leads_in) in [(g.prev, false), (g.next, true)] {
+            let Some(k) = k else { continue };
+            let t = &mut takes[k];
+            if leads_in {
+                t.direction = note.clone();
+                t.direction_raw = raw.clone();
+            } else {
+                t.feedback = note.clone();
+                t.feedback_raw = raw.clone();
+            }
+            for x in &tags {
+                if !t.tags.contains(x) {
+                    t.tags.push(x.clone());
+                }
+            }
+            t.note_ids
+                .extend(g.segs.iter().map(|&r| room[r].id.clone()));
+            if by_rules.contains(&g.id) {
+                t.ai_flag
+                    .get_or_insert_with(|| "notes condensed by rules".into());
+            }
+        }
+        for &r in &g.segs {
+            for &k in g.prev.iter().chain(&g.next) {
+                if !room[r].take_ids.contains(&takes[k].id) {
+                    room[r].take_ids.push(takes[k].id.clone());
+                }
+            }
+            if let Some(k) = g.next.or(g.prev) {
+                room[r]
+                    .line_id
+                    .get_or_insert_with(|| takes[k].line_id.clone());
+            }
         }
     }
 
@@ -1683,6 +1722,80 @@ fn propose_marks(
     out
 }
 
+/// The room talk between two neighbouring takes of a session, or before its first take
+/// or after its last.
+struct Gap {
+    id: String,
+    prev: Option<usize>,
+    next: Option<usize>,
+    /// Room segments (not cue reading), in time order.
+    segs: Vec<usize>,
+}
+
+/// Cuts each session's room talk at its takes. A gap keeps what was said in the first
+/// seconds after the previous take and in the last minute before the next one; a long
+/// break in between is left out. `clock` maps a source to its session and sync offset.
+fn room_gaps(
+    takes: &[Take],
+    room: &[RoomSeg],
+    clock: &HashMap<String, (Option<String>, f64)>,
+) -> Vec<Gap> {
+    let at = |source_id: &str| clock.get(source_id).cloned().unwrap_or((None, 0.0));
+    let mut by_session: BTreeMap<Option<String>, Vec<usize>> = BTreeMap::new();
+    for (i, t) in takes.iter().enumerate() {
+        by_session.entry(at(&t.source_id).0).or_default().push(i);
+    }
+    let mut gaps = Vec::new();
+    for (session, mut list) in by_session {
+        let start = |i: usize| takes[i].t0 - at(&takes[i].source_id).1;
+        let end = |i: usize| takes[i].t1 - at(&takes[i].source_id).1;
+        list.sort_by(|&a, &b| start(a).total_cmp(&start(b)));
+        let mut talk: Vec<usize> = (0..room.len())
+            .filter(|&r| room[r].class != NoteClass::CueReading)
+            .filter(|&r| at(&room[r].source_id).0 == session)
+            .collect();
+        talk.sort_by(|&a, &b| room[a].t0.total_cmp(&room[b].t0));
+        let mut prev: Option<usize> = None;
+        let mut prev_end = f64::MIN;
+        for next in list.iter().copied().map(Some).chain([None]) {
+            // the room mic hears the takes too: speech starting just before one is that take
+            let segs = talk
+                .iter()
+                .copied()
+                .filter(|&r| {
+                    let t = room[r].t0 + 0.3;
+                    let inside =
+                        (prev.is_none() || t >= prev_end) && next.is_none_or(|n| t < start(n));
+                    let after_prev = prev.is_some() && t < prev_end + FEEDBACK_WINDOW_S;
+                    let before_next = next.is_some_and(|n| t >= start(n) - DIRECTION_WINDOW_S);
+                    inside && (after_prev || before_next)
+                })
+                .collect();
+            let id_of = |k: Option<usize>| k.map(|k| takes[k].id.as_str()).unwrap_or("");
+            gaps.push(Gap {
+                id: stable_id("gp", &[id_of(prev), id_of(next)]),
+                prev,
+                next,
+                segs,
+            });
+            if let Some(n) = next {
+                prev = Some(n);
+                prev_end = prev_end.max(end(n));
+            }
+        }
+    }
+    gaps
+}
+
+fn gap_text(room: &[RoomSeg], g: &Gap) -> String {
+    g.segs
+        .iter()
+        .map(|&r| room[r].text.trim())
+        .filter(|x| !x.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn first_texts(texts: &[String], n: usize) -> String {
     texts.iter().take(n).cloned().collect::<Vec<_>>().join(" ")
 }
@@ -1797,5 +1910,128 @@ mod glossary_tests {
         assert_eq!(t.words[6].w, "turkey");
         assert_eq!(t.words[6].raw, "tricky", "what was heard stays visible");
         assert_eq!(t.words[6].t0, t0);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn take(id: &str, source: &str, t0: f64, t1: f64) -> Take {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "line_id": "l", "source_id": source, "take_no": 1,
+            "take_type": "full", "t0": t0, "t1": t1,
+        }))
+        .unwrap()
+    }
+
+    fn seg(source: &str, t0: f64, text: &str, class: NoteClass) -> RoomSeg {
+        RoomSeg {
+            id: format!("n{t0}"),
+            source_id: source.into(),
+            t0,
+            t1: t0 + 1.0,
+            text: text.into(),
+            class,
+            line_id: None,
+            take_ids: vec![],
+        }
+    }
+
+    fn clock() -> HashMap<String, (Option<String>, f64)> {
+        [
+            ("paul".to_string(), (Some("s1".to_string()), 0.0)),
+            // another actor's mic, 2 s late
+            ("sara".to_string(), (Some("s1".to_string()), 2.0)),
+            ("room".to_string(), (Some("s1".to_string()), 0.0)),
+            ("room2".to_string(), (Some("s2".to_string()), 0.0)),
+        ]
+        .into_iter()
+        .collect()
+    }
+
+    #[test]
+    fn talk_between_takes_is_one_shared_gap() {
+        let takes = vec![
+            take("t1", "paul", 100.0, 105.0),
+            take("t2", "paul", 130.0, 134.0),
+        ];
+        let room = vec![
+            seg("room", 106.0, "I like that.", NoteClass::Feedback),
+            seg(
+                "room",
+                115.0,
+                "the coffee machine is broken",
+                NoteClass::Chatter,
+            ),
+            seg("room", 125.0, "one more, quieter", NoteClass::Direction),
+            seg("room", 120.0, "Lunch.", NoteClass::CueReading),
+            seg("room2", 110.0, "another session", NoteClass::Chatter),
+        ];
+        let gaps = room_gaps(&takes, &room, &clock());
+        assert_eq!(gaps.len(), 3, "before, between, after");
+        assert_eq!((gaps[0].prev, gaps[0].next), (None, Some(0)));
+        assert_eq!((gaps[1].prev, gaps[1].next), (Some(0), Some(1)));
+        assert_eq!((gaps[2].prev, gaps[2].next), (Some(1), None));
+        // chatter stays in, cue reading and other sessions don't
+        assert_eq!(
+            gap_text(&room, &gaps[1]),
+            "I like that. the coffee machine is broken one more, quieter"
+        );
+        assert!(gaps[0].segs.is_empty() && gaps[2].segs.is_empty());
+    }
+
+    #[test]
+    fn a_long_break_keeps_the_reaction_and_the_last_minute() {
+        let takes = vec![
+            take("t1", "paul", 0.0, 5.0),
+            take("t2", "paul", 600.0, 604.0),
+        ];
+        let room = vec![
+            seg("room", 7.0, "that was the one", NoteClass::Feedback),
+            seg("room", 200.0, "lunch break talk", NoteClass::Chatter),
+            seg(
+                "room",
+                530.0,
+                "back from lunch, scene four",
+                NoteClass::Chatter,
+            ),
+            seg("room", 570.0, "angrier this time", NoteClass::Direction),
+            // the take itself heard on the room mic
+            seg("room", 599.8, "Lunch", NoteClass::Chatter),
+        ];
+        let gaps = room_gaps(&takes, &room, &clock());
+        assert_eq!(
+            gap_text(&room, &gaps[1]),
+            "that was the one angrier this time"
+        );
+    }
+
+    #[test]
+    fn takes_on_other_mics_split_the_talk_in_session_time() {
+        // Sara's take at file time 52 is session time 50
+        let takes = vec![
+            take("t1", "paul", 10.0, 20.0),
+            take("t2", "sara", 52.0, 60.0),
+            take("t3", "paul", 80.0, 85.0),
+        ];
+        let room = vec![
+            seg("room", 30.0, "now Sara", NoteClass::Direction),
+            seg("room", 49.0, "go", NoteClass::Direction),
+            seg("room", 60.0, "nice", NoteClass::Feedback),
+        ];
+        let gaps = room_gaps(&takes, &room, &clock());
+        let order: Vec<_> = gaps.iter().map(|g| (g.prev, g.next)).collect();
+        assert_eq!(
+            order,
+            vec![
+                (None, Some(0)),
+                (Some(0), Some(1)),
+                (Some(1), Some(2)),
+                (Some(2), None)
+            ]
+        );
+        assert_eq!(gap_text(&room, &gaps[1]), "now Sara go");
+        assert_eq!(gap_text(&room, &gaps[2]), "nice");
     }
 }
