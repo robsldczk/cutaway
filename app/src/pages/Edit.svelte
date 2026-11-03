@@ -543,8 +543,12 @@
       e,
       (dx) => (drag = { keys, dx }),
       async (dx, _dy, u) => {
-        drag = null;
-        await moveSel(dx / px, u.altKey);
+        // the preview holds until the new layout lands, so the clip doesn't snap back first
+        try {
+          await moveSel(dx / px, u.altKey);
+        } finally {
+          drag = null;
+        }
       },
       () => {
         if (!e.shiftKey) selectOnly([s]);
@@ -571,10 +575,13 @@
       (dx) => set(dx),
       async () => {
         const f = fadeEdit;
-        fadeEdit = null;
-        if (!f) return;
-        if (l) await batch([{ cmd: 'set_clip_fades', line_id: l.line_id, fade_in_s: f.fade_in_s, fade_out_s: f.fade_out_s }]);
-        else if (p) await batch([{ cmd: 'update_placement', placement_id: p.id, patch: { fade_in_s: f.fade_in_s, fade_out_s: f.fade_out_s } }]);
+        try {
+          if (!f) return;
+          if (l) await batch([{ cmd: 'set_clip_fades', line_id: l.line_id, fade_in_s: f.fade_in_s, fade_out_s: f.fade_out_s }]);
+          else if (p) await batch([{ cmd: 'update_placement', placement_id: p.id, patch: { fade_in_s: f.fade_in_s, fade_out_s: f.fade_out_s } }]);
+        } finally {
+          fadeEdit = null;
+        }
       },
       () => (fadeEdit = null),
     );
@@ -636,10 +643,13 @@
       },
       async () => {
         const t = trim;
-        trim = null;
-        if (!t || Math.abs(t.dt) < 0.0005) return;
-        if (s.kind === 'line') await batch([{ cmd: 'trim_clip', line_id: s.id, part: s.part ?? 0, edge, delta_s: r3(t.dt), ripple: app.ripple }]);
-        else await batch([{ cmd: 'trim_placement', placement_id: s.id, edge, delta_s: r3(t.dt) }]);
+        try {
+          if (!t || Math.abs(t.dt) < 0.0005) return;
+          if (s.kind === 'line') await batch([{ cmd: 'trim_clip', line_id: s.id, part: s.part ?? 0, edge, delta_s: r3(t.dt), ripple: app.ripple }]);
+          else await batch([{ cmd: 'trim_placement', placement_id: s.id, edge, delta_s: r3(t.dt) }]);
+        } finally {
+          trim = null;
+        }
       },
       () => (trim = null),
     );
