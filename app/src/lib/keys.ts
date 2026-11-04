@@ -31,7 +31,7 @@ export function onKey(e: KeyboardEvent) {
   else if (app.page === 'import' && !(e.shiftKey && (k === 'b' || k === 'B')) && !['1', '2', '3'].includes(k)) handled = false;
   else if (app.page === 'dev' && !['1', '2', '3'].includes(k)) handled = false;
   else if (k === ' ' && e.shiftKey) void app.playFromLocator();
-  else if (k === ' ') void app.togglePlay();
+  else if (k === ' ') void (app.preview?.playing ? app.stopSound() : app.togglePlay());
   else if (k === 'Enter') void app.playLineInContext();
   else if (k === 'ArrowUp' && e.altKey && app.page === 'arrange') void moveLine(-1);
   else if (k === 'ArrowDown' && e.altKey && app.page === 'arrange') void moveLine(1);

@@ -355,6 +355,56 @@ mod tests {
     use super::*;
     use crate::schedule::ScheduledClip;
 
+    /// The timeline and the preview player each hold an engine: two streams on one device.
+    /// Silent, so a test run makes no noise (skips without a device).
+    #[test]
+    fn two_engines_keep_their_own_time() {
+        if std::env::var("CI").is_ok() {
+            eprintln!("skipped: no audio device on CI");
+            return;
+        }
+        let (Ok(a), Ok(b)) = (Engine::start(), Engine::start()) else {
+            eprintln!("skipped: no output device");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let sr = a.sample_rate();
+        let p = dir.path().join("s.wav");
+        apc_media::wav::write_wav(&p, sr, 1, &vec![0.0; sr as usize * 2]).unwrap();
+        for (e, from) in [(&a, 0.0), (&b, 1.0)] {
+            let mut set = SourceSet::new(e.sample_rate());
+            set.add("s", p.clone());
+            let clip = ScheduledClip {
+                source_id: "s".into(),
+                src_in: 0.0,
+                src_out: 2.0,
+                start_s: 0.0,
+                gain_db: 0.0,
+                fade_in_s: 0.0,
+                fade_out_s: 0.0,
+                lane: "audition".into(),
+                loop_len_s: None,
+                pan: 0.0,
+                linear_fade: false,
+                owner: "s".into(),
+                space: None,
+            };
+            let s = PlaySchedule {
+                clips: vec![clip],
+                duration_s: 2.0,
+                ..Default::default()
+            };
+            e.load(s, Arc::new(set));
+            e.play(from, None);
+        }
+        thread::sleep(Duration::from_millis(400));
+        assert!(a.is_playing() && b.is_playing());
+        assert!(a.position_s() > 0.1, "a at {}", a.position_s());
+        assert!(b.position_s() > 1.1, "b at {}", b.position_s());
+        a.stop();
+        assert!(b.is_playing(), "stopping one leaves the other");
+    }
+
     /// Plays 300 ms of a test tone on the default device (skips without one).
     #[test]
     fn plays_and_reports_the_playhead() {

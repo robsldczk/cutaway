@@ -196,10 +196,10 @@ fn buckets_search_keep_dismiss_and_download_on_drop() {
     svc.call("play_sound", &json!({ "remote_id": ids[2] }))
         .unwrap();
     assert_eq!(
-        svc.call("playhead", &json!({})).unwrap()["sound"],
+        svc.call("sound_playhead", &json!({})).unwrap()["sound"],
         ids[2].as_str()
     );
-    svc.call("stop", &json!({})).unwrap();
+    svc.call("stop_sound", &json!({})).unwrap();
 
     // place the kept sound at once, and a preview after its download (background job)
     let kept = foil["kept"][0]["id"].as_str().unwrap().to_string();

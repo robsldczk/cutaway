@@ -999,6 +999,7 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         asset_id,
         remote_id,
         bucket_id,
+        cue_id,
         lane,
         character,
         at_s,
@@ -1026,7 +1027,7 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
     let p = crate::methods::PlaceSoundP {
         asset_id: String::new(),
         scene,
-        cue_id: None,
+        cue_id,
         lane,
         character,
         anchor_line_id,

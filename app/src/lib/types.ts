@@ -476,7 +476,6 @@ export interface SearchResult extends Preview {
 }
 
 /** Drag type of a free-search result (a `Preview` as JSON) on its way into a bucket. */
-export const EPIDEMIC_DRAG = 'application/x-cutaway-epidemic';
 
 export interface SearchPage {
   results: SearchResult[];
@@ -523,9 +522,33 @@ export interface BucketsView {
 
 /** A bucket sound dragged onto the timeline (a kept asset, or a preview to download). */
 export interface DragSound {
-  bucket_id: string;
+  /** Absent for a sound of the library that sits in no bucket. */
+  bucket_id?: string;
   asset_id?: string;
   remote_id?: string;
+  /** The cue it answers, for a candidate. */
+  cue_id?: string;
   name: string;
   duration_s: number;
+}
+
+/** A sound for the preview player. */
+export interface SoundKey {
+  asset_id?: string;
+  remote_id?: string;
+}
+
+/** What the preview player shows of it. */
+export interface SoundFace {
+  name: string;
+  duration_s: number;
+  peaks: number[];
+}
+
+/** The buckets' preview player. `pos` is seconds into the sound; the timeline's `pos` stays. */
+export interface SoundPreview extends SoundFace {
+  id: string;
+  key: SoundKey;
+  pos: number;
+  playing: boolean;
 }

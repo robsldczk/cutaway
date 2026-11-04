@@ -6,8 +6,9 @@
   import { len } from '../lib/format';
   import Icon from './Icon.svelte';
   import KeywordField from './KeywordField.svelte';
+  import PreviewPlayer from './PreviewPlayer.svelte';
   import Waveform from './Waveform.svelte';
-  import type { Bucket, BucketSound, Preview } from '../lib/types';
+  import type { Bucket, BucketSound, Preview, SoundFace, SoundKey } from '../lib/types';
   import { colorOf, solid } from '../theme';
 
   let { bucket, connected, onchange }: { bucket: Bucket; connected: { epidemic: boolean; elevenlabs: boolean }; onchange: () => Promise<void> } = $props();
@@ -72,28 +73,25 @@
     await onchange();
   }
 
-  function playAt(e: MouseEvent, key: { asset_id?: string; remote_id?: string }, dur: number) {
+  function playAt(e: MouseEvent, key: SoundKey, face: SoundFace) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    void app.playSound(key, Math.max(0, ((e.clientX - r.left) / r.width) * dur));
+    void app.playSound(key, Math.max(0, ((e.clientX - r.left) / r.width) * face.duration_s), face);
   }
 
-  function toggle(key: { asset_id?: string; remote_id?: string }) {
-    const id = key.asset_id ?? key.remote_id;
-    if (app.playing && app.sound === id) void app.stop();
-    else void app.playSound(key);
-  }
+  const previewFace = (p: Preview): SoundFace => ({ name: p.title, duration_s: p.duration_s, peaks: pseudo(p.remote_id) });
 
   // Space plays, ← → step through results (SND-51)
-  const rows = $derived([...kept.map((k) => ({ asset_id: k.id })), ...(vocal ? [] : bucket.previews.map((p) => ({ remote_id: p.remote_id })))]);
+  const rows = $derived<{ key: SoundKey; face: SoundFace }[]>([...kept.map((k) => ({ key: { asset_id: k.id }, face: k })), ...(vocal ? [] : bucket.previews.map((p) => ({ key: { remote_id: p.remote_id }, face: previewFace(p) })))]);
   function key(e: KeyboardEvent) {
     const t = e.target as HTMLElement;
     if (t.tagName === 'INPUT' || app.overlay || !rows.length) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
       const d = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1;
       cursor = Math.max(0, Math.min(rows.length - 1, cursor + d));
-      void app.playSound(rows[cursor]);
+      void app.playSound(rows[cursor].key, 0, rows[cursor].face);
     } else if (e.key === ' ') {
-      toggle(rows[Math.min(cursor, rows.length - 1)]);
+      const r = rows[Math.min(cursor, rows.length - 1)];
+      void app.toggleSound(r.key, r.face);
     } else return;
     e.preventDefault();
     e.stopPropagation();
@@ -115,7 +113,7 @@
     }
     return out;
   }
-  const progress = (dur: number) => (dur > 0 ? Math.min(100, (app.pos / dur) * 100) : 0);
+  const progress = (dur: number) => (dur > 0 ? Math.min(100, ((app.preview?.pos ?? 0) / dur) * 100) : 0);
 </script>
 
 <aside class="glass side panel" aria-label="Bucket {bucket.name}">
@@ -156,12 +154,12 @@
     <div class="label sec">{vocal ? 'Vocals' : 'In this bucket'}</div>
     {#each kept as r, i (r.id)}
       <div class="srow kept" class:cur={cursor === i} style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} data-testid="kept-row">
-        <button class="ib pl gold" style={col ? `background: ${col}; color: #16110d` : ''} aria-label="Play {r.name}" onclick={() => toggle({ asset_id: r.id })}><Icon name={app.playing && app.sound === r.id ? 'stop' : 'play'} size={11} /></button>
+        <button class="ib pl gold" style={col ? `background: ${col}; color: #16110d` : ''} aria-label="Play {r.name}" onclick={() => app.toggleSound({ asset_id: r.id }, r)}><Icon name={app.previewing(r.id) ? 'stop' : 'play'} size={11} /></button>
         <div class="mid">
           <span class="ellip nm3">{r.name}{#if r.heard}<span class="muted heard"> · “{r.heard}”</span>{/if}{#if r.matched}<span class="muted heard" title="Matched by its file name. It stays in Sound/{r.file.replace('show:', '')}; remove it to hide it here"> · matched</span>{/if}</span>
-          <span class="wv" role="button" tabindex="-1" aria-label="Play {r.name} from here" onclick={(e) => playAt(e, { asset_id: r.id }, r.duration_s)} onkeydown={() => {}}>
+          <span class="wv" role="button" tabindex="-1" aria-label="Play {r.name} from here" onclick={(e) => playAt(e, { asset_id: r.id }, r)} onkeydown={() => {}}>
             <Waveform peaks={r.peaks} fill={col ?? 'var(--sfx)'} />
-            {#if app.playing && app.sound === r.id}<span class="ph" style="left: {progress(r.duration_s)}%"></span>{/if}
+            {#if app.previewing(r.id)}<span class="ph" style="left: {progress(r.duration_s)}%"></span>{/if}
           </span>
         </div>
         <span class="muted tn d">{len(r.duration_s)}</span>
@@ -178,7 +176,7 @@
       <div class="label sec">Library</div>
       {#each library as r (r.id)}
         <div class="srow">
-          <button class="ib pl" aria-label="Play {r.name}" onclick={() => toggle({ asset_id: r.id })}><Icon name="play" size={11} /></button>
+          <button class="ib pl" aria-label="Play {r.name}" onclick={() => app.toggleSound({ asset_id: r.id }, r)}><Icon name={app.previewing(r.id) ? 'stop' : 'play'} size={11} /></button>
           <div class="mid"><span class="ellip nm3 muted">{r.name}</span><span class="wv"><Waveform peaks={r.peaks} fill="rgb(var(--ink-rgb) / 0.32)" /></span></div>
           <span class="muted tn d">{len(r.duration_s)}</span>
           <button class="ib" aria-label="Keep {r.name}" onclick={() => act('bucket_keep', { asset_id: r.id }).then(() => (library = library.filter((x) => x.id !== r.id)))}><Icon name="plus" /></button>
@@ -190,12 +188,12 @@
     {:else}
       <div class="label sec">Previews · not downloaded</div>
       {#each bucket.previews as r, i (r.remote_id)}
-        {@const on = app.playing && app.sound === r.remote_id}
+        {@const on = app.previewing(r.remote_id)}
         <div class="srow" class:cur={cursor === bucket.kept.length + i} class:on data-testid="preview-row">
-          <button class="ib pl" aria-label="Play preview {r.title}" onclick={() => toggle({ remote_id: r.remote_id })}><Icon name={on ? 'stop' : 'play'} size={11} /></button>
+          <button class="ib pl" aria-label="Play preview {r.title}" onclick={() => app.toggleSound({ remote_id: r.remote_id }, previewFace(r))}><Icon name={on ? 'stop' : 'play'} size={11} /></button>
           <div class="mid">
             <span class="ellip nm3 muted">{r.title}</span>
-            <span class="wv tall" role="button" tabindex="-1" aria-label="Play {r.title} from here" onclick={(e) => playAt(e, { remote_id: r.remote_id }, r.duration_s)} onkeydown={() => {}}>
+            <span class="wv tall" role="button" tabindex="-1" aria-label="Play {r.title} from here" onclick={(e) => playAt(e, { remote_id: r.remote_id }, previewFace(r))} onkeydown={() => {}}>
               <Waveform peaks={pseudo(r.remote_id)} fill="rgb(var(--ink-rgb) / 0.32)" />
               {#if on}<span class="ph" style="left: {progress(r.duration_s)}%"></span>{/if}
             </span>
@@ -210,6 +208,7 @@
       {#if bucket.previews.length && !exhausted}<button class="btn more" onclick={() => search(true)} disabled={!!busy}>{busy === 'more' ? 'Loading…' : 'Load more'}</button>{/if}
     {/if}
   </div>
+  <PreviewPlayer />
 </aside>
 
 <style>

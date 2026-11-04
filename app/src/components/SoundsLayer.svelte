@@ -7,6 +7,7 @@
   import { app } from '../lib/app.svelte';
   import { call } from '../lib/bridge';
   import { charColor, rgba } from '../lib/colors';
+  import { dropzone } from '../lib/drag.svelte';
   import { clamp, fmt } from '../lib/format';
   import { depthAt, groups, layoutBalls, type Field, type Shown } from '../lib/sounds/balls';
   import { soundKey } from '../lib/sounds/keymap';
@@ -17,7 +18,7 @@
   import { settledOf, Settler, snapshot, withFresh } from '../lib/sounds/settle';
   import { nearestTarget, snapTargets, startLabel, type SnapTarget } from '../lib/sounds/snap';
   import type { TimeMap } from '../lib/sounds/timemap';
-  import type { Bucket, BucketsView, ItemView, Job, PlacementView } from '../lib/types';
+  import type { Bucket, BucketsView, DragSound, ItemView, Job, PlacementView } from '../lib/types';
   import OpenedSound from './OpenedSound.svelte';
   import SceneBucket from './SceneBucket.svelte';
 
@@ -238,7 +239,7 @@
     return { x: b.x, y: b.y, R, track: circle(b.x, b.y, R), arc: arc(b.x, b.y, R, g), kx: k.x, ky: k.y, text: `Loudness ${dbText(s.gain_db)}`, many: sel.length };
   });
 
-  const playing = (s: Sound) => app.playing && !app.audition && !app.sound && app.pos >= s.start_s && app.pos < s.start_s + s.len_s;
+  const playing = (s: Sound) => app.playing && !app.audition && app.pos >= s.start_s && app.pos < s.start_s + s.len_s;
 
   // ---- Sounds toggle: the one playful moment ----
 
@@ -295,7 +296,7 @@
     return { id, start_s: s.start_s, len_s: s.len_s, offset_s: s.offset_s, anchor: s.anchor, depth: s.depth, pan: s.pan, gain_db: s.gain_db, in_s: s.in_s, asset_len_s: s.asset_len_s, fade_in_s: s.fade_in_s, fade_out_s: s.fade_out_s, auto_fade: s.auto_fade };
   }
 
-  function point(e: MouseEvent) {
+  function point(e: Pick<MouseEvent, 'clientX' | 'clientY'>) {
     const r = root?.getBoundingClientRect();
     const w = world?.getBoundingClientRect();
     return { x: e.clientX - (r?.left ?? 0), y: e.clientY - (w?.top ?? 0) };
@@ -829,7 +830,7 @@
   }
 
   onMount(() => {
-    app.soundsUi = { key: onKey, wheel: onWheel };
+    app.soundsUi = { key: onKey, wheel: onWheel, dropFiles };
     return () => {
       app.soundsUi = null;
       app.soundOpen = null;
@@ -844,7 +845,7 @@
 
   let ghost = $state<{ x: number; y: number; tone: string } | null>(null);
 
-  function dropSpot(e: DragEvent) {
+  function dropSpot(e: Pick<MouseEvent, 'clientX' | 'clientY'>) {
     const p = point(e);
     if (p.x < spineX - 20 || p.x > rightEdge) return null;
     const t = Math.max(0, map.t(p.y));
@@ -852,40 +853,41 @@
     return { p, t: target?.t ?? t, target };
   }
 
-  function dragOver(e: DragEvent) {
-    if (!on || !e.dataTransfer?.types.includes('application/x-cutaway-bucket')) return;
-    const at = dropSpot(e);
+  function dragLeave() {
+    ghost = null;
+    tip = null;
+    snapY = null;
+  }
+
+  function dragOver(e: MouseEvent, s: DragSound) {
+    const at = on ? dropSpot(e) : null;
     if (!at) {
-      ghost = null;
-      tip = null;
-      return;
+      dragLeave();
+      return false;
     }
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    const s = app.dragSound;
-    ghost = { x: at.p.x, y: at.p.y, tone: (s && toneOf.get(s.bucket_id)) ?? '--bucket-none-rgb' };
+    ghost = { x: at.p.x, y: at.p.y, tone: (s.bucket_id && toneOf.get(s.bucket_id)) || '--bucket-none-rgb' };
     snapY = at.target ? map.y(at.target.t) : null;
-    tip = { x: at.p.x + 26, y: at.p.y - 12, text: `${s?.name ?? 'Sound'} · ${at.target?.start ?? `at ${fmt(at.t)}`}` };
+    tip = { x: at.p.x + 26, y: at.p.y - 12, text: `${s.name} · ${at.target?.start ?? `at ${fmt(at.t)}`}` };
+    return true;
   }
 
-  function dragLeave(e: DragEvent) {
-    if (e.relatedTarget && root?.contains(e.relatedTarget as Node)) return;
-    ghost = null;
-    tip = null;
-    snapY = null;
+  function drop(e: MouseEvent, s: DragSound) {
+    const at = on ? dropSpot(e) : null;
+    if (at) void place(at, s);
   }
 
-  async function drop(e: DragEvent) {
-    const raw = e.dataTransfer?.getData('application/x-cutaway-bucket');
-    const at = dropSpot(e);
-    const s = app.dragSound;
-    ghost = null;
-    tip = null;
-    snapY = null;
-    app.dragSound = null;
-    if (!raw || !at || !on) return;
-    e.preventDefault();
-    const sound = JSON.parse(raw) as { bucket_id: string; asset_id?: string; remote_id?: string };
+  /** Audio dragged in from the Finder: into the library, and placed if it landed by a line.
+   *  It's a sound here, never a recording. */
+  async function dropFiles(paths: string[], x: number, y: number) {
+    const at = on ? dropSpot({ clientX: x, clientY: y }) : null;
+    const r = await app.method<{ assets: { id: string; file: string; duration_s: number }[] }>('import_sounds', { paths });
+    const first = r?.assets[0];
+    if (!first) return;
+    if (at) await place(at, { asset_id: first.id, name: first.file.split('/').pop() ?? '', duration_s: first.duration_s });
+    else app.say(`${r.assets.length} sound${r.assets.length > 1 ? 's' : ''} added to the library`);
+  }
+
+  async function place(at: NonNullable<ReturnType<typeof dropSpot>>, sound: DragSound) {
     const where = at.target ? { anchor_line_id: at.target.anchor.line_id, anchor_word: at.target.anchor.word, anchor_edge: at.target.anchor.edge } : { at_s: +at.t.toFixed(3) };
     const params = { scene: app.sceneId, bucket_id: sound.bucket_id, asset_id: sound.asset_id, remote_id: sound.remote_id, depth: +depthAt(at.p.x, field).toFixed(3), ...where };
     let id: string | undefined;
@@ -896,7 +898,7 @@
       // a preview downloads first
       const job = await app.run(() => call<{ job_id: string }>('place_from_bucket', params));
       if (!job) return;
-      app.say(`Downloading ${s?.name ?? 'the sound'}…`);
+      app.say(`Downloading ${sound.name}…`);
       const j: Job | undefined = await app.waitJob(job.job_id);
       if (j?.state === 'failed') app.say(`Download failed: ${j.message}`);
       await app.refresh();
@@ -938,8 +940,7 @@
   const stageStyle = $derived(`transform: translateY(${(-off).toFixed(1)}px); transition: ${slide}`);
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="snd" class:live={on} bind:this={root} bind:clientWidth={stageW} bind:clientHeight={stageH} ondragover={dragOver} ondragleave={dragLeave} ondrop={drop}>
+<div class="snd" class:live={on} bind:this={root} bind:clientWidth={stageW} bind:clientHeight={stageH} use:dropzone={{ takes: 'bucket', over: dragOver, leave: dragLeave, drop }}>
   <div class="lasso" class:live={on} style="left: {spineX - 16}px; width: {Math.max(0, rightEdge - spineX + 16)}px" onmousedown={bandDown} role="presentation" data-testid="sounds-field"></div>
 
   <div class="world" bind:this={world} style={stageStyle} role="group" aria-label="Sounds of the scene">
@@ -1047,6 +1048,10 @@
     pointer-events: none;
     -webkit-mask-image: linear-gradient(to bottom, transparent 76px, #000 140px, #000 calc(100% - 110px), transparent calc(100% - 30px));
     mask-image: linear-gradient(to bottom, transparent 76px, #000 140px, #000 calc(100% - 110px), transparent calc(100% - 30px));
+  }
+  /* a sound on its way in: nothing here reacts until it lands */
+  :global(body.sound-drag) .snd :not(.lasso) {
+    pointer-events: none !important;
   }
   .lasso {
     position: absolute;

@@ -6,6 +6,7 @@
   import { tick, untrack } from 'svelte';
   import { app, type EditSel } from '../lib/app.svelte';
   import { call } from '../lib/bridge';
+  import { dropzone, type DropZone } from '../lib/drag.svelte';
   import { clamp, fmt } from '../lib/format';
   import { charColor, charLabel, rgba } from '../lib/colors';
   import { GROUP_LABEL, laneLabel, laneRgb, mixOf, placementLane, setMix, type LaneGroup, type LaneRow } from '../lib/lanes';
@@ -748,17 +749,23 @@
   }
 
   // ---- drops from the scene bucket ----
-  function dragOver(e: DragEvent, r: LaneRow) {
-    if (r.lane === 'roomtone') return;
-    if (!e.dataTransfer?.types.includes('application/x-cutaway-bucket')) return;
-    e.preventDefault();
-  }
+  let dropLane = $state<string | null>(null);
+  const laneZone = (r: LaneRow): DropZone<'bucket'> | null =>
+    r.lane === 'roomtone' || !r.lane
+      ? null
+      : {
+          takes: 'bucket',
+          over: () => {
+            dropLane = r.key;
+          },
+          leave: () => {
+            dropLane = null;
+          },
+          drop: (e, s) => void drop(e, r, s),
+        };
 
-  async function drop(e: DragEvent, r: LaneRow) {
-    const raw = e.dataTransfer?.getData('application/x-cutaway-bucket');
-    if (!raw || !v || r.lane === 'roomtone' || !r.lane) return;
-    e.preventDefault();
-    const s = JSON.parse(raw) as DragSound;
+  async function drop(e: MouseEvent, r: LaneRow, s: DragSound) {
+    if (!v || r.lane === 'roomtone' || !r.lane) return;
     const t = timeAt(e.clientX);
     const snap = snapAt(t);
     const where = snap ? { anchor_line_id: snap.line_id, anchor_word: snap.word ?? undefined } : { at_s: +t.toFixed(3) };
@@ -766,7 +773,7 @@
     const lane = r.lane;
     const character = r.lane === 'dialogue' ? r.char : undefined;
     if (s.asset_id) {
-      await app.method('place_from_bucket', { scene: v.scene.id, asset_id: s.asset_id, lane, character, ...where });
+      await app.method('place_from_bucket', { scene: v.scene.id, asset_id: s.asset_id, cue_id: s.cue_id, lane, character, ...where });
       await app.loadEdit();
       return;
     }
@@ -982,7 +989,7 @@
               <button class="ms" class:son={m.solo} aria-label="Solo {r.label}" aria-pressed={m.solo} onclick={() => setMix(r.key, { solo: !m.solo })}>S</button>
             </div>
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions (pointer editing; the keyboard path is the selection keys) -->
-            <div class="lane" class:muted-lane={m.mute} style="left: {HEAD}px; width: {width}px" role="application" aria-label="{r.label} lane" data-testid="edit-lane" data-lane={r.key} onmousedown={laneDown} ondragover={(e) => dragOver(e, r)} ondrop={(e) => drop(e, r)}>
+            <div class="lane" class:muted-lane={m.mute} class:drop-on={dropLane === r.key} style="left: {HEAD}px; width: {width}px" role="application" aria-label="{r.label} lane" data-testid="edit-lane" data-lane={r.key} onmousedown={laneDown} use:dropzone={laneZone(r)}>
               {#if trim?.ghost && clips.find((c) => c.key === trim!.key)?.lane === r.key}
                 <div class="tghost" style="left: {x(trim.ghost.t)}px; width: {x(trim.ghost.len)}px"><Waveform peaks={trim.ghost.peaks} fill={rgba(r.rgb, 0.5)} gain={app.waveGain} /></div>
               {/if}
@@ -1253,6 +1260,9 @@
     bottom: 2px;
     border-radius: 10px;
     background: rgb(var(--veil-rgb) / 0.018);
+  }
+  .lane.drop-on {
+    box-shadow: inset 0 0 0 1.5px var(--sfx);
   }
   .muted-lane {
     opacity: 0.45;

@@ -2,10 +2,12 @@
   // Free Epidemic Sound search (Import › Sounds): results to audition and drag onto a
   // bucket, or onto "New bucket". Nothing is downloaded until a sound is kept or placed.
   import { app } from '../lib/app.svelte';
+  import { grab } from '../lib/drag.svelte';
   import { len } from '../lib/format';
   import Icon from './Icon.svelte';
+  import PreviewPlayer from './PreviewPlayer.svelte';
   import Waveform from './Waveform.svelte';
-  import { EPIDEMIC_DRAG, type SearchResult } from '../lib/types';
+  import type { SearchResult } from '../lib/types';
 
   let {
     query,
@@ -14,7 +16,6 @@
     busy,
     onmore,
     onclose,
-    ondragging,
   }: {
     query: string;
     results: SearchResult[];
@@ -22,24 +23,18 @@
     busy: boolean;
     onmore: () => void;
     onclose: () => void;
-    ondragging: (on: boolean) => void;
   } = $props();
 
-  function drag(e: DragEvent, r: SearchResult) {
-    const p = { provider: r.provider, remote_id: r.remote_id, title: r.title, duration_s: r.duration_s };
-    e.dataTransfer?.setData(EPIDEMIC_DRAG, JSON.stringify(p));
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
-    ondragging(true);
+  function drag(e: MouseEvent, r: SearchResult) {
+    const preview = { provider: r.provider, remote_id: r.remote_id, title: r.title, duration_s: r.duration_s };
+    grab(e, { kind: 'search', name: r.title, preview });
   }
 
-  function toggle(id: string) {
-    if (app.playing && app.sound === id) void app.stop();
-    else void app.playSound({ remote_id: id });
-  }
+  const face = (r: SearchResult) => ({ name: r.title, duration_s: r.duration_s, peaks: pseudo(r.remote_id) });
 
-  function playAt(e: MouseEvent, id: string, dur: number) {
+  function playAt(e: MouseEvent, x: SearchResult) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    void app.playSound({ remote_id: id }, Math.max(0, ((e.clientX - r.left) / r.width) * dur));
+    void app.playSound({ remote_id: x.remote_id }, Math.max(0, ((e.clientX - r.left) / r.width) * x.duration_s), face(x));
   }
 
   function pseudo(id: string): number[] {
@@ -54,7 +49,7 @@
     }
     return out;
   }
-  const progress = (dur: number) => (dur > 0 ? Math.min(100, (app.pos / dur) * 100) : 0);
+  const progress = (dur: number) => (dur > 0 ? Math.min(100, ((app.preview?.pos ?? 0) / dur) * 100) : 0);
 </script>
 
 <aside class="glass side panel" aria-label="Epidemic Sound search">
@@ -67,13 +62,14 @@
 
   <div class="list">
     {#each results as r (r.remote_id)}
-      {@const on = app.playing && app.sound === r.remote_id}
-      <div class="srow" class:on draggable="true" role="listitem" ondragstart={(e) => drag(e, r)} ondragend={() => ondragging(false)} data-testid="search-result" title="Drag onto a bucket">
+      {@const on = app.previewing(r.remote_id)}
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions (dragging is the mouse's) -->
+      <div class="srow" class:on role="listitem" onmousedown={(e) => drag(e, r)} data-testid="search-result" title="Drag onto a bucket">
         <span class="grip muted"><Icon name="grip" /></span>
-        <button class="ib pl" aria-label="Play {r.title}" onclick={() => toggle(r.remote_id)}><Icon name={on ? 'stop' : 'play'} size={11} /></button>
+        <button class="ib pl" aria-label="Play {r.title}" onclick={() => app.toggleSound({ remote_id: r.remote_id }, face(r))}><Icon name={on ? 'stop' : 'play'} size={11} /></button>
         <div class="mid">
           <span class="ellip nm3">{r.title}{#if r.buckets.length}<span class="muted in">&nbsp;· in {r.buckets.length === 1 ? 'a bucket' : `${r.buckets.length} buckets`}</span>{/if}</span>
-          <span class="wv" role="button" tabindex="-1" aria-label="Play {r.title} from here" onclick={(e) => playAt(e, r.remote_id, r.duration_s)} onkeydown={() => {}}>
+          <span class="wv" role="button" tabindex="-1" aria-label="Play {r.title} from here" onclick={(e) => playAt(e, r)} onkeydown={() => {}}>
             <Waveform peaks={pseudo(r.remote_id)} fill="rgb(var(--ink-rgb) / 0.32)" />
             {#if on}<span class="ph" style="left: {progress(r.duration_s)}%"></span>{/if}
           </span>
@@ -85,6 +81,7 @@
     {/each}
     {#if more && results.length}<button class="btn more" onclick={onmore} disabled={busy}>{busy ? 'Loading…' : 'Load more'}</button>{/if}
   </div>
+  <PreviewPlayer />
 </aside>
 
 <style>

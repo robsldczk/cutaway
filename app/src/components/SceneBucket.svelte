@@ -3,10 +3,12 @@
   // preview that downloads when dropped on a lane. Rows drag onto the timeline.
   import { app } from '../lib/app.svelte';
   import { call } from '../lib/bridge';
+  import { grab } from '../lib/drag.svelte';
   import { len } from '../lib/format';
   import Icon from './Icon.svelte';
+  import PreviewPlayer from './PreviewPlayer.svelte';
   import Waveform from './Waveform.svelte';
-  import type { BucketsView, DragSound } from '../lib/types';
+  import type { BucketsView } from '../lib/types';
   import { colorOf, solid } from '../theme';
 
   /** On Arrange the layer owns the buckets: it hands them in, with an eye per bucket. */
@@ -43,18 +45,6 @@
     return closed[id] === undefined ? i < 2 && !data?.buckets[i].show_wide : !closed[id];
   }
 
-  function drag(e: DragEvent, s: DragSound) {
-    e.dataTransfer?.setData('application/x-cutaway-bucket', JSON.stringify(s));
-    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
-    app.dragSound = s;
-  }
-
-  function toggle(key: { asset_id?: string; remote_id?: string }) {
-    const id = key.asset_id ?? key.remote_id;
-    if (app.playing && app.sound === id) void app.stop();
-    else void app.playSound(key);
-  }
-
   async function more(id: string) {
     busy = id;
     const r = await app.run(() => call<{ added: number }>('bucket_search', { bucket_id: id, more: true }));
@@ -86,7 +76,7 @@
   </button>
 {/snippet}
 
-<aside class="glass panel" class:beside={!!eyes} class:off aria-hidden={off} inert={off} data-own-keys aria-label="Bucket for scene {app.view?.scene.number ?? ''}" ondragend={() => (app.dragSound = null)}>
+<aside class="glass panel" class:beside={!!eyes} class:off aria-hidden={off} inert={off} data-own-keys aria-label="Bucket for scene {app.view?.scene.number ?? ''}">
   <div class="hd">
     <span class="t">Bucket · Sc. {app.view?.scene.number ?? ''}</span>
     <button class="btn" onclick={() => app.toggleFullBucket()}>Full bucket <span class="kb">⇧B</span></button>
@@ -114,7 +104,7 @@
       {#if b.show_wide && !data?.buckets[i - 1]?.show_wide}<div class="label wide">Whole show</div>{/if}
       <section class="bkt" class:faded aria-label={b.name}>
         <div class="bhrow">
-        <button class="bh" aria-expanded={open} onclick={() => (closed = { ...closed, [b.id]: open })}>
+        <button class="bh" onmousedown={(e) => e.preventDefault()} aria-expanded={open} onclick={() => (closed = { ...closed, [b.id]: open })}>
           <span class="chev" style="transform: rotate({open ? 0 : -90}deg)"><Icon name="chevron" size={11} stroke={2.4} /></span>
           {#if col}<span class="dot" style="background: {faded ? 'transparent' : col}; box-shadow: {faded ? `inset 0 0 0 1.5px ${col}` : 'none'}"></span>{/if}
           <span class="bn">{b.name}</span>
@@ -124,17 +114,19 @@
         </div>
         {#if open}
           {#each b.kept as s (s.id)}
-            <div class="srow kept" class:used={eyes?.used.has(s.id)} style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} draggable="true" role="listitem" ondragstart={(e) => drag(e, { bucket_id: b.id, asset_id: s.id, name: s.name, duration_s: s.duration_s })} data-testid={b.character ? 'vocal-sound' : 'bucket-sound'}>
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions (dragging is the mouse's; D82) -->
+            <div class="srow kept" class:used={eyes?.used.has(s.id)} style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} role="listitem" onmousedown={(e) => grab(e, { kind: 'bucket', bucket_id: b.id, asset_id: s.id, name: s.name, duration_s: s.duration_s })} data-testid={b.character ? 'vocal-sound' : 'bucket-sound'}>
               <span class="grip"><Icon name="grip" /></span>
-              <button class="play gold" style={col ? `background: ${col}; color: #16110d` : ''} aria-label="Play {s.name}" onclick={() => toggle({ asset_id: s.id })}><Icon name={app.playing && app.sound === s.id ? 'stop' : 'play'} size={10} /></button>
+              <button class="play gold" style={col ? `background: ${col}; color: #16110d` : ''} aria-label="Play {s.name}" onmousedown={(e) => e.preventDefault()} onclick={() => app.toggleSound({ asset_id: s.id }, s)}><Icon name={app.previewing(s.id) ? 'stop' : 'play'} size={10} /></button>
               <div class="mid"><span class="ellip nm4">{s.name}</span><span class="wv"><Waveform peaks={s.peaks} fill={col ?? 'var(--sfx)'} /></span></div>
               <span class="muted tn d">{len(s.duration_s)}</span>
             </div>
           {/each}
           {#each b.previews.slice(0, 6) as p (p.remote_id)}
-            <div class="srow" draggable="true" role="listitem" ondragstart={(e) => drag(e, { bucket_id: b.id, remote_id: p.remote_id, name: p.title, duration_s: p.duration_s })} data-testid="bucket-preview">
+            <!-- svelte-ignore a11y_no_noninteractive_element_interactions (dragging is the mouse's; D82) -->
+            <div class="srow" role="listitem" onmousedown={(e) => grab(e, { kind: 'bucket', bucket_id: b.id, remote_id: p.remote_id, name: p.title, duration_s: p.duration_s })} data-testid="bucket-preview">
               <span class="grip"><Icon name="grip" /></span>
-              <button class="play ring" aria-label="Play {p.title}" onclick={() => toggle({ remote_id: p.remote_id })}><Icon name={app.playing && app.sound === p.remote_id ? 'stop' : 'play'} size={10} /></button>
+              <button class="play ring" aria-label="Play {p.title}" onmousedown={(e) => e.preventDefault()} onclick={() => app.toggleSound({ remote_id: p.remote_id }, { name: p.title, duration_s: p.duration_s, peaks: pseudo(p.remote_id) })}><Icon name={app.previewing(p.remote_id) ? 'stop' : 'play'} size={10} /></button>
               <div class="mid"><span class="ellip nm4 muted">{p.title}</span><span class="wv"><Waveform peaks={pseudo(p.remote_id)} fill="rgb(var(--ink-rgb) / 0.32)" /></span></div>
               <span class="muted tn d">{len(p.duration_s)}</span>
             </div>
@@ -147,6 +139,7 @@
       <p class="muted note">No buckets for this scene. Open the full bucket (⇧B) to spot the script or start one.</p>
     {/each}
   </div>
+  {#if !off}<PreviewPlayer />{/if}
 </aside>
 
 <style>

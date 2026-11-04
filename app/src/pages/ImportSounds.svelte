@@ -13,7 +13,8 @@
   import EpidemicSearch from '../components/EpidemicSearch.svelte';
   import CleanUpSheet from '../components/CleanUpSheet.svelte';
   import SceneRooms from '../components/SceneRooms.svelte';
-  import { EPIDEMIC_DRAG, type Bucket, type BucketsView, type CleanupPlan, type Preview, type SearchPage, type SearchResult } from '../lib/types';
+  import { drag, dropzone, type DropZone } from '../lib/drag.svelte';
+  import type { Bucket, BucketsView, CleanupPlan, Preview, SearchPage, SearchResult } from '../lib/types';
   import { colorOf, solid } from '../theme';
 
   let sort = $state<'scene' | 'tag' | 'show'>('scene');
@@ -27,7 +28,6 @@
   let q = $state('');
   let found = $state<{ query: string; results: SearchResult[]; next: number; more: boolean } | null>(null);
   let searching = $state(false);
-  let dragging = $state(false);
   /** The drop target under a dragged search result: a bucket id, or 'new'. */
   let over = $state<string | null>(null);
   let nb = $state({ name: '', keywords: [] as string[], min: '', max: '', exclude: 'music, voices', scenes: '' });
@@ -116,20 +116,19 @@
   }
 
   // ---- drops from the search results ----
-  function dragOver(e: DragEvent, target: string) {
-    if (!e.dataTransfer?.types.includes(EPIDEMIC_DRAG)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    over = target;
-  }
+  const dragging = $derived(drag.item?.kind === 'search');
+  const target = (id: string, b: Bucket | null): DropZone<'search'> => ({
+    takes: 'search',
+    over: () => {
+      over = id;
+    },
+    leave: () => {
+      over = null;
+    },
+    drop: (_, item) => void drop(item.preview, b),
+  });
 
-  async function drop(e: DragEvent, b: Bucket | null) {
-    const raw = e.dataTransfer?.getData(EPIDEMIC_DRAG);
-    over = null;
-    dragging = false;
-    if (!raw) return;
-    e.preventDefault();
-    const p = JSON.parse(raw) as Preview;
+  async function drop(p: Preview, b: Bucket | null) {
     let into: string | null = null;
     if (b) {
       const r = await app.run(() => call<{ added: boolean; reason?: string }>('bucket_add_preview', { bucket_id: b.id, preview: p }));
@@ -223,7 +222,7 @@
 <main class="grid" class:wide={!side} aria-label="Buckets">
   <SceneRooms />
   {#if found}
-    <article class="bk drop" class:over={over === 'new'} class:hint={dragging} aria-label="Drop here for a new bucket" ondragover={(e) => dragOver(e, 'new')} ondragleave={() => over === 'new' && (over = null)} ondrop={(e) => drop(e, null)} data-testid="new-bucket-drop">
+    <article class="bk drop" class:over={over === 'new'} class:hint={dragging} aria-label="Drop here for a new bucket" use:dropzone={target('new', null)} data-testid="new-bucket-drop">
       <Icon name="plus" size={18} />
       <span class="nm2">New bucket</span>
       <span class="muted dn">Drop a sound here to start “{found.query}”</span>
@@ -233,7 +232,7 @@
     {@const here = !!app.sceneId && b.scene_ids.includes(app.sceneId)}
     {@const col = b.character ? solid(colorOf(b.color_index ?? 0).rgb) : null}
     {@const takes = !b.character}
-    <article class="bk glass" class:sel={b.id === app.openBucket} class:here class:over={over === b.id} class:hint={dragging && takes} aria-label="Bucket {b.name}" data-testid="bucket-card" ondragover={(e) => takes && dragOver(e, b.id)} ondragleave={() => over === b.id && (over = null)} ondrop={(e) => takes && drop(e, b)}>
+    <article class="bk glass" class:sel={b.id === app.openBucket} class:here class:over={over === b.id} class:hint={dragging && takes} aria-label="Bucket {b.name}" data-testid="bucket-card" use:dropzone={takes ? target(b.id, b) : null}>
       <button class="cover" aria-label="Open {b.name}" onclick={() => (app.openBucket = app.openBucket === b.id ? null : b.id)}></button>
       <div class="hd">
         {#if col}<span class="ctag" style="background: {col}">{b.name.replace(/ · vocals$/, '')}</span><span class="ellip nm2 muted">vocals</span><span class="chip outline tn">{b.kept.length}</span>
@@ -279,7 +278,7 @@
 {#if open && data}
   <BucketPanel bucket={open} connected={data.connected} onchange={load} />
 {:else if found}
-  <EpidemicSearch query={found.query} results={found.results} more={found.more} busy={searching} onmore={() => runSearch(true)} onclose={() => (found = null)} ondragging={(on) => { dragging = on; if (!on) over = null; }} />
+  <EpidemicSearch query={found.query} results={found.results} more={found.more} busy={searching} onmore={() => runSearch(true)} onclose={() => (found = null)} />
 {/if}
 
 <style>

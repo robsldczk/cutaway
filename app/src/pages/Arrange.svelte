@@ -88,7 +88,7 @@
 
   // the sounds layer scrolls in time, so the playhead stays on the centre line
   $effect(() => {
-    if (!on || app.audition || app.sound || (app.playing && !app.follow)) return;
+    if (!on || app.audition || (app.playing && !app.follow)) return;
     off = map.y(app.pos);
   });
 

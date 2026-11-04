@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -142,6 +142,145 @@ test('add: a bucket row dropped beside a line snaps, and the drop sets the depth
   await expect(page.getByTestId('loudness')).toBeVisible();
 });
 
+/** The desktop webview: Tauri's file drop takes every drag, so the page never sees one. */
+const noHtmlDrag = (page: Page) =>
+  page.addInitScript(() => {
+    for (const t of ['dragstart', 'dragenter', 'dragover', 'drop'])
+      window.addEventListener(
+        t,
+        (e) => {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        },
+        true,
+      );
+  });
+
+test('add: a bucket row lands where the desktop webview sees no HTML drag at all', async ({ page }) => {
+  await noHtmlDrag(page);
+  await open(page);
+  const from = await centre(await bucketRow(page));
+  const r = (await page.getByTestId('arrange-row').nth(1).boundingBox())!;
+  const field = (await page.getByTestId('sounds-field').boundingBox())!;
+  await drag(page, from, field.x + 330 - from.x, r.y + 1 - from.y);
+  await expect.poll(async () => (await list()).length).toBe(1);
+  await expect(page.getByTestId('sound-ball')).toHaveCount(1);
+  await expect(page.getByTestId('drag-ghost')).toHaveCount(0);
+});
+
+test('add: on its way the sound follows the pointer, Esc calls it off, and the balls stay still', async ({ page }) => {
+  const id = await place(1.5, 0.5);
+  await open(page);
+  const from = await centre(await bucketRow(page));
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x - 30, from.y + 10);
+  await expect(page.getByTestId('drag-ghost')).toContainText('Foil_crackle');
+  // over a ball nothing wakes up (5.1)
+  const ball = await centre(ballOf(page, id));
+  await page.mouse.move(ball.x, ball.y);
+  await expect(page.getByTestId('drag-ghost')).toHaveCount(0);
+  await expect(page.locator('.line.hover')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expect(page.getByTestId('drag-ghost')).toHaveCount(0);
+  await page.waitForTimeout(150);
+  expect(await list()).toHaveLength(1);
+});
+
+test('add: a press on a row with no drag is no drag, and its Play button stays a button', async ({ page }) => {
+  await open(page);
+  await (await bucketRow(page)).click();
+  await page.waitForTimeout(150);
+  expect(await list()).toHaveLength(0);
+  await expect(page.getByTestId('drag-ghost')).toHaveCount(0);
+});
+
+test('add: a bucket row drops onto an Edit lane', async ({ page }) => {
+  await noHtmlDrag(page);
+  await open(page);
+  await page.keyboard.press('3');
+  const lane = page.locator('[data-testid="edit-lane"][data-lane="sfx1"]').first();
+  await expect(lane).toBeVisible();
+  await (await bucketRow(page)).dragTo(lane, { targetPosition: { x: 200, y: 12 } });
+  await expect.poll(async () => (await list()).length).toBe(1);
+});
+
+test('no HTML drag and drop anywhere: it never fires in the desktop app', () => {
+  const files = readdirSync('src', { recursive: true, encoding: 'utf8' }).filter((f) => f.endsWith('.svelte'));
+  const used = files.filter((f) => /draggable=|ondrag\w*=|ondrop=/.test(readFileSync(join('src', f), 'utf8')));
+  expect(used).toEqual([]);
+});
+
+test('preview: Play in a bucket has its own player, and the timeline stays where it is', async ({ page }) => {
+  await open(page);
+  await page.getByTestId('arrange-row').nth(2).click();
+  const world = page.getByRole('group', { name: 'Sounds of the scene' });
+  const row = await bucketRow(page);
+  await page.waitForTimeout(400);
+  const at = await world.getAttribute('style');
+  const head = (await rpc<{ position_s: number }>('playhead')).position_s;
+
+  await row.getByRole('button', { name: /^Play / }).click();
+
+  const player = page.getByTestId('preview-player');
+  await expect(player).toContainText('Foil_crackle');
+  await expect(row.getByRole('button', { name: /^Play / })).toBeVisible();
+  // it runs on its own clock …
+  await expect.poll(async () => (await rpc<{ position_s: number }>('sound_playhead')).position_s).toBeGreaterThan(0.3);
+  await expect(page.getByTestId('preview-time')).not.toContainText('0:00 /');
+  // … and the main transport never heard of it
+  await expect(page.getByRole('button', { name: 'Play or stop (Space)' })).toHaveAttribute('data-playing', 'false');
+  expect(await world.getAttribute('style')).toBe(at);
+  const main = await rpc<{ position_s: number; playing: boolean }>('playhead');
+  expect(main.playing).toBe(false);
+  expect(main.position_s).toBe(head);
+
+  // Space stops the preview, and only then does it play the timeline. The sound is short:
+  // from its start again, so it can't run out first
+  const w = (await page.getByTestId('preview-wave').boundingBox())!;
+  await page.mouse.click(w.x + 1, w.y + w.height / 2);
+  await expect(player.getByRole('button', { name: /^Stop preview/ })).toBeVisible();
+  await page.keyboard.press('Space');
+  await expect.poll(async () => (await rpc<{ playing: boolean }>('sound_playhead')).playing).toBe(false);
+  expect((await rpc<{ playing: boolean }>('playhead')).playing).toBe(false);
+  await expect(player.getByRole('button', { name: /^Play preview/ })).toBeVisible();
+  await page.keyboard.press('Space');
+  await expect.poll(async () => (await rpc<{ playing: boolean }>('playhead')).playing).toBe(true);
+  await rpc('stop');
+});
+
+test('preview: the transport takes over, the player seeks, and hiding the bucket stops it', async ({ page }) => {
+  await open(page);
+  const row = await bucketRow(page);
+  const heard = async () => (await rpc<{ playing: boolean; position_s: number }>('sound_playhead'));
+  await row.getByRole('button', { name: /^Play / }).click();
+  await expect.poll(async () => (await heard()).playing).toBe(true);
+
+  // a click on the player's waveform lands in the sound
+  const w = (await page.getByTestId('preview-wave').boundingBox())!;
+  await page.mouse.click(w.x + w.width * 0.8, w.y + w.height / 2);
+  await expect.poll(async () => (await heard()).position_s).toBeGreaterThan(1.9);
+
+  // the main Play stops it
+  const play = page.getByRole('button', { name: 'Play or stop (Space)' });
+  await play.click();
+  await expect(play).toHaveAttribute('data-playing', 'true');
+  await expect.poll(async () => (await heard()).playing).toBe(false);
+  await play.click();
+  await expect(play).toHaveAttribute('data-playing', 'false');
+
+  // and a preview stops the main Play, leaving the playhead where it stopped
+  await play.click();
+  await expect(play).toHaveAttribute('data-playing', 'true');
+  await row.getByRole('button', { name: /^Play / }).click();
+  await expect(play).toHaveAttribute('data-playing', 'false');
+  await expect.poll(async () => (await heard()).playing).toBe(true);
+
+  await page.keyboard.press('b');
+  await expect.poll(async () => (await heard()).playing).toBe(false);
+});
+
 test('depth: sideways is depth, and small vertical motion leaves the timing alone', async ({ page }) => {
   const a = await place(1, 0.1);
   await open(page);
@@ -171,6 +310,18 @@ test('move: dropped where nothing snaps, a sound is free', async ({ page }) => {
   const a = await place(0.5, 0.3);
   await rpc('move_sound', { placement_id: a, anchor_line_id: (await rpc<{ line_id: string }[]>('list_lines', { scene: '1' }))[0].line_id, offset_s: 0.4 });
   await open(page);
+  // the distance below is free of targets only from where the ball comes to rest
+  let y = 0;
+  await expect
+    .poll(
+      async () => {
+        const last = y;
+        y = (await centre(ballOf(page, a))).y;
+        return Math.abs(y - last);
+      },
+      { intervals: [150] },
+    )
+    .toBeLessThan(0.5);
   const after = await oneStep(page, () => centre(ballOf(page, a)).then((c) => drag(page, c, 0, 44)));
   expect(after.find((x) => x.id === a)!.anchor).toBe(null);
 });

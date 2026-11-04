@@ -1,6 +1,10 @@
 //! Playback for the UI: the cpal engine when an output device exists, otherwise a virtual
 //! clock (CI, the browser dev bridge) so the transport still behaves.
 //!
+//! Two decks: the timeline's, and the buckets' preview player. A sound auditioned from a
+//! bucket isn't on the timeline, so it has no business moving the playhead. One plays at a
+//! time: starting either stops the other, and the timeline's playhead stays where it stopped.
+//!
 //! With `playback.level` on (the default) recordings play leveled and the output runs
 //! through a safety limiter. Only the gains sent to the engine change; nothing is stored.
 
@@ -12,6 +16,7 @@ use std::time::Instant;
 use serde_json::{json, Value};
 
 use apc_audio::engine::Engine;
+use apc_audio::mixer::SourceSet;
 use apc_audio::{MixSettings, PlaySchedule};
 use apc_core::config::PlaybackConfig;
 use apc_export::bounce::source_set;
@@ -20,16 +25,79 @@ use apc_media::loudness::{integrated_lufs, match_gain_db};
 use crate::error::Result;
 use crate::service::Service;
 
+/// One way to the speakers.
 #[derive(Default)]
-pub struct Player {
+struct Deck {
     engine: Option<Engine>,
-    /// Take being auditioned alone (positions are then seconds into the take).
-    take_id: Option<String>,
-    /// Sound auditioned from a bucket.
-    sound: Option<String>,
     tried: bool,
     clock: Option<(Instant, f64, f64)>,
     stopped_at: f64,
+}
+
+impl Deck {
+    /// Opens the device the first time it's needed.
+    fn open(&mut self) {
+        if !self.tried && std::env::var("CUTAWAY_NO_AUDIO").is_err() {
+            self.tried = true;
+            self.engine = Engine::start().ok();
+        }
+    }
+
+    fn position(&self) -> (f64, bool) {
+        if let Some(e) = &self.engine {
+            return (e.position_s(), e.is_playing());
+        }
+        match self.clock {
+            Some((t0, from, until)) => {
+                let p = from + t0.elapsed().as_secs_f64();
+                if p >= until {
+                    (until, false)
+                } else {
+                    (p, true)
+                }
+            }
+            None => (self.stopped_at, false),
+        }
+    }
+
+    /// The position, and whether it's still playing; a virtual clock that ran out rests.
+    fn poll(&mut self) -> (f64, bool) {
+        let (pos, playing) = self.position();
+        if !playing && self.clock.is_some() {
+            self.clock = None;
+            self.stopped_at = pos;
+        }
+        (pos, playing)
+    }
+
+    fn stop(&mut self) -> f64 {
+        let pos = self.position().0;
+        if let Some(e) = &self.engine {
+            e.stop();
+        }
+        self.clock = None;
+        self.stopped_at = pos;
+        pos
+    }
+}
+
+/// The buckets' preview player.
+#[derive(Default)]
+struct Preview {
+    deck: Deck,
+    /// What it was last given (asset or remote id).
+    sound: Option<String>,
+    duration_s: f64,
+}
+
+#[derive(Default)]
+pub struct Player {
+    deck: Deck,
+    preview: Preview,
+    /// Take being auditioned alone (positions are then seconds into the take).
+    take_id: Option<String>,
+    /// Stretch of a source played alone (dev panel).
+    sound: Option<String>,
     scene_id: Option<String>,
     rev: i64,
     /// What is playing: an edit that wouldn't change it isn't worth a restart.
@@ -84,7 +152,7 @@ pub fn play(svc: &mut Service, scene_id: &str, from_s: f64, until_s: Option<f64>
     };
     svc.player.take_id = None;
     svc.player.sound = None;
-    start(svc, sched, scene_id, from_s, until_s, vec![])
+    start(svc, sched, scene_id, from_s, until_s)
 }
 
 /// Plays one take alone, loudness-matched, from `from_s` seconds into it.
@@ -128,14 +196,7 @@ pub fn play_take(svc: &mut Service, take_id: &str, from_s: f64) -> Result<Value>
         duration_s: t.duration(),
         ..Default::default()
     };
-    let r = start(
-        svc,
-        sched,
-        &scene_id,
-        from_s.clamp(0.0, t.duration()),
-        None,
-        vec![],
-    )?;
+    let r = start(svc, sched, &scene_id, from_s.clamp(0.0, t.duration()), None)?;
     svc.player.take_id = Some(take_id.to_string());
     Ok(r)
 }
@@ -171,14 +232,14 @@ pub fn play_source(svc: &mut Service, source_id: &str, t0: f64, t1: f64) -> Resu
         ..Default::default()
     };
     let scene = svc.player.scene_id.clone().unwrap_or_default();
-    let r = start(svc, sched, &scene, 0.0, None, vec![])?;
+    let r = start(svc, sched, &scene, 0.0, None)?;
     svc.player.take_id = None;
     svc.player.sound = Some(format!("source:{source_id}"));
     Ok(r)
 }
 
-/// Plays a sound file alone (bucket audition: a library sound or a cached preview).
-/// The playhead then reports `sound` = the label, and seconds into the file.
+/// Plays a sound file on the preview player (bucket audition: a library sound or a cached
+/// preview). `sound_playhead` then reports `sound` = the label, and seconds into the file.
 pub fn play_file(
     svc: &mut Service,
     path: &std::path::Path,
@@ -224,18 +285,24 @@ pub fn play_file(
         duration_s: duration,
         ..Default::default()
     };
-    let scene = svc.player.scene_id.clone().unwrap_or_default();
-    let r = start(
-        svc,
-        sched,
-        &scene,
-        from_s.clamp(0.0, duration),
-        None,
-        vec![(id, path.to_path_buf())],
-    )?;
-    svc.player.take_id = None;
-    svc.player.sound = Some(label.to_string());
-    Ok(r)
+    let from_s = from_s.clamp(0.0, duration);
+    stop_timeline(svc);
+    let p = &mut svc.player.preview;
+    p.deck.open();
+    if let Some(e) = &p.deck.engine {
+        let mut set = SourceSet::new(e.sample_rate());
+        set.add(id, path.to_path_buf());
+        e.set_limiter(cfg.level);
+        e.load(sched, Arc::new(set));
+        e.play(from_s, Some(duration));
+    } else {
+        p.deck.clock = Some((Instant::now(), from_s, duration));
+    }
+    p.sound = Some(label.to_string());
+    p.duration_s = duration;
+    Ok(
+        json!({ "playing": true, "from_s": from_s, "until_s": duration, "duration_s": duration, "device": p.deck.engine.is_some() }),
+    )
 }
 
 fn start(
@@ -244,61 +311,53 @@ fn start(
     scene_id: &str,
     from_s: f64,
     until_s: Option<f64>,
-    extra: Vec<(String, std::path::PathBuf)>,
 ) -> Result<Value> {
+    svc.player.preview.deck.stop();
     // the room rings on past the last clip, as it does in the bounce
     let duration = sched.end_s();
-    let use_device = std::env::var("CUTAWAY_NO_AUDIO").is_err();
-    if !svc.player.tried && use_device {
-        svc.player.tried = true;
-        svc.player.engine = Engine::start().ok();
-    }
+    svc.player.deck.open();
     let until = until_s.unwrap_or(duration).min(duration);
     svc.player.loaded = Some(sched.clone());
-    if let Some(e) = &svc.player.engine {
-        let mut set = source_set(svc.doc(), &svc.paths, e.sample_rate());
-        for (id, p) in extra {
-            set.add(id, p);
-        }
+    if let Some(e) = &svc.player.deck.engine {
+        let set = source_set(svc.doc(), &svc.paths, e.sample_rate());
         e.set_limiter(svc.config().playback.level);
         e.load(sched, Arc::new(set));
         e.play(from_s, Some(until));
     } else {
-        svc.player.clock = Some((Instant::now(), from_s, until));
+        svc.player.deck.clock = Some((Instant::now(), from_s, until));
     }
     svc.player.scene_id = Some(scene_id.to_string());
     svc.player.rev = svc.bus.rev();
     svc.player.until = Some(until);
     Ok(
-        json!({ "playing": true, "from_s": from_s, "until_s": until, "duration_s": duration, "device": svc.player.engine.is_some() }),
+        json!({ "playing": true, "from_s": from_s, "until_s": until, "duration_s": duration, "device": svc.player.deck.engine.is_some() }),
     )
 }
 
+fn stop_timeline(svc: &mut Service) -> f64 {
+    svc.player.deck.stop()
+}
+
+/// Stops whatever plays.
 pub fn stop(svc: &mut Service) -> Result<Value> {
-    let pos = position(svc).0;
-    if let Some(e) = &svc.player.engine {
-        e.stop();
-    }
-    svc.player.clock = None;
-    svc.player.stopped_at = pos;
+    svc.player.preview.deck.stop();
+    let pos = stop_timeline(svc);
     Ok(json!({ "playing": false, "position_s": pos }))
 }
 
-fn position(svc: &Service) -> (f64, bool) {
-    if let Some(e) = &svc.player.engine {
-        return (e.position_s(), e.is_playing());
-    }
-    match svc.player.clock {
-        Some((t0, from, until)) => {
-            let p = from + t0.elapsed().as_secs_f64();
-            if p >= until {
-                (until, false)
-            } else {
-                (p, true)
-            }
-        }
-        None => (svc.player.stopped_at, false),
-    }
+/// Stops the preview player alone.
+pub fn stop_sound(svc: &mut Service) -> Result<Value> {
+    let pos = svc.player.preview.deck.stop();
+    Ok(json!({ "playing": false, "position_s": pos }))
+}
+
+/// Where the preview player is: seconds into its sound.
+pub fn sound_playhead(svc: &mut Service) -> Result<Value> {
+    let p = &mut svc.player.preview;
+    let (pos, playing) = p.deck.poll();
+    Ok(
+        json!({ "sound": p.sound, "position_s": pos, "playing": playing, "duration_s": p.duration_s }),
+    )
 }
 
 /// The scene's schedule, if the document changed during playback in a way that can be heard.
@@ -317,14 +376,10 @@ fn changed_schedule(svc: &mut Service) -> Option<PlaySchedule> {
 
 /// Playhead; reloads the schedule when the document changed during playback.
 pub fn playhead(svc: &mut Service) -> Result<Value> {
-    let (pos, playing) = position(svc);
-    if !playing && svc.player.clock.is_some() {
-        svc.player.clock = None;
-        svc.player.stopped_at = pos;
-    }
+    let (pos, playing) = svc.player.deck.poll();
     if playing {
         if let Some(s) = changed_schedule(svc) {
-            if let Some(e) = &svc.player.engine {
+            if let Some(e) = &svc.player.deck.engine {
                 e.set_limiter(svc.config().playback.level);
                 e.load(
                     s.clone(),
@@ -336,7 +391,7 @@ pub fn playhead(svc: &mut Service) -> Result<Value> {
         }
     }
     Ok(
-        json!({ "position_s": pos, "playing": playing, "scene_id": svc.player.scene_id, "take_id": svc.player.take_id, "sound": svc.player.sound, "level": svc.player.engine.as_ref().map(|e| e.take_level()).unwrap_or(0.0) }),
+        json!({ "position_s": pos, "playing": playing, "scene_id": svc.player.scene_id, "take_id": svc.player.take_id, "sound": svc.player.sound, "level": svc.player.deck.engine.as_ref().map(|e| e.take_level()).unwrap_or(0.0) }),
     )
 }
 
@@ -418,6 +473,61 @@ mod tests {
         .unwrap();
         assert_ne!(svc.bus.rev(), rev, "the document did change");
         assert!(changed_schedule(&mut svc).is_none());
+    }
+
+    fn door(dir: &Path) -> PathBuf {
+        dir.join("Door.wav")
+    }
+
+    #[test]
+    fn a_preview_leaves_the_timeline_where_it_was() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut svc, scene, _) = playing(dir.path());
+        let loaded = svc.player.loaded.clone();
+        let at = stop(&mut svc).unwrap()["position_s"].as_f64().unwrap();
+
+        play_file(&mut svc, &door(dir.path()), "Door", 0.25).unwrap();
+
+        let head = playhead(&mut svc).unwrap();
+        assert_eq!(head["playing"], false);
+        assert_eq!(head["position_s"].as_f64().unwrap(), at);
+        assert_eq!(head["scene_id"], scene.as_str());
+        assert_eq!(svc.player.loaded, loaded, "the timeline's schedule stays");
+        let heard = sound_playhead(&mut svc).unwrap();
+        assert_eq!(heard["playing"], true);
+        assert_eq!(heard["sound"], "Door");
+        assert!(heard["position_s"].as_f64().unwrap() >= 0.25);
+        assert!((heard["duration_s"].as_f64().unwrap() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_preview_stops_the_timeline_and_the_timeline_stops_a_preview() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut svc, scene, _) = playing(dir.path());
+        assert_eq!(playhead(&mut svc).unwrap()["playing"], true);
+        play_file(&mut svc, &door(dir.path()), "Door", 0.0).unwrap();
+        assert_eq!(playhead(&mut svc).unwrap()["playing"], false);
+        play(&mut svc, &scene, 0.0, None).unwrap();
+        assert_eq!(sound_playhead(&mut svc).unwrap()["playing"], false);
+        assert_eq!(playhead(&mut svc).unwrap()["playing"], true);
+    }
+
+    #[test]
+    fn stopping_a_preview_is_all_it_stops() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut svc, _, _) = playing(dir.path());
+        let at = stop(&mut svc).unwrap()["position_s"].as_f64().unwrap();
+        play_file(&mut svc, &door(dir.path()), "Door", 0.0).unwrap();
+        stop_sound(&mut svc).unwrap();
+        assert_eq!(sound_playhead(&mut svc).unwrap()["playing"], false);
+        assert_eq!(
+            playhead(&mut svc).unwrap()["position_s"].as_f64().unwrap(),
+            at
+        );
+        // and a plain stop reaches it too: closing an episode must leave nothing playing
+        play_file(&mut svc, &door(dir.path()), "Door", 0.0).unwrap();
+        stop(&mut svc).unwrap();
+        assert_eq!(sound_playhead(&mut svc).unwrap()["playing"], false);
     }
 
     #[test]

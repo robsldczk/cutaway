@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte';
   import { call, inTauri, pickPath } from '../lib/bridge';
+  import { grab } from '../lib/drag.svelte';
   import type { Asset, CueView } from '../lib/types';
   import Drawer from './Drawer.svelte';
 
@@ -77,9 +78,11 @@
     if (tab === 'library') await loadLibrary();
   }
 
-  function dragStart(e: DragEvent, asset_id: string, cue_id?: string, anchored = false) {
-    e.dataTransfer?.setData('application/x-cutaway-sound', JSON.stringify({ asset_id, cue_id, anchored }));
-    if (app.page !== 'edit') app.setPage('edit');
+  /** The lanes are on the Edit page: the drag takes you there. */
+  function drag(e: MouseEvent, a: Asset, cue_id?: string) {
+    grab(e, { kind: 'bucket', asset_id: a.id, cue_id, name: a.file.split('/').pop() ?? a.id, duration_s: a.duration_s }, () => {
+      if (app.page !== 'edit') app.setPage('edit');
+    });
   }
 </script>
 
@@ -106,7 +109,7 @@
         {#if c.candidates.length}
           <div class="cands">
             {#each c.candidates as a (a.id)}
-              <button class="cand" class:chosen={c.cue.chosen === a.id} draggable="true" ondragstart={(e) => dragStart(e, a.id, c.cue.id, true)} onclick={() => choose(c, a)} title="Click to choose, drag onto the timeline">{a.file.split('/').pop()}</button>
+              <button class="cand" class:chosen={c.cue.chosen === a.id} onmousedown={(e) => drag(e, a, c.cue.id)} onclick={() => choose(c, a)} title="Click to choose, drag onto the timeline">{a.file.split('/').pop()}</button>
             {/each}
           </div>
         {/if}
@@ -131,7 +134,8 @@
   {:else}
     <div class="row"><input class="field" placeholder="Search the library" bind:value={query} onkeydown={(e) => e.key === 'Enter' && loadLibrary()} /><button class="btn" onclick={() => importFiles()}>Import…</button></div>
     {#each library as a (a.id)}
-      <div class="asset" draggable="true" ondragstart={(e) => dragStart(e, a.id)} role="listitem" title="Drag onto the timeline">
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions (dragging is the mouse's) -->
+      <div class="asset" onmousedown={(e) => drag(e, a)} role="listitem" title="Drag onto the timeline">
         <span class="ellip">{a.file.split('/').pop()}</span><span class="muted">{a.category} · {a.duration_s.toFixed(1)} s</span>
       </div>
     {:else}

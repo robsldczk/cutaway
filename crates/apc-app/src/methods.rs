@@ -568,6 +568,9 @@ pub struct PlaceFromBucketP {
     pub remote_id: Option<String>,
     #[serde(default)]
     pub bucket_id: Option<String>,
+    /// The cue it answers.
+    #[serde(default)]
+    pub cue_id: Option<String>,
     #[serde(default)]
     pub lane: Option<Lane>,
     /// For `lane: dialogue` (vocals default to their character's lane).
@@ -765,7 +768,7 @@ registry! {
     "export_mix", ExportMixP, Write, true, "Bounce a scene to WAV or MP3.";
     "play", PlayP, Read, false, "Play the scene from a time (audio device, or a virtual clock without one).";
     "play_take", PlayTakeP, Read, false, "Audition one take alone (loudness-matched) from a time within it.";
-    "stop", NoParams, Read, false, "Stop playback.";
+    "stop", NoParams, Read, false, "Stop playback, the preview player included.";
     "playhead", NoParams, Read, false, "Playhead position and state.";
     "peaks", PeaksP, Read, false, "Waveform peaks of a source range.";
     "peaks_batch", PeaksBatchP, Read, false, "Waveform peaks of several source ranges in one call (the Edit page's visible clips).";
@@ -791,7 +794,9 @@ registry! {
     "bucket_dismiss", BucketRemoteP, Write, true, "Dismiss a preview so searches skip it.";
     "bucket_generate", BucketGenerateP, Write, true, "Generate sounds for a bucket (ElevenLabs) and keep them.";
     "place_from_bucket", PlaceFromBucketP, Write, true, "Place a bucket sound on the timeline. A preview downloads first (returns a job_id).";
-    "play_sound", PlaySoundP, Read, false, "Audition a bucket sound (kept or preview).";
+    "play_sound", PlaySoundP, Read, false, "Audition a bucket sound (kept or preview) on the preview player. The timeline stops; its playhead stays.";
+    "stop_sound", NoParams, Read, false, "Stop the preview player.";
+    "sound_playhead", NoParams, Read, false, "The preview player's sound, position and state.";
     "list_sounds", SceneP, Read, true, "The sounds placed in a scene with their ids, timing, anchor, gain, pan, depth and fades.";
     "move_sound", MoveSoundP, Write, true, "Move a placed sound: onto an anchor (a word, a line edge, or the pause after a word: anchor_word with anchor_edge end), to free time (at_s), or by offset_s from where it hangs. Anchored sounds follow their line.";
     "trim_sound", TrimSoundP, Write, true, "Trim a placed sound's start or end. Never longer than the source; the automatic fade follows.";
@@ -1491,6 +1496,8 @@ impl Service {
                 let p: PlaySoundP = parse(params)?;
                 crate::buckets::play(self, p.asset_id, p.remote_id, p.from_s)
             }
+            "stop_sound" => crate::player::stop_sound(self),
+            "sound_playhead" => crate::player::sound_playhead(self),
             "list_sounds" => {
                 let p: SceneP = parse(params)?;
                 let sc = scene_id(self, p.scene.as_deref())?;

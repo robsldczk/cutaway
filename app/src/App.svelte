@@ -17,6 +17,7 @@
   import Welcome from './components/Welcome.svelte';
   import ShowHome from './components/ShowHome.svelte';
   import Bucket from './components/Bucket.svelte';
+  import DragGhost from './components/DragGhost.svelte';
   import Options from './pages/Options.svelte';
   import Arrange from './pages/Arrange.svelte';
   import Edit from './pages/Edit.svelte';
@@ -89,7 +90,8 @@
     }
   }
 
-  async function dropped(paths: string[]) {
+  /** `x`, `y`: on macOS Tauri's "physical" drop position is really in points, so CSS pixels. */
+  async function dropped(paths: string[], x: number, y: number) {
     const scripts = paths.filter((p) => /\.(fountain|thrl|txt)$/i.test(p));
     const audio = paths.filter((p) => AUDIO.test(p));
     for (const s of scripts) await app.method('import_script', { path: s });
@@ -99,6 +101,8 @@
       await app.method('import_sounds', { paths: audio, scene: app.sceneId, at_s: +app.pos.toFixed(3) });
       await app.loadEdit();
       app.say(`${audio.length} sound${audio.length > 1 ? 's' : ''} imported, placed at the playhead`);
+    } else if (app.page === 'arrange' && app.soundsUi && app.soundsOn) {
+      await app.soundsUi.dropFiles(audio, x, y);
     } else if (app.drawer === 'bucket' || (app.page === 'import' && app.importTab === 'sounds')) {
       await app.method('import_sounds', { paths: audio });
       app.say(`${audio.length} sounds added to the library`);
@@ -124,7 +128,7 @@
       });
       void import('@tauri-apps/api/webview').then(async ({ getCurrentWebview }) => {
         unlisten = await getCurrentWebview().onDragDropEvent((ev) => {
-          if (ev.payload.type === 'drop') void dropped(ev.payload.paths);
+          if (ev.payload.type === 'drop') void dropped(ev.payload.paths, ev.payload.position.x, ev.payload.position.y);
         });
       });
     }
@@ -174,6 +178,7 @@
   {#if app.overlay === 'export'}<ExportPanel />{/if}
 
   {#if app.toast}<div class="toast" role="status">{app.toast}</div>{/if}
+  <DragGhost />
 </div>
 
 <style>

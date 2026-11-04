@@ -1,7 +1,7 @@
 // UI state. Document state comes only from the core (view models); every change is a
 // command sent through the bridge. Local state here is selection, page, playhead, overlays.
 import { call, BridgeError } from './bridge';
-import type { DragSound, EditView, ItemView, Job, SceneView, ShowView, Status } from './types';
+import type { EditView, ItemView, Job, SceneView, ShowView, SoundFace, SoundKey, SoundPreview, Status } from './types';
 
 export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'dev';
 export type ImportTab = 'files' | 'sounds';
@@ -140,14 +140,12 @@ class AppState {
   /** Arrange: buckets faded out with their eye. View only: this page, this session, never
    *  the document or the mix. */
   hiddenBuckets = $state<string[]>([]);
-  /** The bucket sound being dragged (a drag can't be read until it is dropped). */
-  dragSound = $state<DragSound | null>(null);
   /** Keys and the wheel go to the sounds layer first, while it is on the page. */
-  soundsUi: { key(e: KeyboardEvent): boolean; wheel(e: WheelEvent): boolean } | null = null;
+  soundsUi: { key(e: KeyboardEvent): boolean; wheel(e: WheelEvent): boolean; dropFiles(paths: string[], x: number, y: number): Promise<void> } | null = null;
   /** Bucket the full bucket highlights or opens in its side panel. */
   openBucket = $state<string | null>(null);
-  /** Sound being auditioned from a bucket (asset id or remote id). */
-  sound = $state<string | null>(null);
+  /** The buckets' preview player: the sound last auditioned, playing or not. */
+  preview = $state<SoundPreview | null>(null);
   /** The open show (studio mode): its home shows when no episode is open. */
   show = $state<ShowView | null>(null);
   /** The show's backdrop (a data URL), loaded once per show. */
@@ -156,6 +154,7 @@ class AppState {
   private warned = '';
   private lastRev = -1;
   private playTimer: ReturnType<typeof setInterval> | null = null;
+  private previewTimer: ReturnType<typeof setInterval> | null = null;
   private revTimer: ReturnType<typeof setInterval> | null = null;
 
   get lines(): ItemView[] {
@@ -539,7 +538,7 @@ class AppState {
     const r = await this.run(() => call<{ playing: boolean }>('play', { scene: this.sceneId, from_s: from, until_s: until }));
     if (!r?.playing) return;
     this.audition = null;
-    this.sound = null;
+    this.previewEnded();
     this.playing = true;
     this.pos = from;
     this.startPolling();
@@ -548,33 +547,72 @@ class AppState {
   async playTake(takeId: string, from: number) {
     const r = await this.run(() => call<{ playing: boolean }>('play_take', { take_id: takeId, from_s: from }));
     if (!r?.playing) return;
+    this.previewEnded();
     this.audition = takeId;
     this.playing = true;
     this.pos = from;
     this.startPolling();
   }
 
-  /** Auditions a bucket sound (kept asset or preview) from a point in it. */
-  async playSound(key: { asset_id?: string; remote_id?: string }, from = 0) {
-    const r = await this.run(() => call<{ playing: boolean }>('play_sound', { ...key, from_s: from }));
+  /** Auditions a bucket sound (kept asset or preview) from a point in it, on the preview
+   *  player. The backend stops the timeline for it; the playhead stays where it was. */
+  async playSound(key: SoundKey, from: number, face: SoundFace) {
+    const r = await this.run(() => call<{ playing: boolean; duration_s: number }>('play_sound', { ...key, from_s: from }));
     if (!r?.playing) return;
-    this.audition = null;
-    this.sound = key.asset_id ?? key.remote_id ?? null;
-    this.playing = true;
-    this.pos = from;
-    this.startPolling();
+    this.transportStopped();
+    this.preview = { ...face, id: key.asset_id ?? key.remote_id ?? '', key, duration_s: r.duration_s, pos: from, playing: true };
+    this.startPreviewPolling();
+  }
+
+  /** Is this sound (asset or remote id) on the preview player, playing? */
+  previewing(id: string) {
+    return !!this.preview?.playing && this.preview.id === id;
+  }
+
+  toggleSound(key: SoundKey, face: SoundFace) {
+    return this.previewing(key.asset_id ?? key.remote_id ?? '') ? this.stopSound() : this.playSound(key, 0, face);
+  }
+
+  async stopSound() {
+    await this.run(() => call('stop_sound'));
+    this.previewEnded();
   }
 
   async stop() {
     await this.run(() => call('stop'));
+    this.transportStopped();
+    this.previewEnded();
+  }
+
+  private transportStopped() {
     this.playing = false;
-    this.sound = null;
+    this.level = 0;
     this.stopPolling();
     if (this.audition) {
       // back on the scene timeline at the line being edited
       this.audition = null;
       if (this.cur) this.pos = this.cur.start_s;
     }
+  }
+
+  private previewEnded() {
+    if (this.previewTimer) clearInterval(this.previewTimer);
+    this.previewTimer = null;
+    if (this.preview) this.preview = { ...this.preview, playing: false, pos: 0 };
+  }
+
+  private startPreviewPolling() {
+    if (this.previewTimer) clearInterval(this.previewTimer);
+    this.previewTimer = setInterval(async () => {
+      try {
+        const p = await call<{ position_s: number; playing: boolean }>('sound_playhead');
+        if (!this.previewTimer || !this.preview) return;
+        if (!p.playing) this.previewEnded();
+        else this.preview.pos = p.position_s;
+      } catch {
+        this.previewEnded();
+      }
+    }, 33);
   }
 
   async togglePlay() {
@@ -646,7 +684,7 @@ class AppState {
         const p = await call<{ position_s: number; playing: boolean; level?: number }>('playhead');
         this.pos = p.position_s;
         this.level = Math.max(p.level ?? 0, this.level * 0.85);
-        if (this.follow && !this.audition && !this.sound) {
+        if (this.follow && !this.audition) {
           const it = this.lineAt(p.position_s);
           if (it && it.line_id !== this.curId) this.curId = it.line_id;
         }
@@ -655,8 +693,7 @@ class AppState {
           this.level = 0;
           this.stopPolling();
           const c = this.cycle;
-          if (this.page === 'edit' && c.on && !this.sound && c.to > c.from && p.position_s >= c.to - 0.05) void this.play(c.from, c.to);
-          if (this.sound) this.sound = null;
+          if (this.page === 'edit' && c.on && c.to > c.from && p.position_s >= c.to - 0.05) void this.play(c.from, c.to);
         }
       } catch {
         this.playing = false;
