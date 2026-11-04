@@ -129,6 +129,8 @@ export interface ItemView {
   room: RoomItem[];
   spacer_enabled: boolean;
   spacer_duration_s: number | null;
+  /** How long it takes: that, or the default for its length. */
+  spacer_s: number;
 }
 
 export interface SceneSummary {
@@ -285,6 +287,12 @@ export interface SceneRoom {
 }
 
 /** A scene's room on the Sounds tab. */
+export interface RoomAmbience {
+  asset_id: string;
+  name: string;
+  gain_db: number;
+}
+
 export interface RoomRow {
   scene_id: string;
   number: number;
@@ -294,8 +302,13 @@ export interface RoomRow {
   /** What the settings come to, from the curves the audio uses. */
   decay_s: number;
   predelay_ms: number;
-  /** The scene's own room tone. */
-  tone: { asset_id: string; name: string; gain_db: number } | null;
+  /** The ambience it plays, its own or what its place shares. */
+  tone: RoomAmbience | null;
+  /** It's set on this scene. */
+  own_tone: boolean;
+  /** Scenes of one location are one room. */
+  location_id: string;
+  night: boolean;
   /** Without one it plays its location's, if that has any. */
   place_tone: boolean;
   sounds: number;
@@ -386,7 +399,7 @@ export interface LaneMix {
 export interface RoomToneBed {
   source: string;
   loop_s: number;
-  /** The scene's own room tone (its sound); null when it's the location's. */
+  /** Its library sound; null for a stretch of a recording. */
   own: string | null;
   gain_db: number;
   seams: number[];

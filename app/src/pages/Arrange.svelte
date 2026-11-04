@@ -64,6 +64,8 @@
   let actEls: Record<string, HTMLDivElement> = $state({});
   let actionRows = $state.raw<ActionRow[]>([]);
   let dropOn = $state<string | null>(null);
+  let actPreview = $state<{ id: string; s: number } | null>(null);
+  const actLen = (a: ItemView) => (actPreview?.id === a.line_id ? actPreview.s : a.spacer_s);
 
   /** Sounds hanging on an action. */
   const tagsOf = (a: ItemView) => (on ? (app.edit?.placements ?? []).filter((p) => p.anchor?.line_id === a.line_id) : []);
@@ -99,12 +101,18 @@
     void app.view;
     void sc;
     void gapPreview;
+    void actPreview;
     // action text wraps to the column's width, so it's measured once that has settled
     void stageW;
     void moving;
     void on;
     void tick().then(() => {
       const next: RowBox[] = [];
+      // directions before the first line have time of their own (D94)
+      for (const a of head) {
+        const el = actEls[a.line_id];
+        if (el) next.push({ start_s: a.start_s, end_s: a.end_s, top: el.offsetTop, height: el.offsetHeight });
+      }
       for (const r of rows) {
         const el = rowEls[r.it.line_id];
         if (el) next.push({ start_s: r.it.start_s, end_s: r.it.end_s, top: el.offsetTop, height: el.offsetHeight });
@@ -116,7 +124,7 @@
         const el = actEls[a.line_id];
         return el ? [{ line_id: a.line_id, text: a.text, start_s: a.start_s, until, y: el.offsetTop + el.offsetHeight / 2, height: el.offsetHeight }] : [];
       };
-      actionRows = [...head.flatMap((a) => measure(a, lineItems[0]?.start_s ?? a.start_s)), ...rows.flatMap((r) => r.acts.flatMap((a) => measure(a, r.next?.start_s ?? a.start_s))), ...tail.flatMap((a) => measure(a, a.start_s))];
+      actionRows = [...head.flatMap((a) => measure(a, a.start_s)), ...rows.flatMap((r) => r.acts.flatMap((a) => measure(a, r.next?.start_s ?? a.start_s))), ...tail.flatMap((a) => measure(a, a.start_s))];
     });
   });
 
@@ -281,6 +289,32 @@
     );
   }
 
+  /** A direction's length: how much room it leaves for its sounds. Dragged like a pause. */
+  function grabAction(e: MouseEvent, a: ItemView) {
+    e.stopPropagation();
+    const id = a.line_id;
+    const s0 = a.spacer_s;
+    const y0 = e.clientY;
+    track(
+      e,
+      (ev) => (actPreview = { id, s: clamp(s0 + (ev.clientY - y0) / (26 * sc), 0.1, 30) }),
+      async () => {
+        const s = actPreview ? Math.round(actPreview.s * 20) / 20 : s0;
+        if (Math.abs(s - s0) < 0.001) {
+          actPreview = null;
+          return;
+        }
+        // hold the released length until the new view lands, so the row doesn't jump back first
+        actPreview = { id, s };
+        try {
+          await app.cmd({ cmd: 'set_spacer', spacer_id: id, enabled: true, duration_s: s });
+        } finally {
+          actPreview = null;
+        }
+      },
+    );
+  }
+
   function grabTrim(e: MouseEvent, it: ItemView, edge: 'h' | 't') {
     const strip = (e.currentTarget as HTMLElement).parentElement;
     const w = win(it);
@@ -383,9 +417,10 @@
 
 {#snippet action(a: ItemView)}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the playhead's keys reach it too) -->
-  <div class="act" class:over={dropOn === a.line_id} bind:this={actEls[a.line_id]} use:dropzone={actionZone(a)} onclick={() => on && app.scrubTo(a.start_s)} data-testid="action-row" title={on ? 'Drop a sound here to tag it to this action' : undefined}>
+  <div class="act" class:over={dropOn === a.line_id} class:off={!a.spacer_enabled} style="min-height: {Math.round(actLen(a) * 14 * sc)}px" bind:this={actEls[a.line_id]} use:dropzone={actionZone(a)} onclick={() => on && app.scrubTo(a.start_s)} data-testid="action-row" title={on ? 'Drop a sound here to tag it to this action' : undefined}>
     <span class="script atext">{a.text}</span>
     {#each tagsOf(a) as p (p.id)}<span class="tag ellip" data-testid="action-tag">{p.name}</span>{/each}
+    <span class="aedge" role="slider" tabindex="-1" aria-label="Length of this direction" aria-valuenow={actLen(a)} title="Drag to change how long this direction takes" onmousedown={(e) => grabAction(e, a)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} data-testid="action-len"><span class="asec tn">{actLen(a).toFixed(1)} s</span></span>
   </div>
 {/snippet}
 
@@ -410,7 +445,6 @@
         <span class="script ellip txt" style="font-size: {Math.round(15 * sc)}px">{#if r.it.words.length && !r.it.dropped}{#each lineWords(r.it).filter((w) => !w.deleted) as w, wi (w.j)}{wi ? ' ' : ''}<span class:wmuted={w.muted}>{w.text}</span>{/each}{:else}{r.it.text}{/if}</span>
         <ClipState it={r.it} />
         {#if r.it.moved}<span class="badge moved">Moved</span>{/if}
-        {#if hc || tc}<span class="badge cuts">Cuts a word</span>{/if}
         <span class="dur" data-testid="row-dur">{(r.it.end_s - r.it.start_s).toFixed(1)} s</span>
       </div>
       <div class="strip" onmousedown={(e) => scrub(e, r.it)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} title="Click to set the locator, I / O to set in and out" style="height: {Math.round(30 * sc)}px" role="slider" tabindex="-1" aria-valuenow={0}>
@@ -516,10 +550,6 @@
     color: var(--text-strong);
     box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.4);
   }
-  .cuts {
-    color: var(--text-on-pill);
-    background: var(--warn);
-  }
   .dur {
     flex: none;
     font-size: var(--fs-small);
@@ -616,13 +646,39 @@
     align-items: baseline;
     gap: 4px 8px;
     margin: 4px 14px;
-    padding: 5px 10px;
+    box-sizing: border-box;
+    padding: 5px 48px 5px 10px;
     border-radius: 8px;
     border-left: 2px solid rgb(var(--ink-rgb) / 0.22);
     color: var(--text-3);
     transition:
       background var(--dur-fast),
       color var(--dur-fast);
+  }
+  .act.off {
+    opacity: 0.6;
+  }
+  /* the bottom edge: drag it for a longer or shorter direction */
+  .aedge {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -4px;
+    height: 12px;
+    cursor: ns-resize;
+  }
+  .asec {
+    position: absolute;
+    right: 8px;
+    bottom: 6px;
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    font-size: 10.5px;
+    color: var(--text-4);
+    transition: color var(--dur-fast);
+  }
+  .act:hover .asec {
+    color: var(--text-strong);
   }
   .act.over {
     color: var(--text-strong);

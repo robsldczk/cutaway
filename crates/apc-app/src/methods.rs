@@ -609,6 +609,30 @@ pub struct BucketLoopP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct AmbienceP {
+    /// Puts what this scene's cues asked for first.
+    #[serde(default)]
+    pub scene: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct ImportAmbienceP {
+    pub path: String,
+    /// The room it goes straight into; left out it's only offered.
+    #[serde(default)]
+    pub scene: Option<String>,
+    /// As in `set_scene_tone`.
+    #[serde(default)]
+    pub night: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct SuggestBucketP {
+    /// A file name or path.
+    pub name: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct CharacterWetP {
     pub character: String,
     /// 0 dry … 1.
@@ -618,12 +642,15 @@ pub struct CharacterWetP {
 #[derive(Deserialize, JsonSchema)]
 pub struct SceneToneP {
     pub scene: String,
-    /// A sound of the episode or the show's library; left out, the scene plays its location's.
+    /// A sound of the episode or the show's library; left out, the ambience goes.
     #[serde(default)]
     pub asset_id: Option<String>,
-    /// Level in dB; left out it stays, or starts at −6.
+    /// Level in dB; left out it stays, or starts at −28.
     #[serde(default)]
     pub gain_db: Option<f64>,
+    /// Only the place's night scenes (true) or the others (false). Left out, all of them.
+    #[serde(default)]
+    pub night: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -844,9 +871,12 @@ registry! {
     "remove_sound", PlacementP, Write, true, "Take a placed sound off the timeline. Undoable.";
     "batch_sounds", BatchSoundsP, Write, true, "Several sound edits as one undo step (a multi-select move, gain or depth change); if one fails, none applies. Each edit is {op: move|trim|fades|gain|pan|depth|slip|remove, ...the fields of that method}.";
     "scene_rooms", NoParams, Read, true, "Each scene's room: size, damping, wet, what they come to (decay, pre-delay) and how many sounds play in it.";
+    "ambience_sounds", AmbienceP, Read, true, "What can loop under a room: the ambience of the library, what a scene's cues asked for first.";
+    "import_ambience", ImportAmbienceP, Write, true, "Bring a file in as an ambience: into the room tone folder, and looping under a scene's location if one is given.";
+    "suggest_bucket", SuggestBucketP, Read, true, "The bucket a file name points to, or a name for a new one (bucket_id null). The same name always gives the same answer.";
     "voice_rooms", NoParams, Read, true, "Each character and how much of the scene's room their voice takes.";
     "set_character_wet", CharacterWetP, Write, true, "Set how much of the scene's room a character's voice takes, 0 dry to 1.";
-    "set_scene_tone", SceneToneP, Write, true, "Set the room tone looping under a scene, from a library sound, and its level. Without asset_id the scene plays its location's.";
+    "set_scene_tone", SceneToneP, Write, true, "Set the ambience looping under a scene's location, from a library sound, and its level: every scene of the place shares it, or give night to set the place's night scenes or the others apart.";
     "bucket_set_loop", BucketLoopP, Write, true, "Set whether a bucket sound loops. Dropped, a sound over 6 s with Loop on goes on the ambience lane and repeats to the end of the scene.";
     "set_scene_room", SceneRoomP, Write, true, "Set a scene's room: size, damping, wet (0 to 1 each; left out stays). Each scene has its own room, shared by all its sounds.";
 }
@@ -1556,6 +1586,24 @@ impl Service {
             "set_scene_room" => crate::sound_edit::set_room(self, parse(params)?),
             "set_scene_tone" => crate::sound_edit::set_tone(self, parse(params)?),
             "voice_rooms" => Ok(crate::sound_edit::voices(self)?),
+            "ambience_sounds" => {
+                let p: AmbienceP = parse(params)?;
+                crate::buckets::ambience(self, p.scene.as_deref())
+            }
+            "import_ambience" => {
+                let p: ImportAmbienceP = parse(params)?;
+                crate::buckets::import_ambience(self, &p)
+            }
+            "suggest_bucket" => {
+                let p: SuggestBucketP = parse(params)?;
+                let id = crate::studio::bucket_by_name(self, &p.name);
+                let name = id
+                    .as_ref()
+                    .and_then(|b| self.doc().buckets.get(b))
+                    .map(crate::studio::shown_name)
+                    .unwrap_or_else(|| crate::studio::proposed_bucket(&p.name));
+                Ok(json!({ "bucket_id": id, "name": name }))
+            }
             "set_character_wet" => {
                 let p: CharacterWetP = parse(params)?;
                 Ok(self

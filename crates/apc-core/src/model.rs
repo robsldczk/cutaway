@@ -202,9 +202,19 @@ pub struct Scene {
     /// The room the scene's sounds share (each scene has its own, D76).
     #[serde(default)]
     pub room: SceneRoom,
-    /// The room tone looping under this scene. Without one it plays its location's (D86).
+    /// The ambience looping under this scene. Without one it plays what its location has (D97).
     #[serde(default)]
     pub tone: Option<SceneTone>,
+}
+
+impl Scene {
+    /// Dark outside: the time of day a place may have a second ambience for.
+    pub fn is_night(&self) -> bool {
+        let t = self.time_of_day.to_lowercase();
+        ["night", "evening", "dusk", "dark"]
+            .iter()
+            .any(|w| t.contains(w))
+    }
 }
 
 /// A library sound looping under a whole scene.
@@ -399,8 +409,11 @@ pub struct RoomTone {
     pub gain_db: f64,
 }
 
+/// Where an ambience starts: under the voices.
+pub const DEFAULT_TONE_DB: f64 = -28.0;
+
 fn default_tone_gain() -> f64 {
-    -6.0
+    DEFAULT_TONE_DB
 }
 
 /// A script location (from scene headings); carries its room tone.
@@ -1216,9 +1229,12 @@ dispatch!(
 );
 
 impl Document {
-    /// The room tone a scene plays: its own, else its location's.
+    /// The ambience a scene plays. Places share: without one of its own a scene plays what
+    /// its location has, for its time of day if that's set apart, then what the setting it
+    /// belongs to has, then the location's room tone (D97).
     pub fn room_tone_for(&self, scene: &Scene) -> Option<RoomTone> {
-        let own = scene.tone.as_ref().and_then(|t| {
+        let tone = scene.tone.as_ref().or_else(|| self.shared_tone(scene));
+        let own = tone.and_then(|t| {
             let a = self.assets.get(&t.asset_id)?;
             Some(RoomTone {
                 enabled: true,
@@ -1233,6 +1249,30 @@ impl Document {
             self.room_tone_of(&crate::script::location_id(&scene.location))
                 .cloned()
         })
+    }
+
+    /// What the rest of a scene's place plays, nearest first.
+    fn shared_tone(&self, scene: &Scene) -> Option<&SceneTone> {
+        let mut loc = crate::script::location_id(&scene.location);
+        // settings stack one level deep in Throughline; the bound guards against loops
+        for _ in 0..8 {
+            let mut here: Vec<&Scene> = self
+                .scenes
+                .values()
+                .filter(|s| s.tone.is_some() && crate::script::location_id(&s.location) == loc)
+                .collect();
+            here.sort_by_key(|s| s.number);
+            let found = here
+                .iter()
+                .find(|s| s.is_night() == scene.is_night())
+                .or(here.first())
+                .and_then(|s| s.tone.as_ref());
+            if found.is_some() {
+                return found;
+            }
+            loc = self.locations.get(&loc)?.parent.clone()?;
+        }
+        None
     }
 
     /// The room tone a location plays: its own when enabled, else the nearest parent's

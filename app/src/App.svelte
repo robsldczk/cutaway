@@ -3,6 +3,7 @@
   import { app } from './lib/app.svelte';
   import { call, inTauri, pickPath } from './lib/bridge';
   import { brand } from './lib/brand';
+  import { fileEnd, fileEnter, fileOver } from './lib/filedrop.svelte';
   import { onKey } from './lib/keys';
   import Header from './components/Header.svelte';
   import SceneRail from './components/SceneRail.svelte';
@@ -18,6 +19,7 @@
   import ShowHome from './components/ShowHome.svelte';
   import Bucket from './components/Bucket.svelte';
   import DragGhost from './components/DragGhost.svelte';
+  import FileSheet from './components/FileSheet.svelte';
   import Options from './pages/Options.svelte';
   import Arrange from './pages/Arrange.svelte';
   import Edit from './pages/Edit.svelte';
@@ -96,13 +98,13 @@
     const audio = paths.filter((p) => AUDIO.test(p));
     for (const s of scripts) await app.method('import_script', { path: s });
     if (!audio.length) return;
-    if (app.page === 'edit') {
-      // onto the timeline: import into the library and place the first sound at the playhead
-      await app.method('import_sounds', { paths: audio, scene: app.sceneId, at_s: +app.pos.toFixed(3) });
-      await app.loadEdit();
-      app.say(`${audio.length} sound${audio.length > 1 ? 's' : ''} imported, placed at the playhead`);
-    } else if (app.page === 'arrange' && app.soundsUi && app.soundsOn) {
-      await app.soundsUi.dropFiles(audio, x, y);
+    if (app.page === 'import' && app.importTab === 'rooms') {
+      // a room has one: the first is its ambience, any others wait among the choices
+      for (const [i, path] of audio.entries()) await app.method('import_ambience', { path, ...(i === 0 ? app.roomPick : {}) }, false);
+      await app.refresh();
+      app.say('Ambience of this room');
+    } else if (filingHere()) {
+      app.filing = { paths: audio, x, y };
     } else if (app.drawer === 'bucket' || (app.page === 'import' && app.importTab === 'sounds')) {
       await app.method('import_sounds', { paths: audio });
       app.say(`${audio.length} sounds added to the library`);
@@ -115,8 +117,15 @@
     }
   }
 
+  /** Pages where a sound from the Finder is filed into a bucket. */
+  const filingHere = () => app.page === 'edit' || (app.page === 'arrange' && app.soundsOn) || (app.page === 'import' && app.importTab === 'sounds');
+
   onMount(() => {
     void app.boot();
+    // the browser tests have no Finder: they call what Tauri's events would
+    if (import.meta.env.DEV) {
+      Object.assign(window, { cutawayFileDrag: { enter: fileEnter, over: fileOver, drop: (paths: string[], x: number, y: number) => { fileEnd(); return dropped(paths, x, y); } } });
+    }
     window.addEventListener('keydown', onKey);
     const el = root;
     el?.addEventListener('wheel', onWheel, { passive: false });
@@ -128,7 +137,14 @@
       });
       void import('@tauri-apps/api/webview').then(async ({ getCurrentWebview }) => {
         unlisten = await getCurrentWebview().onDragDropEvent((ev) => {
-          if (ev.payload.type === 'drop') void dropped(ev.payload.paths, ev.payload.position.x, ev.payload.position.y);
+          const p = ev.payload;
+          if (p.type === 'enter') fileEnter(p.paths);
+          else if (p.type === 'over') fileOver(p.position.x, p.position.y);
+          else if (p.type === 'leave') fileEnd();
+          else if (p.type === 'drop') {
+            fileEnd();
+            void dropped(p.paths, p.position.x, p.position.y);
+          }
         });
       });
     }
@@ -179,6 +195,7 @@
 
   {#if app.toast}<div class="toast" role="status">{app.toast}</div>{/if}
   <DragGhost />
+  <FileSheet />
 </div>
 
 <style>

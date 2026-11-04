@@ -233,8 +233,58 @@ pub(crate) fn set_room(tx: &mut Tx, scene_id: &str, room: &SceneRoom) -> Result<
         damping: finite("damping", room.damping)?.clamp(0.0, 1.0),
         wet: finite("wet", room.wet)?.clamp(0.0, 1.0),
     };
+    // a place is one room, however many scenes happen in it (D97)
+    for mut other in same_place(tx, &scene) {
+        other.room = scene.room;
+        tx.put(&other)?;
+    }
     tx.put(&scene)?;
     Ok(serde_json::to_value(scene.room)?)
+}
+
+/// The other scenes of a scene's location.
+fn same_place(tx: &Tx, scene: &Scene) -> Vec<Scene> {
+    tx.doc()
+        .scenes
+        .values()
+        .filter(|s| s.id != scene.id && s.location == scene.location)
+        .cloned()
+        .collect()
+}
+
+pub(crate) fn set_ambience(
+    tx: &mut Tx,
+    scene_id: &str,
+    night: Option<bool>,
+    tone: &Option<SceneTone>,
+) -> Result<Value> {
+    let scene = tx
+        .doc()
+        .scenes
+        .get(scene_id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("scene", scene_id))?;
+    let tone = checked_tone(tx, tone)?;
+    let mut scenes = same_place(tx, &scene);
+    scenes.push(scene);
+    for mut s in scenes {
+        if night.is_none_or(|n| s.is_night() == n) {
+            s.tone = tone.clone();
+            tx.put(&s)?;
+        }
+    }
+    Ok(serde_json::to_value(&tone)?)
+}
+
+fn checked_tone(tx: &Tx, tone: &Option<SceneTone>) -> Result<Option<SceneTone>> {
+    let Some(t) = tone else { return Ok(None) };
+    if !tx.doc().assets.contains_key(&t.asset_id) {
+        return Err(CoreError::not_found("asset", &t.asset_id));
+    }
+    Ok(Some(SceneTone {
+        asset_id: t.asset_id.clone(),
+        gain_db: finite("gain_db", t.gain_db)?.clamp(TONE_GAIN_MIN_DB, TONE_GAIN_MAX_DB),
+    }))
 }
 
 pub(crate) fn set_voice_wet(tx: &mut Tx, character_id: &str, wet: f64) -> Result<Value> {
@@ -256,18 +306,7 @@ pub(crate) fn set_tone(tx: &mut Tx, scene_id: &str, tone: &Option<SceneTone>) ->
         .get(scene_id)
         .cloned()
         .ok_or_else(|| CoreError::not_found("scene", scene_id))?;
-    scene.tone = match tone {
-        Some(t) => {
-            if !tx.doc().assets.contains_key(&t.asset_id) {
-                return Err(CoreError::not_found("asset", &t.asset_id));
-            }
-            Some(SceneTone {
-                asset_id: t.asset_id.clone(),
-                gain_db: finite("gain_db", t.gain_db)?.clamp(TONE_GAIN_MIN_DB, TONE_GAIN_MAX_DB),
-            })
-        }
-        None => None,
-    };
+    scene.tone = checked_tone(tx, tone)?;
     tx.put(&scene)?;
     Ok(serde_json::to_value(&scene.tone)?)
 }
@@ -288,6 +327,7 @@ mod tests {
         let other = Scene {
             id: "other".into(),
             number: scene.number + 1,
+            location: "OTHER PLACE".into(),
             ..scene.clone()
         };
         let asset = |id: &str, len: f64| -> Asset {
@@ -1042,6 +1082,145 @@ mod tests {
         assert_eq!(bus.doc().scenes["sc"].room, before);
         bus.redo().unwrap();
         assert_eq!(bus.doc().scenes["sc"].room, room);
+    }
+
+    /// A second scene in the same place, at the given time of day.
+    fn twin(bus: &mut CommandBus, time_of_day: &str) -> Scene {
+        let scene = Scene {
+            id: "twin".into(),
+            number: 9,
+            order: vec![],
+            time_of_day: time_of_day.into(),
+            ..bus.doc().scenes["sc"].clone()
+        };
+        let put = scene.clone();
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            tx.put(&put)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        scene
+    }
+
+    fn tone(asset_id: &str, gain_db: f64) -> Option<SceneTone> {
+        Some(SceneTone {
+            asset_id: asset_id.into(),
+            gain_db,
+        })
+    }
+
+    /// Which sound a scene plays under it.
+    fn heard(bus: &CommandBus, id: &str) -> Option<String> {
+        let d = bus.doc();
+        d.room_tone_for(&d.scenes[id]).and_then(|t| t.asset_id)
+    }
+
+    #[test]
+    fn a_place_is_one_room() {
+        let (_d, mut bus) = setup();
+        twin(&mut bus, "");
+        let room = SceneRoom {
+            size: 0.9,
+            damping: 0.1,
+            wet: 0.2,
+        };
+        bus.execute(&Command::SetSceneRoom {
+            scene_id: "sc".into(),
+            room,
+        })
+        .unwrap();
+        assert_eq!(bus.doc().scenes["twin"].room, room, "the same place");
+        assert_ne!(bus.doc().scenes["other"].room, room, "another place");
+    }
+
+    #[test]
+    fn scenes_of_a_place_share_what_any_of_them_has() {
+        let (_d, mut bus) = setup();
+        twin(&mut bus, "");
+        // as an episode from before sharing has it: set on one scene only
+        bus.execute(&Command::SetSceneTone {
+            scene_id: "sc".into(),
+            tone: tone("door", -34.0),
+        })
+        .unwrap();
+        assert_eq!(heard(&bus, "twin").as_deref(), Some("door"));
+        assert_eq!(heard(&bus, "other"), None, "not across places");
+        let d = bus.doc();
+        assert_eq!(d.room_tone_for(&d.scenes["twin"]).unwrap().gain_db, -34.0);
+    }
+
+    #[test]
+    fn one_choice_reaches_every_scene_of_the_place_in_one_step() {
+        let (_d, mut bus) = setup();
+        twin(&mut bus, "");
+        bus.execute(&Command::SetRoomAmbience {
+            scene_id: "twin".into(),
+            night: None,
+            tone: tone("bed", -28.0),
+        })
+        .unwrap();
+        assert_eq!(bus.doc().scenes["sc"].tone, tone("bed", -28.0));
+        assert_eq!(bus.doc().scenes["twin"].tone, tone("bed", -28.0));
+        assert_eq!(bus.doc().scenes["other"].tone, None);
+        bus.undo().unwrap();
+        assert_eq!(bus.doc().scenes["sc"].tone, None);
+        assert_eq!(bus.doc().scenes["twin"].tone, None);
+    }
+
+    #[test]
+    fn night_can_have_its_own_and_falls_back_on_the_day() {
+        let (_d, mut bus) = setup();
+        twin(&mut bus, "Night");
+        bus.execute(&Command::SetRoomAmbience {
+            scene_id: "sc".into(),
+            night: Some(false),
+            tone: tone("door", -28.0),
+        })
+        .unwrap();
+        assert_eq!(heard(&bus, "twin").as_deref(), Some("door"), "optional");
+        bus.execute(&Command::SetRoomAmbience {
+            scene_id: "sc".into(),
+            night: Some(true),
+            tone: tone("bed", -30.0),
+        })
+        .unwrap();
+        assert_eq!(heard(&bus, "twin").as_deref(), Some("bed"));
+        assert_eq!(
+            heard(&bus, "sc").as_deref(),
+            Some("door"),
+            "the day keeps its own"
+        );
+    }
+
+    #[test]
+    fn a_setting_without_an_ambience_plays_its_parents() {
+        let (_d, mut bus) = setup();
+        let inner = Location {
+            id: "loc_other-place".into(),
+            name: "OTHER PLACE".into(),
+            room_tone: Default::default(),
+            description: String::new(),
+            parent: Some("loc_lab".into()),
+        };
+        let outer = Location {
+            id: "loc_lab".into(),
+            name: "LAB".into(),
+            parent: None,
+            ..inner.clone()
+        };
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            tx.put(&inner)?;
+            tx.put(&outer)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        bus.execute(&Command::SetRoomAmbience {
+            scene_id: "sc".into(),
+            night: None,
+            tone: tone("door", -28.0),
+        })
+        .unwrap();
+        assert_eq!(heard(&bus, "other").as_deref(), Some("door"));
     }
 
     #[test]

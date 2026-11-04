@@ -260,8 +260,13 @@ pub struct RoomView {
     /// What the settings come to, from the same curves the audio uses.
     pub decay_s: f64,
     pub predelay_ms: f64,
-    /// The scene's own room tone.
+    /// The ambience the scene plays, its own or what its place shares.
     pub tone: Option<ToneView>,
+    /// It's set on this scene.
+    pub own_tone: bool,
+    /// Scenes of one location are one room.
+    pub location_id: String,
+    pub night: bool,
     /// Without one it plays its location's, if that has any.
     pub place_tone: bool,
     /// Sounds of the scene that play in this room.
@@ -274,9 +279,6 @@ pub struct ToneView {
     pub name: String,
     pub gain_db: f64,
 }
-
-/// Where a scene's room tone starts, the level a location's starts at too.
-const DEFAULT_TONE_DB: f64 = -6.0;
 
 /// The cast with their wet settings, in cast order.
 pub fn voices(svc: &mut Service) -> Result<Value> {
@@ -301,16 +303,21 @@ pub fn set_tone(svc: &mut Service, p: SceneToneP) -> Result<Value> {
     let tone = match p.asset_id {
         Some(id) => {
             let a = crate::sound::ensure_asset_in_doc(svc, &id)?;
-            let was = scene.tone.as_ref().map(|t| t.gain_db);
+            let was = svc
+                .doc()
+                .room_tone_for(&scene)
+                .filter(|t| t.asset_id.is_some())
+                .map(|t| t.gain_db);
             Some(SceneTone {
                 asset_id: a.id,
-                gain_db: p.gain_db.or(was).unwrap_or(DEFAULT_TONE_DB),
+                gain_db: p.gain_db.or(was).unwrap_or(apc_core::DEFAULT_TONE_DB),
             })
         }
         None => None,
     };
-    let r = svc.exec(&Command::SetSceneTone {
+    let r = svc.exec(&Command::SetRoomAmbience {
         scene_id: scene.id,
+        night: p.night,
         tone,
     })?;
     Ok(r.result)
@@ -332,15 +339,17 @@ pub fn rooms(svc: &mut Service) -> Result<Vec<RoomView>> {
                 room: s.room,
                 decay_s: shape.decay_s,
                 predelay_ms: shape.predelay_s * 1000.0,
-                tone: s.tone.as_ref().map(|t| ToneView {
-                    asset_id: t.asset_id.clone(),
-                    name: doc
-                        .assets
-                        .get(&t.asset_id)
-                        .map(|a| crate::views::sound_name(&a.file))
-                        .unwrap_or_default(),
-                    gain_db: t.gain_db,
+                tone: doc.room_tone_for(s).and_then(|t| {
+                    let a = doc.assets.get(t.asset_id.as_ref()?)?;
+                    Some(ToneView {
+                        asset_id: a.id.clone(),
+                        name: crate::views::sound_name(&a.file),
+                        gain_db: t.gain_db,
+                    })
                 }),
+                own_tone: s.tone.is_some(),
+                location_id: apc_core::script::location_id(&s.location),
+                night: s.is_night(),
                 place_tone: doc
                     .room_tone_of(&apc_core::script::location_id(&s.location))
                     .is_some_and(|t| t.enabled),

@@ -423,6 +423,7 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
     let mut list: Vec<&SoundBucket> = doc
         .buckets
         .values()
+        .filter(|b| !crate::studio::is_ambience_bucket(svc, b))
         .filter(|b| match (&sid, &b.character) {
             (None, _) => true,
             // a character's vocals belong to every scene the character speaks in
@@ -469,8 +470,9 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
         // in a show, the files in the bucket's folder are its sounds too
         let loose = crate::studio::is_loose_bucket(svc, b);
         for a in crate::studio::folder_sounds(svc, b) {
-            // a loose sound that matched shows in the bucket that wanted it
-            if loose && matched.claimed(&a.id) {
+            // a loose sound that matched shows in the bucket that wanted it, and an ambience
+            // is a room's, in Import › Rooms
+            if loose && (matched.claimed(&a.id) || a.loops_by_default()) {
                 continue;
             }
             if !sounds.iter().any(|x| x.id == a.id || x.hash == a.hash) {
@@ -508,7 +510,7 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
             })
             .collect();
         out.push(json!({
-            "id": b.id, "name": b.name, "keywords": b.keywords, "scenes": scene_labels(&doc, b), "scene_ids": b.scene_ids,
+            "id": b.id, "name": crate::studio::shown_name(b), "keywords": b.keywords, "scenes": scene_labels(&doc, b), "scene_ids": b.scene_ids,
             "kept": kept, "previews": previews, "length_min_s": b.length_min_s, "length_max_s": b.length_max_s,
             "exclude": b.exclude, "ai_suggested": b.ai_suggested, "folder": b.folder,
             "character": b.character, "color_index": cast(b), "show_wide": show_wide,
@@ -981,6 +983,93 @@ pub fn generate(
         })?;
     }
     Ok(json!({ "kept": ids }))
+}
+
+/// What can loop under a room: the ambience buckets' sounds, those a scene's cues asked for
+/// first, then every other ambience in the library.
+pub fn ambience(svc: &mut Service, scene: Option<&str>) -> Result<Value> {
+    svc.bus.refresh()?;
+    let doc = svc.doc().clone();
+    let sid = scene.and_then(|k| doc.find_scene(k)).map(|s| s.id.clone());
+    let row = |a: &Asset| json!({ "id": a.id, "name": crate::views::sound_name(&a.file), "duration_s": a.duration_s });
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut groups: Vec<(bool, Value)> = Vec::new();
+    let mut buckets: Vec<&SoundBucket> = doc.buckets.values().collect();
+    buckets.sort_by_key(|b| (b.order, b.id.clone()));
+    for b in buckets {
+        if !crate::studio::is_ambience_bucket(svc, b) {
+            continue;
+        }
+        let mut sounds: Vec<Asset> = b
+            .kept
+            .iter()
+            .filter_map(|id| doc.assets.get(id).cloned())
+            .collect();
+        sounds.extend(crate::studio::bucket_sounds(svc, b));
+        let rows: Vec<Value> = sounds
+            .iter()
+            .filter(|a| seen.insert(a.id.clone()))
+            .map(row)
+            .collect();
+        if rows.is_empty() {
+            continue;
+        }
+        let here = sid.as_ref().is_some_and(|s| b.scene_ids.contains(s));
+        groups.push((
+            here,
+            json!({ "name": b.name, "here": here, "sounds": rows }),
+        ));
+    }
+    let local: Vec<Asset> = doc.assets.values().cloned().collect();
+    let rest: Vec<Value> = svc
+        .library()
+        .list(&local)?
+        .iter()
+        .filter(|a| a.loops_by_default() && seen.insert(a.id.clone()))
+        .map(row)
+        .collect();
+    if !rest.is_empty() {
+        groups.push((
+            false,
+            json!({ "name": "Ambience", "here": false, "sounds": rest }),
+        ));
+    }
+    groups.sort_by_key(|(here, _)| !here);
+    Ok(json!(groups
+        .into_iter()
+        .map(|(_, g)| g)
+        .collect::<Vec<_>>()))
+}
+
+/// A file for a room's ambience: into the show's room tone folder, and straight into the room.
+pub fn import_ambience(svc: &mut Service, p: &crate::methods::ImportAmbienceP) -> Result<Value> {
+    let bucket = svc
+        .doc()
+        .buckets
+        .values()
+        .find(|b| {
+            b.folder
+                .as_deref()
+                .is_some_and(|f| f.ends_with("room-tone"))
+        })
+        .map(|b| b.id.clone());
+    let r = crate::sound::import(svc, std::slice::from_ref(&p.path), None, None, None, bucket)?;
+    let id = r["assets"][0]["id"]
+        .as_str()
+        .ok_or_else(|| AppError::Params(format!("no sound in '{}'", p.path)))?
+        .to_string();
+    let Some(scene) = &p.scene else {
+        return Ok(json!({ "asset_id": id }));
+    };
+    crate::sound_edit::set_tone(
+        svc,
+        crate::methods::SceneToneP {
+            scene: scene.clone(),
+            asset_id: Some(id),
+            gain_db: None,
+            night: p.night,
+        },
+    )
 }
 
 /// Does this sound loop? What its bucket says, else what kind of sound it is.

@@ -87,8 +87,8 @@
   });
 
   const mid = $derived.by(() => {
-    const z = zoom > 1.05 ? `zoom ×${zoom.toFixed(1)} · ` : '⌘ scroll to zoom · ';
-    if (app.page === 'arrange') return z + 'drag ⠿ to reorder, drag a pause to stretch or overlap';
+    const z = zoom > 1.05 ? `zoom ×${zoom.toFixed(1)} · ` : '';
+    if (app.page === 'arrange') return z.replace(/ · $/, '');
     if (!cur) return z;
     const n = cur.takes.length;
     const k = (cur.take_index ?? 0) + 1;
@@ -129,13 +129,6 @@
     </button>
   </div>
 </section>
-<div class="hint">
-  {#if app.page === 'options'}Space play · ⇧Space from locator · ← → takes · ↑ ↓ or scroll for lines · I O in/out · F favorite · E edit · ? all keys
-  {:else if app.page === 'arrange' && app.soundOpen}Space play · scroll scrub · drag an edge to trim · ⌥ drag slips · ↑ ↓ on a handle · Esc close
-  {:else if app.page === 'arrange' && app.soundsOn}Space play · scroll scrub · S sounds · ⌥ drag pan · ring or ⇧ scroll loudness · 2× or Enter open · ⌫ remove · ? all keys
-  {:else if app.page === 'arrange'}Space play · ⇧Space from locator · click waveform for locator · I O in/out · ⌥↑ ⌥↓ move · ? all keys
-  {:else}Space play · drag clips (⌥ moves one clip alone) · ⌥← ⌥→ nudge · B bucket · ? all keys{/if}
-</div>
 
 <style>
   .transport {
@@ -215,15 +208,5 @@
     display: flex;
     gap: 2px;
     flex: none;
-  }
-  .hint {
-    position: absolute;
-    left: 50%;
-    bottom: 8px;
-    transform: translateX(-50%);
-    font-size: var(--fs-small);
-    color: var(--text-4);
-    white-space: nowrap;
-    z-index: 10;
   }
 </style>

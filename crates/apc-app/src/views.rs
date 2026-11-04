@@ -143,6 +143,8 @@ pub struct ItemView {
     // spacers
     pub spacer_enabled: bool,
     pub spacer_duration_s: Option<f64>,
+    /// How long it takes: that, or the default for its length.
+    pub spacer_s: f64,
 }
 
 #[derive(Serialize, Clone)]
@@ -539,6 +541,9 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
             room: order.strip(&doc, &takes),
             spacer_enabled: sp.map(|s| s.enabled).unwrap_or(false),
             spacer_duration_s: sp.and_then(|s| s.duration_s),
+            spacer_s: sp
+                .and_then(|s| s.duration_s)
+                .unwrap_or_else(|| apc_core::timeline::default_spacer_s(line.words.len())),
         });
     }
     let loc_id = apc_core::script::location_id(&scene.location);
@@ -785,8 +790,7 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
         .room_tone_for(&scene)
         .filter(|t| t.enabled && t.t1 > t.t0 + 0.05)
         .map(|t| {
-            let period = apc_audio::mixer::loop_period_s(t.t1 - t.t0);
-            let n = (layout.duration_s / period).floor() as usize;
+            let points = apc_audio::mixer::loop_points(t.t1 - t.t0);
             RoomToneBed {
                 source: t
                     .source_id
@@ -800,10 +804,13 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
                             .map(|a| a.file.clone())
                     })
                     .unwrap_or_default(),
-                loop_s: period,
-                own: scene.tone.as_ref().map(|s| s.asset_id.clone()),
+                loop_s: points.period_s,
+                own: t.asset_id.clone(),
                 gain_db: t.gain_db,
-                seams: (1..=n.min(500)).map(|k| k as f64 * period).collect(),
+                seams: (0..500)
+                    .map(|k| points.first_s + k as f64 * points.period_s)
+                    .take_while(|t| *t < layout.duration_s)
+                    .collect(),
             }
         });
     Ok(EditView {

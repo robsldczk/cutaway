@@ -611,6 +611,8 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
     let mut cursor = 0.0;
     let mut pending_spacers = 0.0;
     let mut first_box = true;
+    // no line of any kind yet, pinned or not
+    let mut opening = true;
     // start of the last chained box: a default overlap never reaches back past it
     let mut prev_start = 0.0;
     for item_id in &scene.order {
@@ -624,13 +626,18 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
                 .get(item_id)
                 .and_then(|s| s.duration_s)
                 .unwrap_or_else(|| default_spacer_s(line.words.len()));
-            if enabled && !first_box {
+            // Before the first line there's no pause to widen: a direction there takes its
+            // own time on the timeline, and sounds can sit on it (D94).
+            let start_s = cursor;
+            if enabled && opening {
+                cursor += dur * scene.tightness.max(0.1);
+            } else if enabled && !first_box {
                 pending_spacers += dur;
             }
             items.push(LayoutItem {
                 item_id: item_id.clone(),
                 kind: ItemKind::Spacer,
-                start_s: cursor,
+                start_s,
                 end_s: cursor,
                 gap_before_s: 0.0,
                 gap_overridden: false,
@@ -646,6 +653,7 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
             });
             continue;
         }
+        opening = false;
         let b = doc.boxes.get(item_id).cloned().unwrap_or(BoxState {
             id: item_id.clone(),
             ..Default::default()
@@ -1041,6 +1049,37 @@ pub(crate) mod tests {
         assert!((l.item("a").unwrap().end_s - 1.0).abs() < 1e-9);
         assert!((b.start_s - (1.0 + 0.3 + 0.5)).abs() < 1e-9);
         assert!((l.duration_s - (1.8 + 2.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn directions_before_the_first_line_take_their_own_time() {
+        let (mut d, mut sc) = doc2();
+        let p = Pacing::default();
+        d.lines.insert("h".into(), d.lines["x"].clone());
+        d.lines.get_mut("h").unwrap().id = "h".into();
+        d.spacers.insert(
+            "h".into(),
+            Spacer {
+                id: "h".into(),
+                duration_s: Some(1.5),
+                enabled: true,
+            },
+        );
+        sc.order.insert(0, "h".into());
+        let l = layout_scene(&d, &sc, &p);
+        let h = l.item("h").unwrap();
+        assert_eq!((h.start_s, h.end_s), (0.0, 1.5));
+        assert!((l.item("a").unwrap().start_s - 1.5).abs() < 1e-9);
+
+        // a direction turned off is no break
+        d.spacers.get_mut("h").unwrap().enabled = false;
+        let l = layout_scene(&d, &sc, &p);
+        assert_eq!(l.item("a").unwrap().start_s, 0.0);
+
+        // and a scene of directions alone has a length
+        d.spacers.get_mut("h").unwrap().enabled = true;
+        sc.order = vec!["h".into()];
+        assert_eq!(layout_scene(&d, &sc, &p).duration_s, 1.5);
     }
 
     #[test]

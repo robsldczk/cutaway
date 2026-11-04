@@ -67,7 +67,7 @@
   async function setTone(gain: number) {
     if (!v) return;
     const own = app.edit?.room_tone?.own;
-    if (own) await app.cmd({ cmd: 'set_scene_tone', scene_id: v.scene.id, tone: { asset_id: own, gain_db: gain } });
+    if (own) await app.method('set_scene_tone', { scene: v.scene.id, asset_id: own, gain_db: gain });
     else await app.cmd({ cmd: 'set_room_tone', location_id: v.location_id, tone: { ...v.room_tone, gain_db: gain } });
     await app.loadEdit();
   }

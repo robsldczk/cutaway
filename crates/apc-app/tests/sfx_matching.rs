@@ -137,6 +137,24 @@ fn show_sounds_reach_the_buckets_and_the_clean_up_files_them() {
     let gone = s.call("play_sound", &json!({ "asset_id": "nothing" }));
     assert!(gone.is_err(), "an unknown sound still says so");
 
+    // a sound's name decides its bucket, the same way every time
+    let kitchen = named(&b, "Kitchen")["id"].clone();
+    let radio = named(&b, "Radio")["id"].clone();
+    for _ in 0..3 {
+        let hit = |s: &mut apc_app::Session, n: &str| {
+            call(s, "suggest_bucket", json!({ "name": n }))["bucket_id"].clone()
+        };
+        assert_eq!(
+            hit(&mut s, "/tmp/ES_Kitchen, Kettle, Boil - Epidemic Sound.wav"),
+            kitchen
+        );
+        assert_eq!(hit(&mut s, "ES_Radio, Police, Chatter.wav"), radio);
+        assert!(
+            hit(&mut s, "ES_Zzz, Nothing Known.wav").is_null(),
+            "stays loose"
+        );
+    }
+
     // and it can loop under a scene: it joins the episode for that
     call(
         &mut s,

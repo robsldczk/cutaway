@@ -464,6 +464,150 @@ test('actions: they read between the lines, and a sound dropped on one hangs on 
   await expect.poll(async () => (await list())[0]?.anchor?.line_id).toBe(action);
 });
 
+const fileDrag = (page: Page, call: string, ...args: unknown[]) =>
+  page.evaluate(([c, a]) => (window as unknown as Record<string, Record<string, (...x: unknown[]) => unknown>>).cutawayFileDrag[c as string](...(a as unknown[])), [call, args] as const);
+
+test('finder: drop, Enter: the name guesses the bucket, and the sound is filed and in the scene', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'finder-'));
+  const byName = join(dir, 'Foil wrap crinkle.wav');
+  wav(byName, 1);
+  await open(page);
+  await bucketRow(page);
+  const field = (await page.getByTestId('sounds-field').boundingBox())!;
+  const y = (await page.getByTestId('arrange-row').nth(1).boundingBox())!.y;
+
+  await fileDrag(page, 'drop', [byName], field.x + 330, y + 1);
+  const name = page.getByTestId('file-bucket');
+  await expect(name).toHaveValue('Layer test sounds');
+  await expect(name).toBeFocused();
+  await expect(page.getByTestId('file-say')).toContainText('Into this bucket');
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('file-sheet')).toHaveCount(0);
+  await expect.poll(async () => (await list()).length).toBe(1);
+  expect((await list())[0].anchor).toMatchObject({ edge: 'start' });
+  const kept = await rpc<{ buckets: { id: string; kept: { name: string }[] }[] }>('buckets', {});
+  expect(JSON.stringify(kept.buckets.find((b) => b.id === bucket)?.kept)).toContain('Foil wrap crinkle');
+});
+
+test('finder: a name no bucket has proposes one, and typing another makes that bucket', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'finder-'));
+  const file = join(dir, 'ES_Whistle, Referee, Short - Epidemic Sound.wav');
+  wav(file, 1);
+  await open(page);
+  await bucketRow(page);
+  const c = await centre(page.getByTestId('sounds-field'));
+  await fileDrag(page, 'drop', [file], c.x, c.y);
+  const name = page.getByTestId('file-bucket');
+  await expect(name).toHaveValue('Whistle');
+  await expect(page.getByTestId('file-say')).toContainText('New bucket');
+  await name.fill('Whistles of the test');
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await list()).length).toBe(1);
+  const v = await rpc<{ buckets: { id: string; name: string; kept: unknown[] }[] }>('buckets', {});
+  const made = v.buckets.find((b) => b.name === 'Whistles of the test')!;
+  expect(made.kept).toHaveLength(1);
+  await rpc('delete_bucket', { bucket_id: made.id, confirm: true });
+});
+
+test('finder: a chip picks the bucket, typing narrows the chips, and Esc leaves nothing behind', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'finder-'));
+  const file = join(dir, 'Unheard of.wav');
+  wav(file, 1);
+  await open(page);
+  await bucketRow(page);
+  const c = await centre(page.getByTestId('sounds-field'));
+  const before = await rpc<{ id: string }[]>('list_library');
+
+  // Esc: nothing imported, nothing placed
+  await fileDrag(page, 'drop', [file], c.x, c.y);
+  const name = page.getByTestId('file-bucket');
+  await expect(name).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('file-sheet')).toHaveCount(0);
+  expect(await list()).toHaveLength(0);
+  expect(await rpc<{ id: string }[]>('list_library')).toHaveLength(before.length);
+
+  await fileDrag(page, 'drop', [file], c.x, c.y);
+  await expect(name).toHaveValue('Unheard of');
+  await name.fill('layer te');
+  const chips = page.getByTestId('file-chip');
+  await expect(chips).toHaveCount(1);
+  await chips.first().click();
+  await expect(name).toHaveValue('Layer test sounds');
+  await expect(name).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await list()).length).toBe(1);
+});
+
+test('finder: the Ambience chip gives the sound to the room, and nothing to the timeline', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'finder-'));
+  const file = join(dir, 'Ambience, Empty Hall.wav');
+  wav(file, 2);
+  await open(page);
+  await bucketRow(page);
+  const c = await centre(page.getByTestId('sounds-field'));
+  await fileDrag(page, 'drop', [file], c.x, c.y);
+  const name = page.getByTestId('file-bucket');
+  await expect(name).toHaveValue('Ambience');
+  await expect(page.getByTestId('file-say')).toContainText('Loops under');
+  await page.keyboard.press('Enter');
+  const rooms = () => rpc<{ tone: { name: string; gain_db: number } | null }[]>('scene_rooms');
+  await expect.poll(async () => (await rooms())[0].tone?.name).toContain('Empty Hall');
+  expect((await rooms())[0].tone?.gain_db).toBe(-28);
+  expect(await list()).toHaveLength(0);
+  await rpc('set_scene_tone', { scene: '1' });
+});
+
+test('directions: the ones before the first line take time, and a sound can sit on them', async ({ page }) => {
+  await open(page);
+  const first = (await rpc<{ start_s?: number }[]>('list_lines', { scene: '1' }))[0];
+  expect(first).toBeTruthy();
+  const row = page.getByTestId('action-row').first();
+  await expect(row).toContainText('A kettle whistles');
+  const b = (await row.boundingBox())!;
+  const lineTop = (await page.getByTestId('arrange-row').first().boundingBox())!.y;
+  expect(b.y).toBeLessThan(lineTop);
+  await (await bucketRow(page)).dragTo(row);
+  await expect.poll(async () => (await list()).length).toBe(1);
+  const [s] = await list();
+  expect(s.start_s).toBe(0);
+  expect(s.anchor).toMatchObject({ edge: 'start' });
+});
+
+test('directions: the bottom edge sets how long one takes, and what follows moves with it', async ({ page }) => {
+  const id = await place(0, 0.5);
+  const spoken = (await rpc<{ line_id: string }[]>('list_lines', { scene: '1' }))[0];
+  await rpc('move_sound', { placement_id: id, anchor_line_id: spoken.line_id, offset_s: 0 });
+  await open(page);
+  const before = (await sound(id)).start_s;
+  const row = page.getByTestId('action-row').first();
+  const handle = row.getByTestId('action-len');
+  const was = parseFloat((await handle.textContent()) ?? '');
+  await page.waitForTimeout(400);
+  const steps = await undoSteps();
+  const c = await centre(handle.locator('.asec'));
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 4; i++) await page.mouse.move(c.x, c.y + 13 * i);
+  await expect(handle).toContainText(`${(was + 2).toFixed(1)} s`);
+  await page.mouse.up();
+
+  await expect.poll(undoSteps).toBe(steps + 1);
+  await expect.poll(async () => (await sound(id)).start_s).toBeGreaterThan(before + 1.9);
+
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect.poll(async () => (await sound(id)).start_s).toBeCloseTo(before, 2);
+  await expect(handle).toContainText(`${was.toFixed(1)} s`);
+});
+
+test('nothing along the bottom: no hints under the transport, no word tags on the cards', async ({ page }) => {
+  await open(page);
+  await expect(page.getByText('Cuts a word')).toHaveCount(0);
+  await expect(page.getByText(/all keys/)).toHaveCount(0);
+  await expect(page.getByText(/scroll to zoom/)).toHaveCount(0);
+  await expect(page.getByText(/to reorder/)).toHaveCount(0);
+});
+
 test('depth: sideways is depth, and small vertical motion leaves the timing alone', async ({ page }) => {
   const a = await place(1, 0.1);
   await open(page);
@@ -472,6 +616,50 @@ test('depth: sideways is depth, and small vertical motion leaves the timing alon
   const s = after.find((x) => x.id === a)!;
   expect(s.depth).toBeGreaterThan(0.2);
   expect(s.start_s).toBe(start);
+});
+
+/** Drags a ball onto the next line's start; `hold` keeps ⌥ down. */
+async function ontoLine(page: Page, id: string, hold = false) {
+  const row = (await page.getByTestId('arrange-row').nth(1).boundingBox())!;
+  const c = await centre(ballOf(page, id));
+  await page.mouse.move(c.x, c.y);
+  if (hold) await page.keyboard.down('Alt');
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(c.x, c.y + ((row.y + 1 - c.y) * i) / 8);
+  const tip = await page.getByTestId('sound-tip').textContent();
+  await page.mouse.up();
+  if (hold) await page.keyboard.up('Alt');
+  return tip ?? '';
+}
+
+test('snap: ⌥ lets a sound go exactly where it is put, for one move', async ({ page }) => {
+  const a = await place(0.2, 0.3);
+  await open(page);
+  await page.waitForTimeout(400);
+  const tip = await ontoLine(page, a, true);
+  expect(tip).toContain('Starts at');
+  await expect.poll(async () => (await sound(a)).start_s).toBeGreaterThan(0.2);
+  expect((await sound(a)).anchor).toBeNull();
+  expect((await sound(a)).pan).toBe(0);
+});
+
+test('snap: the button turns it off, and it stays off', async ({ page }) => {
+  const a = await place(0.2, 0.3);
+  await open(page);
+  const snap = page.getByTestId('snap-toggle');
+  await expect(snap).toHaveAttribute('aria-pressed', 'true');
+  await snap.click();
+  await expect(snap).toHaveAttribute('aria-pressed', 'false');
+  await page.waitForTimeout(400);
+  expect(await ontoLine(page, a)).toContain('Starts at');
+  await expect.poll(async () => (await sound(a)).start_s).toBeGreaterThan(0.2);
+  expect((await sound(a)).anchor).toBeNull();
+
+  await page.reload();
+  await expect(page.getByTestId('current-box')).toBeVisible();
+  await page.getByRole('button', { name: 'Arrange', exact: false }).click();
+  await expect(page.getByTestId('snap-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await page.getByTestId('snap-toggle').click();
 });
 
 test('move: a ball snaps to a line, names it, and hangs on it', async ({ page }) => {

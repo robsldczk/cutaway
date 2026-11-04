@@ -25,7 +25,7 @@ pub struct SourceSet {
     rate: u32,
     paths: HashMap<String, PathBuf>,
     readers: Mutex<HashMap<String, AudioReader>>,
-    cache: Mutex<HashMap<ClipKey, Arc<Vec<f32>>>>,
+    cache: Mutex<HashMap<ClipKey, Arc<ClipAudio>>>,
 }
 
 fn resample_linear(x: &[f32], from: u32, to: u32) -> Vec<f32> {
@@ -46,32 +46,84 @@ fn resample_linear(x: &[f32], from: u32, to: u32) -> Vec<f32> {
         .collect()
 }
 
-/// Longest crossfade at a loop's seam.
-const SEAM_S: f64 = 0.5;
+/// Where a loop turns around, as parts of its file. Files often fade in and out, so it stays
+/// clear of both ends: from well before the end back to about the middle (D93).
+const LOOP_TURN_AT: f64 = 0.85;
+const LOOP_BACK_TO: f64 = 0.45;
+/// Longest crossfade at the turn. It's cut from what follows the turn, so the end of the file
+/// sets the limit on a short one.
+const SEAM_MAX_S: f64 = 3.0;
 
-fn seam_s(len_s: f64) -> f64 {
-    SEAM_S.min(len_s / 4.0)
+/// When a loop of a `len_s` file first turns around, and how long each round is after that.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LoopPoints {
+    pub first_s: f64,
+    pub period_s: f64,
 }
 
-/// How often a loop of `len_s` repeats: its seam overlaps, so a little less than its length.
-pub fn loop_period_s(len_s: f64) -> f64 {
-    len_s - seam_s(len_s)
+pub fn loop_points(len_s: f64) -> LoopPoints {
+    LoopPoints {
+        first_s: len_s * LOOP_TURN_AT,
+        period_s: len_s * (LOOP_TURN_AT - LOOP_BACK_TO),
+    }
 }
 
-/// A clip ready to repeat: its tail crossfades into its head, so the seam of a file that was
-/// never cut to loop doesn't click. Equal power: room tone and beds don't correlate.
-fn seamless(x: &[f32], rate: u32) -> Vec<f32> {
-    let n = (seam_s(x.len() as f64 / f64::from(rate.max(1))) * f64::from(rate)) as usize;
-    if n == 0 || x.len() < 2 * n {
-        return x.to_vec();
+/// A clip's samples, at the mix rate. A looping clip plays through to `turn` and then repeats
+/// what follows it.
+#[derive(Debug, PartialEq)]
+pub struct ClipAudio {
+    samples: Vec<f32>,
+    turn: usize,
+}
+
+impl std::ops::Deref for ClipAudio {
+    type Target = Vec<f32>;
+    fn deref(&self) -> &Vec<f32> {
+        &self.samples
     }
-    let period = x.len() - n;
-    let mut y = x[..period].to_vec();
-    for i in 0..n {
-        let t = (i as f64 + 0.5) / n as f64 * std::f64::consts::FRAC_PI_2;
-        y[i] = x[i] * t.sin() as f32 + x[period + i] * t.cos() as f32;
+}
+
+impl ClipAudio {
+    /// A clip that plays once.
+    fn once(samples: Vec<f32>) -> Self {
+        let turn = samples.len();
+        ClipAudio { samples, turn }
     }
-    y
+
+    /// A clip ready to repeat: the file up to the turn, then one round from the middle whose
+    /// start crossfades out of what follows the turn, so going round is continuous. Equal
+    /// power: room tone and beds don't correlate.
+    fn looped(x: &[f32], rate: u32) -> Self {
+        let n = x.len();
+        let turn = (n as f64 * LOOP_TURN_AT) as usize;
+        let back = (n as f64 * LOOP_BACK_TO) as usize;
+        let seam = ((SEAM_MAX_S * f64::from(rate)) as usize).min(n - turn);
+        if seam == 0 || back >= turn {
+            return ClipAudio {
+                samples: x.to_vec(),
+                turn: 0,
+            };
+        }
+        let mut samples = x[..turn].to_vec();
+        samples.extend_from_slice(&x[back..turn]);
+        for i in 0..seam {
+            let t = (i as f64 + 0.5) / seam as f64 * std::f64::consts::FRAC_PI_2;
+            samples[turn + i] = x[back + i] * t.sin() as f32 + x[turn + i] * t.cos() as f32;
+        }
+        ClipAudio { samples, turn }
+    }
+
+    /// The sample for frame `k` of a loop.
+    fn wrapped(&self, k: usize) -> Option<f32> {
+        let n = self.samples.len();
+        if k < n {
+            return self.samples.get(k).copied();
+        }
+        let round = n.checked_sub(self.turn).filter(|r| *r > 0)?;
+        self.samples
+            .get(self.turn + (k - self.turn) % round)
+            .copied()
+    }
 }
 
 /// The gentle roll-off of a far sound: one pole, run over the whole clip from its first sample,
@@ -107,7 +159,7 @@ impl SourceSet {
     }
 
     /// Mono samples of `[src_in, src_out)` at the mix rate, with the clip's roll-off.
-    pub fn clip(&self, c: &ScheduledClip) -> Result<Arc<Vec<f32>>> {
+    pub fn clip(&self, c: &ScheduledClip) -> Result<Arc<ClipAudio>> {
         let hz = c
             .space
             .map(|s| s.lowpass_hz)
@@ -133,9 +185,9 @@ impl SourceSet {
             None => raw,
         };
         let v = Arc::new(if c.loop_len_s.is_some() {
-            seamless(&raw, self.rate)
+            ClipAudio::looped(&raw, self.rate)
         } else {
-            raw
+            ClipAudio::once(raw)
         });
         if let Ok(mut cache) = self.cache.lock() {
             if cache.len() > 512 {
@@ -249,15 +301,15 @@ impl Mixer {
                     break;
                 }
                 let local = k as f64 / rate;
-                let mut idx = k as usize;
-                if c.loop_len_s.is_some() {
-                    idx %= buf.len();
-                } else if idx >= buf.len() {
-                    break;
-                }
-                let v = buf[idx]
-                    * gain
-                    * fade_gain(local, len, c.fade_in_s, c.fade_out_s, c.linear_fade);
+                let idx = k as usize;
+                let sample = if c.loop_len_s.is_some() {
+                    buf.wrapped(idx)
+                } else {
+                    buf.get(idx).copied()
+                };
+                let Some(sample) = sample else { break };
+                let v =
+                    sample * gain * fade_gain(local, len, c.fade_in_s, c.fade_out_s, c.linear_fade);
                 if let Some(out) = dry.as_deref_mut() {
                     let d = v * dry_gain;
                     out[2 * n] += d * gl;
@@ -362,23 +414,43 @@ fn warm_up(
 mod tests {
     use super::*;
 
+    fn around(c: &ClipAudio, k: usize) -> f32 {
+        c.wrapped(k).unwrap()
+    }
+
     #[test]
-    fn a_loop_seam_is_continuous() {
-        // a ramp jumps from 1 back to 0 at the end of the file
+    fn a_loop_turns_around_inside_the_file_and_stays_continuous() {
+        // a ramp: any jump in the audio is a jump in the value
         let rate = 1000;
-        let x: Vec<f32> = (0..4000).map(|i| i as f32 / 4000.0).collect();
-        let y = seamless(&x, rate);
-        assert_eq!(y.len(), 3500, "the seam overlaps by half a second");
-        let jump = (y[0] - y[y.len() - 1]).abs();
-        assert!(jump < 0.02, "wrapping around jumps by {jump}");
-        assert_eq!(y[2000], x[2000], "the middle stays the file");
-        assert!((loop_period_s(4.0) - 3.5).abs() < 1e-9);
+        let x: Vec<f32> = (0..20_000).map(|i| i as f32 / 20_000.0).collect();
+        let c = ClipAudio::looped(&x, rate);
+        let p = loop_points(20.0);
+        let turn = (p.first_s * 1000.0).round() as usize;
+        let round = (p.period_s * 1000.0).round() as usize;
+
+        assert_eq!(turn, 17_000, "clear of the end");
+        assert_eq!(round, 8_000, "back to about the middle");
+        assert_eq!(
+            around(&c, 16_999),
+            x[16_999],
+            "the file plays as it is up to the turn"
+        );
+        // the seam starts on what follows the turn, and ends on what it came back to
+        assert!((around(&c, turn) - x[turn]).abs() < 0.001);
+        assert!((around(&c, turn + 2_999) - x[9_000 + 2_999]).abs() < 0.001);
+        // round after round lands on the same samples, and going round doesn't jump
+        assert_eq!(around(&c, turn + round + 5), around(&c, turn + 5));
+        let last = around(&c, turn + round - 1);
+        assert!((around(&c, turn + round) - last).abs() < 0.001);
     }
 
     #[test]
     fn a_short_loop_has_a_short_seam() {
-        assert!((loop_period_s(1.0) - 0.75).abs() < 1e-9);
-        assert_eq!(seamless(&[], 48000), Vec::<f32>::new());
+        let x = vec![0.5f32; 4000];
+        let c = ClipAudio::looped(&x, 1000);
+        assert!(around(&c, 100_000).abs() > 0.0);
+        let empty = ClipAudio::looped(&[], 48000);
+        assert_eq!(empty.wrapped(10), None);
     }
 
     #[test]

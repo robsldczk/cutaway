@@ -263,6 +263,11 @@ fn free_search_results_dropped_into_buckets_survive_searches() {
     }
 }
 
+/// Spotted ambience stays in the document for Import › Rooms; it doesn't list as a bucket.
+fn spotted_ambience(svc: &apc_app::Service, name: &str) -> bool {
+    svc.doc().buckets.values().any(|b| b.name == name)
+}
+
 fn bucket_named(svc: &mut apc_app::Service, name: &str) -> Option<Value> {
     svc.call("buckets", &json!({})).unwrap()["buckets"]
         .as_array()
@@ -282,12 +287,12 @@ fn spotting_one_scene_makes_its_buckets_and_counts_as_spotted() {
         .call("spot_sound_effects", &json!({ "scene": "1" }))
         .unwrap();
     assert!(r["cues"].as_u64().unwrap() >= 2);
-    assert!(bucket_named(&mut svc, "Lab ambience").is_some());
+    assert!(spotted_ambience(&svc, "Lab ambience"));
     assert!(bucket_named(&mut svc, "Doors and hatches").is_some());
     // so Spot script leaves scene 1 alone and does scene 2
     let r = svc.call("spot_buckets", &json!({})).unwrap();
     assert_eq!(r["scenes"], 1);
-    assert!(bucket_named(&mut svc, "Canteen ambience").is_some());
+    assert!(spotted_ambience(&svc, "Canteen ambience"));
 }
 
 #[test]
@@ -333,10 +338,10 @@ fn re_spotting_a_changed_script_tidies_the_buckets() {
         "the spotted keyword went: {doors}"
     );
     assert!(
-        bucket_named(&mut svc, "Canteen ambience").is_none(),
+        !spotted_ambience(&svc, "Canteen ambience"),
         "nothing kept in it, so it goes"
     );
-    assert!(bucket_named(&mut svc, "Kitchen ambience").is_some());
+    assert!(spotted_ambience(&svc, "Kitchen ambience"));
     let props = bucket_named(&mut svc, "Props").unwrap();
     assert!(props["keywords"]
         .as_array()

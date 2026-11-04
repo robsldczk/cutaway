@@ -269,7 +269,8 @@
   // ---- gestures ----
 
   interface Gesture {
-    kind: 'ball' | 'head' | 'trim' | 'pan' | 'ring';
+    /** `alt`: ⌥ is down and the direction hasn't said yet: sideways pans, up or down moves. */
+    kind: 'ball' | 'head' | 'trim' | 'pan' | 'ring' | 'alt';
     id: string;
     base: SoundState[];
     x0: number;
@@ -366,9 +367,12 @@
     dragging = [id, ...gesture.base.map((b) => b.id).filter((x) => x !== id)];
   }
 
-  function dragTime(g: Gesture, wanted: number) {
+  /** What catches a sound here: nothing with snapping off, or while ⌥ is held. */
+  const caught = (e: { altKey?: boolean }, t: number, y?: number) => (app.soundSnap && !e.altKey ? nearestTarget(targets, t, map, undefined, y) : null);
+
+  function dragTime(g: Gesture, wanted: number, e: MouseEvent) {
     const t = Math.max(0, wanted);
-    const r = timeDrag(g.base, g.id, t, nearestTarget(targets, t, map));
+    const r = timeDrag(g.base, g.id, t, caught(e, t));
     g.time = r.delta;
     g.target = r.target;
     snapY = r.target ? map.y(r.target.t) : null;
@@ -383,6 +387,10 @@
     const dy = p.y - g.y0;
     const grabbed = g.base.find((b) => b.id === g.id);
     if (!grabbed) return;
+    if (g.kind === 'alt') {
+      if (Math.abs(dx) < PRESS_PX && Math.abs(dy) < PRESS_PX) return;
+      g.kind = Math.abs(dx) >= Math.abs(dy) ? 'pan' : 'head';
+    }
     if (g.kind === 'ball') {
       if (!g.moved) {
         if (Math.abs(dx) < PRESS_PX && Math.abs(dy) < PRESS_PX) return;
@@ -397,13 +405,13 @@
       const words = [`${zone(grabbed.depth + g.depth)} · ${Math.round((grabbed.depth + g.depth) * 100)}%`];
       if (g.freeY || Math.abs(dy) > DEADZONE_PX) {
         g.freeY = true;
-        dragTime(g, map.t(p.y - g.grab));
+        dragTime(g, map.t(p.y - g.grab), e);
         words.push(startLabel(g.target, grabbed.start_s + g.time));
       }
       patchAll(g.base, (b) => ({ depth: b.depth + g.depth, start_s: b.start_s + g.time }));
       tip = { x: p.x + 30, y: p.y - 40, text: words.join(' · ') };
     } else if (g.kind === 'head') {
-      dragTime(g, map.t(p.y - g.grab));
+      dragTime(g, map.t(p.y - g.grab), e);
       patchAll(g.base, (b) => ({ start_s: b.start_s + g.time }));
       tip = { x: spineX + 80, y: p.y - 14, text: startLabel(g.target, grabbed.start_s + g.time) };
     } else if (g.kind === 'trim') {
@@ -411,7 +419,7 @@
       if (!s) return;
       const max = s.asset_len_s > 0 && !s.looped ? s.asset_len_s - s.in_s : Infinity;
       const t = map.t(p.y);
-      const target = nearestTarget(targets, t, map);
+      const target = caught(e, t);
       g.len = clamp((target?.t ?? t) - grabbed.start_s, Math.min(MIN_TRIM_S, g.size), max);
       const onTarget = !!target && Math.abs(grabbed.start_s + g.len - target.t) < 0.001;
       snapY = onTarget ? map.y(target.t) : null;
@@ -493,7 +501,7 @@
     }
     const ids = pressSelect(sel, id);
     app.soundSel = ids;
-    begin(e, e.altKey ? 'pan' : 'ball', id, ids);
+    begin(e, e.altKey ? 'alt' : 'ball', id, ids);
   }
 
   function lineDown(e: MouseEvent, s: Sound) {
@@ -845,7 +853,7 @@
   }
 
   onMount(() => {
-    app.soundsUi = { key: onKey, wheel: onWheel, dropFiles, dropOnAction };
+    app.soundsUi = { key: onKey, wheel: onWheel, placeFile, dropOnAction };
     return () => {
       app.soundsUi = null;
       app.soundOpen = null;
@@ -860,11 +868,11 @@
 
   let ghost = $state<{ x: number; y: number; tone: string } | null>(null);
 
-  function dropSpot(e: Pick<MouseEvent, 'clientX' | 'clientY'>) {
+  function dropSpot(e: Pick<MouseEvent, 'clientX' | 'clientY'> & { altKey?: boolean }) {
     const p = point(e);
     if (p.x < spineX - 20 || p.x > rightEdge) return null;
     const t = Math.max(0, map.t(p.y));
-    const target = nearestTarget(targets, t, map, undefined, p.y);
+    const target = caught(e, t, p.y);
     return { p, t: target?.t ?? t, target };
   }
 
@@ -897,15 +905,12 @@
     if (target) void place({ p: { x: (spineX + rightEdge) / 2, y: map.y(target.t) }, t: target.t, target }, s);
   }
 
-  /** Audio dragged in from the Finder: into the library, and placed if it landed by a line.
-   *  It's a sound here, never a recording. */
-  async function dropFiles(paths: string[], x: number, y: number) {
-    const at = on ? dropSpot({ clientX: x, clientY: y }) : null;
-    const r = await app.method<{ assets: { id: string; file: string; duration_s: number }[] }>('import_sounds', { paths });
-    const first = r?.assets[0];
-    if (!first) return;
-    if (at) await place(at, { asset_id: first.id, name: first.file.split('/').pop() ?? '', duration_s: first.duration_s });
-    else app.say(`${r.assets.length} sound${r.assets.length > 1 ? 's' : ''} added to the library`);
+  /** A sound filed from the Finder, at the height it was dropped: over the column or the panel
+   *  it's still the time there that counts. */
+  async function placeFile(s: DragSound, x: number, y: number) {
+    const left = root?.getBoundingClientRect().left ?? 0;
+    const at = on ? dropSpot({ clientX: clamp(x, left + spineX, left + rightEdge), clientY: y }) : null;
+    if (at) await place(at, s);
   }
 
   async function place(at: NonNullable<ReturnType<typeof dropSpot>>, sound: DragSound) {

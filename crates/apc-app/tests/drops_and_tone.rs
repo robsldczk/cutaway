@@ -251,7 +251,7 @@ fn a_scene_loops_its_own_room_tone() {
         "under the whole scene"
     );
 
-    // another scene has its own
+    // another place has its own
     let rooms = f.svc.call("scene_rooms", &json!({})).unwrap();
     assert_eq!(rooms[0]["tone"]["gain_db"], -18.0);
     assert!(rooms[1]["tone"].is_null());
@@ -281,4 +281,73 @@ fn an_unknown_sound_is_no_room_tone() {
         &json!({ "scene": "1", "asset_id": "nothing" }),
     );
     assert!(r.is_err());
+}
+
+#[test]
+fn an_ambience_is_a_rooms_and_not_a_bucket() {
+    let mut f = fix();
+    let tone = f
+        .svc
+        .call(
+            "create_bucket",
+            &json!({ "name": "Canteen ambience", "keywords": ["hum"] }),
+        )
+        .unwrap()["bucket_id"]
+        .clone();
+    let names = |svc: &mut apc_app::Service| -> Vec<String> {
+        svc.call("buckets", &json!({})).unwrap()["buckets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["name"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert!(names(&mut f.svc).contains(&"Drops".to_string()));
+    assert!(!names(&mut f.svc).contains(&"Canteen ambience".to_string()));
+
+    // its sounds are the room's choices
+    let file = f.root.join("hum.wav");
+    wav(&file, 9.0);
+    let r = f
+        .svc
+        .call(
+            "import_sounds",
+            &json!({ "paths": [file.to_string_lossy()], "bucket_id": tone }),
+        )
+        .unwrap();
+    let id = r["assets"][0]["id"].clone();
+    let groups = f.svc.call("ambience_sounds", &json!({})).unwrap();
+    assert_eq!(groups[0]["name"], "Canteen ambience");
+    assert_eq!(groups[0]["sounds"][0]["id"], id);
+}
+
+#[test]
+fn a_dropped_sounds_name_points_to_a_bucket_or_proposes_one() {
+    let mut f = fix();
+    let doors = f
+        .svc
+        .call(
+            "create_bucket",
+            &json!({ "name": "Doors and hatches", "keywords": ["door"] }),
+        )
+        .unwrap()["bucket_id"]
+        .clone();
+    let ask = |svc: &mut apc_app::Service, name: &str| {
+        svc.call("suggest_bucket", &json!({ "name": name }))
+            .unwrap()
+    };
+    let hit = ask(&mut f.svc, "/x/ES_Doors, Wood, Slam - Epidemic Sound.wav");
+    assert_eq!(hit["bucket_id"], doors);
+    assert_eq!(hit["name"], "Doors and hatches");
+
+    for (file, name) in [
+        ("ES_Metal, Impact, Cabinet - Epidemic Sound.wav", "Metal"),
+        ("/x/kettle_whistle_long.wav", "Kettle whistle"),
+        ("strange noise.aif", "Strange noise"),
+    ] {
+        let hit = ask(&mut f.svc, file);
+        assert!(hit["bucket_id"].is_null(), "{file}");
+        assert_eq!(hit["name"], name, "{file}");
+        assert_eq!(ask(&mut f.svc, file), hit, "the same every time");
+    }
 }

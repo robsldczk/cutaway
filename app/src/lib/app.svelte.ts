@@ -4,7 +4,7 @@ import { call, BridgeError } from './bridge';
 import type { DragSound, EditView, ItemView, Job, SceneView, ShowView, SoundFace, SoundKey, SoundPreview, Status } from './types';
 
 export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'dev';
-export type ImportTab = 'files' | 'sounds';
+export type ImportTab = 'files' | 'sounds' | 'rooms';
 export type Tool = 'pointer' | 'split' | 'fade' | 'gain' | 'marquee';
 export type Overlay = null | 'help' | 'editor' | 'settings' | 'history' | 'export';
 export type Drawer = null | 'inspector' | 'unmatched' | 'bucket';
@@ -53,6 +53,15 @@ function storedDev(): boolean {
   }
 }
 
+/** Snapping on Arrange: on unless switched off, remembered per viewer. */
+function storedSoundSnap(): boolean {
+  try {
+    return localStorage.getItem('cutaway.soundSnap') !== '0';
+  } catch {
+    return true;
+  }
+}
+
 /** Follow playhead: on unless switched off, remembered per viewer. */
 function storedFollow(): boolean {
   try {
@@ -85,6 +94,8 @@ class AppState {
   dev = $state(storedDev());
   /** While playing, the current box moves with the playhead (and the view with it); off, it stays put. */
   follow = $state(storedFollow());
+  /** Sounds on Arrange catch on lines, pauses and directions. ⌥ lets go for one drag. */
+  soundSnap = $state(storedSoundSnap());
   status = $state<Status | null>(null);
   view = $state<SceneView | null>(null);
   edit = $state<EditView | null>(null);
@@ -112,6 +123,10 @@ class AppState {
   importBack = $state<Page | null>(null);
   /** Import › Sounds opens its Rooms on the current scene once. */
   roomsAsked = $state(false);
+  /** A sound from the Finder waiting to be told where it lives. */
+  filing = $state<{ paths: string[]; x: number; y: number } | null>(null);
+  /** A scene of the room open in Import › Rooms, and which of its ambiences. */
+  roomPick = $state<{ scene: string; night?: boolean } | null>(null);
   // Edit page (Logic-style control bar)
   editBucket = $state(true);
   editInspector = $state(false);
@@ -141,7 +156,7 @@ class AppState {
    *  the document or the mix. */
   hiddenBuckets = $state<string[]>([]);
   /** Keys and the wheel go to the sounds layer first, while it is on the page. */
-  soundsUi: { key(e: KeyboardEvent): boolean; wheel(e: WheelEvent): boolean; dropFiles(paths: string[], x: number, y: number): Promise<void>; dropOnAction(line_id: string, s: DragSound): void } | null = null;
+  soundsUi: { key(e: KeyboardEvent): boolean; wheel(e: WheelEvent): boolean; placeFile(s: DragSound, x: number, y: number): Promise<void>; dropOnAction(line_id: string, s: DragSound): void } | null = null;
   /** Bucket the full bucket highlights or opens in its side panel. */
   openBucket = $state<string | null>(null);
   /** The buckets' preview player: the sound last auditioned, playing or not. */
@@ -184,6 +199,15 @@ class AppState {
     document.documentElement.dataset.theme = t;
     try {
       localStorage.setItem('cutaway.theme', t);
+    } catch {
+      /* private mode: the choice lasts for this session */
+    }
+  }
+
+  setSoundSnap(on: boolean) {
+    this.soundSnap = on;
+    try {
+      localStorage.setItem('cutaway.soundSnap', on ? '1' : '0');
     } catch {
       /* private mode: the choice lasts for this session */
     }
@@ -441,11 +465,11 @@ class AppState {
     }
   }
 
-  /** The room's home: the Sounds tab of the project setup, at this scene. */
+  /** The room's home: the Rooms tab of the project setup, at this scene. */
   openRooms() {
     this.importBack = this.page;
     this.roomsAsked = true;
-    this.importTab = 'sounds';
+    this.importTab = 'rooms';
     this.setPage('import');
   }
 

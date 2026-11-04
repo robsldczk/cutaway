@@ -340,6 +340,13 @@ pub enum Command {
         scene_id: String,
         room: SceneRoom,
     },
+    /// A room's ambience: every scene of the scene's location, or only those of a time of
+    /// day (`night`). `None` as the tone takes it away.
+    SetRoomAmbience {
+        scene_id: String,
+        night: Option<bool>,
+        tone: Option<SceneTone>,
+    },
     /// How much of the scene's room a character's voice takes.
     SetCharacterWet {
         character_id: String,
@@ -460,6 +467,7 @@ impl Command {
             Command::SetSoundDepth { .. } => "set_sound_depth",
             Command::SlipSound { .. } => "slip_sound",
             Command::SetSceneRoom { .. } => "set_scene_room",
+            Command::SetRoomAmbience { .. } => "set_room_ambience",
             Command::SetCharacterWet { .. } => "set_character_wet",
             Command::SetSceneTone { .. } => "set_scene_tone",
             Command::PutBucket { .. } => "put_bucket",
@@ -1126,6 +1134,11 @@ impl Command {
             } => sounds::set_depth(tx, placement_id, *depth),
             Command::SlipSound { placement_id, in_s } => sounds::slip(tx, placement_id, *in_s),
             Command::SetSceneRoom { scene_id, room } => sounds::set_room(tx, scene_id, room),
+            Command::SetRoomAmbience {
+                scene_id,
+                night,
+                tone,
+            } => sounds::set_ambience(tx, scene_id, *night, tone),
             Command::SetCharacterWet { character_id, wet } => {
                 sounds::set_voice_wet(tx, character_id, *wet)
             }

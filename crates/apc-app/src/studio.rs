@@ -148,6 +148,103 @@ fn words(s: &str) -> Vec<String> {
         .collect()
 }
 
+/// Words that say nothing about what a sound is.
+const NOISE: &[&str] = &[
+    "and", "the", "a", "of", "sfx", "es", "epidemic", "sound", "wav", "mp3", "aif", "aiff", "flac",
+];
+
+/// The name a bucket goes by among the sound effects. Spotting names a location's cues
+/// "Airfield ambience"; a folder of sounds that took that name is still the airfield's.
+pub fn shown_name(b: &SoundBucket) -> String {
+    b.name
+        .strip_suffix(" ambience")
+        .filter(|_| b.folder.as_deref().is_some_and(|f| !f.contains("ambience")))
+        .unwrap_or(&b.name)
+        .to_string()
+}
+
+/// A room's ambience, not sound effects: it's chosen in Import › Rooms, and a bucket of it
+/// doesn't show among the buckets (D92). A bucket only named so keeps its folder's sounds.
+pub fn is_ambience_bucket(svc: &Service, b: &SoundBucket) -> bool {
+    if b.character.is_some() {
+        return false;
+    }
+    if b.folder
+        .as_deref()
+        .is_some_and(|f| f.ends_with("room-tone"))
+    {
+        return true;
+    }
+    b.name.to_lowercase().ends_with(" ambience") && !folder_has_files(svc, b)
+}
+
+/// The bucket a sound's file name points to: the same name always gets the same bucket. Words
+/// of a bucket's name count most, then its folder's, then its keywords'; the file name's
+/// first word, the kind of sound in a library's names, counts double. Ties go to the earlier
+/// bucket.
+pub fn bucket_by_name(svc: &Service, file: &str) -> Option<String> {
+    let stem = std::path::Path::new(file)
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let have: Vec<String> = words(&stem)
+        .into_iter()
+        .filter(|w| !NOISE.contains(&w.as_str()))
+        .collect();
+    let first = have.first().cloned();
+    let score = |text: &str, worth: u32| -> u32 {
+        words(text)
+            .iter()
+            .filter(|w| !NOISE.contains(&w.as_str()) && have.contains(w))
+            .map(|w| worth * if Some(w) == first.as_ref() { 2 } else { 1 })
+            .sum()
+    };
+    let doc = svc.doc();
+    let mut open: Vec<&SoundBucket> = doc
+        .buckets
+        .values()
+        .filter(|b| b.character.is_none() && !is_music(doc, b))
+        .filter(|b| !is_loose_bucket(svc, b) && !is_ambience_bucket(svc, b))
+        .collect();
+    open.sort_by_key(|b| (b.order, b.id.clone()));
+    let mut best: Option<(u32, &SoundBucket)> = None;
+    for b in open {
+        let folder = b.folder.as_deref().and_then(|f| f.rsplit('/').next());
+        let points = score(&shown_name(b), 3)
+            + folder.map_or(0, |f| score(f, 2))
+            + score(&b.keywords.join(" "), 1);
+        if points > 0 && best.is_none_or(|(p, _)| points > p) {
+            best = Some((points, b));
+        }
+    }
+    best.map(|(_, b)| b.id.clone())
+}
+
+/// A name for a new bucket from a sound's file name: the kind of sound a library's name opens
+/// with ("ES_Metal, Impact, Cabinet" → "Metal"), or else its first two words.
+pub fn proposed_bucket(file: &str) -> String {
+    let stem = std::path::Path::new(file)
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let name = stem.strip_prefix("ES_").unwrap_or(&stem);
+    let name = name.split(" - ").next().unwrap_or(name);
+    let kind = match name.split_once(',') {
+        Some((kind, _)) => kind.to_string(),
+        None => name
+            .split(|c: char| c == '_' || c == '-' || c.is_whitespace())
+            .filter(|w| !w.is_empty())
+            .take(2)
+            .collect::<Vec<_>>()
+            .join(" "),
+    };
+    let mut c = kind.trim().chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().chain(c).collect(),
+        None => "Sounds".into(),
+    }
+}
+
 /// The library folder a bucket named `name` belongs in: the folder whose words all appear in
 /// the name, the most specific first ("Doors and hatches" → `doors`). Only the name counts:
 /// one cue's keyword ("chair") would pull a catch-all bucket ("Props") into a folder.

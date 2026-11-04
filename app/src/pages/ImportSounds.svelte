@@ -12,7 +12,6 @@
   import ImportTabs from '../components/ImportTabs.svelte';
   import EpidemicSearch from '../components/EpidemicSearch.svelte';
   import CleanUpSheet from '../components/CleanUpSheet.svelte';
-  import SceneRooms from '../components/SceneRooms.svelte';
   import { drag, dropzone, type DropZone } from '../lib/drag.svelte';
   import type { Bucket, BucketsView, CleanupPlan, Preview, SearchPage, SearchResult } from '../lib/types';
   import { colorOf, solid } from '../theme';
@@ -220,7 +219,6 @@
 </div>
 
 <main class="grid" class:wide={!side} aria-label="Buckets">
-  <SceneRooms buckets={data?.buckets ?? []} />
   {#if found}
     <article class="bk drop" class:over={over === 'new'} class:hint={dragging} aria-label="Drop here for a new bucket" use:dropzone={target('new', null)} data-testid="new-bucket-drop">
       <Icon name="plus" size={18} />

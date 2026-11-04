@@ -153,7 +153,7 @@
     g.moved = true;
     const now: Part = g.part === 'move' && e.altKey ? 'slip' : g.part;
     const wanted = partAt(now, g.base) + (dy / H) * win.len;
-    const snaps = now === 'in' || now === 'out' || now === 'move';
+    const snaps = (now === 'in' || now === 'out' || now === 'move') && app.soundSnap && !e.altKey;
     const r = reshape(now, g.base, wanted, snaps ? nearestIn(targets, wanted, snapTol(win, H)) : null);
     g.now = now;
     g.r = r;
