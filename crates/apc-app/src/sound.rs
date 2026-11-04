@@ -435,8 +435,10 @@ pub fn import(
                 character: None,
                 anchor_line_id: None,
                 anchor_word: None,
+                anchor_edge: Edge::Start,
                 at_s: Some(t),
                 offset_s: 0.0,
+                depth: 0.0,
             },
         )?;
         placed = Some(r);
@@ -480,7 +482,7 @@ pub fn place(svc: &mut Service, p: PlaceSoundP) -> Result<Value> {
         (Some(l), _) => Some(Anchor {
             line_id: l.clone(),
             word: p.anchor_word,
-            edge: Edge::Start,
+            edge: p.anchor_edge,
         }),
         (None, None) => cue.as_ref().and_then(|c| c.anchor.clone()),
         (None, Some(_)) => None,
@@ -499,6 +501,8 @@ pub fn place(svc: &mut Service, p: PlaceSoundP) -> Result<Value> {
         })?),
         _ => None,
     };
+    // a breath or "mh-hm" is cut to the actor's sound: it keeps its short edges
+    let vocal = lane == Lane::Dialogue;
     let placement = Placement {
         id: new_id("pl"),
         scene_id: scene.id.clone(),
@@ -516,11 +520,14 @@ pub fn place(svc: &mut Service, p: PlaceSoundP) -> Result<Value> {
         } else {
             1.0
         },
-        fade_in_s: 0.01,
+        fade_in_s: if vocal { 0.01 } else { 0.02 },
         fade_out_s: 0.05,
         fade_curve: Default::default(),
         gain_db: 0.0,
         muted: false,
+        pan: 0.0,
+        depth: p.depth,
+        auto_fade: !vocal,
     };
     Ok(svc.exec(&Command::PlaceSound { placement })?.result)
 }

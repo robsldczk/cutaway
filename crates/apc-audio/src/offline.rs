@@ -3,19 +3,20 @@
 use std::path::Path;
 
 use crate::error::Result;
-use crate::mixer::{Mixer, SourceSet};
+use crate::mixer::{Renderer, SourceSet};
 use crate::schedule::PlaySchedule;
 
 /// Renders the whole schedule to stereo frames at the source set's rate.
 pub fn render_to_buffer(s: &PlaySchedule, sources: &SourceSet) -> Result<Vec<f32>> {
     sources.preload(s)?;
-    let frames = (s.duration_s * sources.rate() as f64).round() as usize;
+    let frames = (s.end_s() * sources.rate() as f64).round() as usize;
     let mut out = vec![0.0f32; frames * 2];
+    let mut renderer = Renderer::new(s, sources.rate());
     const BLOCK: usize = 4096;
     let mut f = 0usize;
     while f < frames {
         let n = BLOCK.min(frames - f);
-        Mixer::render(s, sources, f as u64, &mut out[2 * f..2 * (f + n)]);
+        renderer.render(s, sources, f as u64, &mut out[2 * f..2 * (f + n)]);
         f += n;
     }
     for v in out.iter_mut() {
@@ -50,6 +51,7 @@ mod tests {
             pan: 0.0,
             linear_fade: false,
             owner: "l".into(),
+            space: None,
         }
     }
 
@@ -77,6 +79,7 @@ mod tests {
                 clip(2.2271, 3.0, 0.99, 0.010),
             ],
             duration_s: 1.99 + 0.7729,
+            ..Default::default()
         };
         let out = render_to_buffer(&s, &set).unwrap();
         let left: Vec<f32> = out.iter().step_by(2).copied().collect();
@@ -90,6 +93,7 @@ mod tests {
         let hard = PlaySchedule {
             clips: vec![clip(0.5013, 1.5013, 0.0, 0.0), clip(2.2271, 3.0, 1.0, 0.0)],
             duration_s: 1.77,
+            ..Default::default()
         };
         let out = render_to_buffer(&hard, &set).unwrap();
         let left: Vec<f32> = out.iter().step_by(2).copied().collect();
@@ -114,6 +118,7 @@ mod tests {
             let s = PlaySchedule {
                 clips: vec![clip(0.5, 1.5, start, 0.0)],
                 duration_s: start + 1.0,
+                ..Default::default()
             };
             let out = render_to_buffer(&s, &set).unwrap();
             let first = (start * 48000.0).round() as usize;
@@ -134,6 +139,7 @@ mod tests {
         let s = PlaySchedule {
             clips: vec![clip(0.0, 1.0, 0.25, 0.005)],
             duration_s: 1.25,
+            ..Default::default()
         };
         let p = dir.path().join("out.wav");
         let len = render_to_wav(&s, &set, &p).unwrap();

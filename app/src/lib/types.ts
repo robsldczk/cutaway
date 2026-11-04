@@ -277,6 +277,26 @@ export interface Anchor {
   edge: 'start' | 'end';
 }
 
+/** The room a scene's sounds share. Each setting runs 0 … 1. */
+export interface SceneRoom {
+  size: number;
+  damping: number;
+  wet: number;
+}
+
+/** A scene's room on the Sounds tab. */
+export interface RoomRow {
+  scene_id: string;
+  number: number;
+  heading: string;
+  place: string;
+  room: SceneRoom;
+  /** What the settings come to, from the curves the audio uses. */
+  decay_s: number;
+  predelay_ms: number;
+  sounds: number;
+}
+
 export interface PlacementView {
   id: string;
   asset_id: string;
@@ -296,6 +316,12 @@ export interface PlacementView {
   fade_curve: 'equal_power' | 'linear';
   gain_db: number;
   muted: boolean;
+  /** -1 left … +1 right. */
+  pan: number;
+  /** 0 close … 1 far. */
+  depth: number;
+  /** The fade out follows the length; setting it by hand turns this off. */
+  auto_fade: boolean;
   /** Asset in point and the asset's length (trim limits). */
   in_s: number;
   asset_len_s: number;

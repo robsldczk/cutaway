@@ -3,7 +3,9 @@ import { app } from './app.svelte';
 
 export function onKey(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null;
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && e.key !== 'Escape') return;
+  // a slider keeps the focus after a drag: its undo must still work, its arrows stay its own
+  const sliderUndo = t instanceof HTMLInputElement && t.type === 'range' && (e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z');
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && e.key !== 'Escape' && !sliderUndo) return;
   if (app.overlay === 'editor') return;
   const k = e.key;
   const mod = e.metaKey || e.ctrlKey;

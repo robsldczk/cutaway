@@ -548,6 +548,21 @@ S6 Migration of Tarmac-EP02
 - [ ] (Rob) Manual: set the backdrop, open Episode 2 in the app, drag an Epidemic result into a folder bucket and check the file lands in `Sound/sfx/<bucket>/`; open the show on a second machine after Syncthing has synced.
 - [ ] (Rob) `.stignore` on each device: `*.cutaway-wal`, `*.cutaway-shm` (and `Cache/media` if the sync volume matters).
 
+### M15: Sounds beside the dialogue, card A: data layer, room bus and depth (Rob, 2026-11-04)
+
+Spec: `tasks/Bokeh · live prototype-html/audioplay-cutter-handover-arrange-sounds.md`. Decisions: D75–D77. Cards B (Arrange UI) and C (opened sound) build on this.
+
+- [x] Clip parameters on the existing sound clip: pan, depth, auto fade; length within the source; anchors as M7 has them.
+- [x] Commands, each one undo step: move/anchor, trim, fades, gain, pan, depth, slip, add with a starting depth, remove. `Batch` for multi-select. Absolute values, so a UI previews locally and commits once.
+- [x] The same in the CLI (`cutaway sfx …`) and over MCP, with `list_sounds` and `scene_rooms` to read back.
+- [x] One room per scene in the document, `set_scene_room`, kept across script versions; schema 2 migration.
+- [x] Room bus in `apc-audio`: FDN reverb (D75), depth macro (D76), `Renderer` shared by the engine and the bounce, warm-up on seek, the tail in both.
+- [x] Room controls on Import › Sounds.
+- [x] Tests: every command with undo and redo, batch, migration (also on a copy of Episode 2 and through its old undo log), determinism, block-size and seek parity, depth monotonicity, scene isolation, CLI/MCP parity.
+- [ ] (Rob) By ear: the depth curve and the default room on real sounds (`depth.rs`, `RoomShape::new`).
+- [ ] (Rob) Update every machine on the Syncthing share before a migrated episode reaches it (D76).
+- [ ] (Rob) Confirm the gain range (D77).
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -601,3 +616,4 @@ S6 Migration of Tarmac-EP02
 - 2026-11-02 `audio-level` merged into `dev` (decision renumbered D69). Checked on a copy of Tarmac-EP02: role offsets −3.4 … +8.9 dB; across the 8 scenes with two or more roles the loudness spread between roles drops from 8.3 dB to 3.0 dB on average; scene 1 plays on the real device under the −1 dBFS ceiling. Playwright `playback.spec.ts` for the Settings switch. check.sh green.
 - 2026-11-03 Editor feel (D70–D72), on `dev` (worktree `../cutaway-dev`, because another session works in the main folder on `director-text`): ⌥ scroll zooms the Edit page; ⇧ scroll flies through lines on Options/Arrange; drags hold their preview until the command lands (no snap-back) and pause rows follow the mouse; undo/redo wait for an in-flight command; **Follow** playhead switch (header + Settings, on by default); lead-in 100 ms / tail 150 ms / edge fade 20 ms around every line, heard and exported, stopping short of other words (Settings sliders, `pacing.*` keys); boxes and word lanes show the script's words timed by what was heard. check.sh green, Playwright 17/17. `gh` not authenticated: no PR opened.
 - 2026-11-04 Branch `sfx-matching` (D74): show sounds reach the buckets by file name (matched when the view is read, nothing stored), a Loose SFX bucket, whole-show buckets in the docked bucket, and Clean up: one AI call proposes folders for loose SFX, a review sheet moves what is confirmed, placed sounds are repointed. On a copy of Episode 2: spotted buckets without sounds 13 → 0, SFX in a bucket 68 → 104 of 104, reachable from the docked bucket 26 → 104. One live clean-up plan on the copy: 23 moves, 13 left loose. Nothing moved in the real pipeline. check.sh green, Playwright 15/18: `editor.spec.ts` (trim handles, Arrange lengthens a clip) and `smoke.spec.ts` (flip takes, delete a word) fail with identical numbers on untouched `dev` at bc2d9e4, so they predate this branch; not investigated here.
+- 2026-11-04 M15 card A done on `feature/1-sound-fx-a-data-layer-room-bus-and-depth` (D75–D77): sound clips gain pan, depth and auto fade; undoable commands for all of it from the UI, CLI and MCP; one room per scene (schema 2) with controls on Import › Sounds; a 16-line FDN room on a shared bus through one `Renderer` in the engine and the bounce, bit-identical from the start and below −80 dB after any seek. Depth 0 → 1 on noise: room against sound −30.8 → −4.8 dB, 12.7 dB quieter, 5× darker. `float_roundtrip` fixes last-bit drift on undo (12 % of full-precision values). A copy of Episode 2 migrated (16 scenes), and undo and redo through its old log came back hash-identical. Fixture tests run and green. check.sh green, Playwright green. Not listened to: the curves wait for Rob's ears.

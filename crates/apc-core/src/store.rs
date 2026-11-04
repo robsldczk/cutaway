@@ -9,7 +9,7 @@ use crate::bus::Change;
 use crate::error::{CoreError, Result};
 use crate::model::{Document, Kind};
 
-pub const EPISODE_SCHEMA_VERSION: i64 = 1;
+pub const EPISODE_SCHEMA_VERSION: i64 = 2;
 
 const EPISODE_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -101,6 +101,28 @@ fn configure(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Adds the fields a row of `kind` doesn't have yet. Existing values are left alone.
+fn fill_missing(conn: &Connection, kind: Kind, fields: &[(&str, Value)]) -> Result<()> {
+    let rows: Vec<(String, String)> = conn
+        .prepare("SELECT id, data FROM entity WHERE kind=?1")?
+        .query_map([kind.as_str()], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for (id, data) in rows {
+        let mut v: Value = serde_json::from_str(&data)?;
+        let Some(obj) = v.as_object_mut() else {
+            continue;
+        };
+        for (key, value) in fields {
+            obj.entry(key.to_string()).or_insert_with(|| value.clone());
+        }
+        conn.execute(
+            "UPDATE entity SET data=?1 WHERE kind=?2 AND id=?3",
+            params![serde_json::to_string(&v)?, kind.as_str(), id],
+        )?;
+    }
+    Ok(())
+}
+
 fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
@@ -156,7 +178,7 @@ impl EpisodeStore {
         let conn = Connection::open(path)?;
         configure(&conn)?;
         conn.execute_batch(EPISODE_SCHEMA)?;
-        let store = EpisodeStore {
+        let mut store = EpisodeStore {
             conn,
             path: path.to_path_buf(),
         };
@@ -170,7 +192,49 @@ impl EpisodeStore {
                 supported: EPISODE_SCHEMA_VERSION,
             });
         }
+        if v < EPISODE_SCHEMA_VERSION {
+            store.migrate()?;
+        }
         Ok(store)
+    }
+
+    /// Brings an older file up to date, all or nothing. Values are written into the rows, so
+    /// retuning a default later doesn't change the sound of a finished scene. The document
+    /// means the same afterwards, so `rev` stays and no undo step is made.
+    fn migrate(&mut self) -> Result<()> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        // another process may have migrated while this one waited for the lock
+        let v: i64 = tx
+            .query_row(
+                "SELECT value FROM meta WHERE key='schema_version'",
+                [],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()?
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        if v < 2 {
+            let room = serde_json::to_value(crate::model::SceneRoom::default())?;
+            fill_missing(&tx, Kind::Scene, &[("room", room)])?;
+            fill_missing(
+                &tx,
+                Kind::Placement,
+                &[
+                    ("pan", Value::from(0.0)),
+                    ("depth", Value::from(0.0)),
+                    // their fades were set by hand or by an older default: they stay
+                    ("auto_fade", Value::from(false)),
+                ],
+            )?;
+        }
+        tx.execute(
+            "INSERT INTO meta(key,value) VALUES('schema_version',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [EPISODE_SCHEMA_VERSION.to_string()],
+        )?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// Opens an episode file only to read it (nothing is written, not even the log files'
@@ -472,4 +536,153 @@ fn write_row(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::SceneRoom;
+    use serde_json::json;
+
+    /// An episode file as version 1 wrote it: rows without the room or the sound fields.
+    fn v1_file(dir: &Path) -> PathBuf {
+        let path = dir.join("old.cutaway");
+        let store = EpisodeStore::create(&path).unwrap();
+        store.set_meta("schema_version", "1").unwrap();
+        store.set_meta("rev", "7").unwrap();
+        let rows = [
+            (
+                "scene",
+                "sc1",
+                json!({ "id": "sc1", "number": 1, "heading": "INT. LAB", "tightness": 0.5 }),
+            ),
+            (
+                "scene",
+                "sc2",
+                json!({ "id": "sc2", "number": 2, "heading": "INT. HALL" }),
+            ),
+            (
+                "placement",
+                "p1",
+                json!({
+                    "id": "p1", "scene_id": "sc1", "asset_id": "a", "lane": "sfx", "len_s": 2.5,
+                    "fade_in_s": 0.01, "fade_out_s": 0.05, "gain_db": -3.0,
+                }),
+            ),
+        ];
+        for (kind, id, data) in rows {
+            store
+                .conn()
+                .execute(
+                    "INSERT INTO entity(kind,id,ord,data) VALUES(?1,?2,0,?3)",
+                    params![kind, id, data.to_string()],
+                )
+                .unwrap();
+        }
+        path
+    }
+
+    fn row(store: &EpisodeStore, kind: &str, id: &str) -> Value {
+        let data: String = store
+            .conn()
+            .query_row(
+                "SELECT data FROM entity WHERE kind=?1 AND id=?2",
+                [kind, id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        serde_json::from_str(&data).unwrap()
+    }
+
+    #[test]
+    fn opening_a_version_1_file_gives_every_scene_a_room() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = EpisodeStore::open(&v1_file(dir.path())).unwrap();
+        assert_eq!(store.meta("schema_version").unwrap().as_deref(), Some("2"));
+        let doc = store.load_document().unwrap();
+        assert_eq!(doc.scenes["sc1"].room, SceneRoom::default());
+        assert_eq!(doc.scenes["sc2"].room, SceneRoom::default());
+        assert_eq!(doc.scenes["sc1"].tightness, 0.5, "the rest stays");
+        // written into the row, so retuning the default later can't change the scene
+        assert_eq!(
+            row(&store, "scene", "sc1")["room"],
+            serde_json::to_value(SceneRoom::default()).unwrap()
+        );
+    }
+
+    #[test]
+    fn migrated_sounds_keep_their_fades_and_level() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = EpisodeStore::open(&v1_file(dir.path())).unwrap();
+        let doc = store.load_document().unwrap();
+        let p = &doc.placements["p1"];
+        assert_eq!((p.pan, p.depth), (0.0, 0.0));
+        assert!(!p.auto_fade, "fades set before auto existed stay as set");
+        assert_eq!((p.fade_in_s, p.fade_out_s), (0.01, 0.05));
+        assert_eq!((p.gain_db, p.len_s), (-3.0, 2.5));
+        assert_eq!(row(&store, "placement", "p1")["depth"], json!(0.0));
+    }
+
+    #[test]
+    fn migrating_is_not_an_edit() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = EpisodeStore::open(&v1_file(dir.path())).unwrap();
+        assert_eq!(store.rev().unwrap(), 7);
+        assert_eq!(store.history(10).unwrap().len(), 0, "no undo step");
+    }
+
+    #[test]
+    fn migrating_runs_once_and_keeps_what_is_there() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = v1_file(dir.path());
+        drop(EpisodeStore::open(&path).unwrap());
+        let room = json!({ "size": 0.9, "damping": 0.1, "wet": 0.2 });
+        {
+            let store = EpisodeStore::open(&path).unwrap();
+            let mut v = row(&store, "scene", "sc1");
+            v["room"] = room.clone();
+            store
+                .conn()
+                .execute(
+                    "UPDATE entity SET data=?1 WHERE kind='scene' AND id='sc1'",
+                    [v.to_string()],
+                )
+                .unwrap();
+            // and a row that already has the field survives a migration too
+            store.set_meta("schema_version", "1").unwrap();
+        }
+        let store = EpisodeStore::open(&path).unwrap();
+        assert_eq!(row(&store, "scene", "sc1")["room"], room);
+    }
+
+    #[test]
+    fn a_file_from_a_newer_version_is_refused_and_left_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("new.cutaway");
+        let store = EpisodeStore::create(&path).unwrap();
+        store.set_meta("schema_version", "99").unwrap();
+        drop(store);
+        assert!(matches!(
+            EpisodeStore::open(&path),
+            Err(CoreError::SchemaVersion { found: 99, .. })
+        ));
+    }
+
+    #[test]
+    fn a_new_file_needs_no_migration() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = EpisodeStore::create(&dir.path().join("n.cutaway")).unwrap();
+        assert_eq!(
+            store.meta("schema_version").unwrap().as_deref(),
+            Some(EPISODE_SCHEMA_VERSION.to_string().as_str())
+        );
+    }
+
+    #[test]
+    fn a_read_only_copy_of_an_old_file_still_loads() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = EpisodeStore::open_read_only(&v1_file(dir.path())).unwrap();
+        let doc = store.load_document().unwrap();
+        assert_eq!(doc.scenes["sc2"].room, SceneRoom::default());
+    }
 }

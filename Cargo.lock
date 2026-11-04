@@ -258,6 +258,7 @@ dependencies = [
  "apc-cli",
  "apc-core",
  "apc-export",
+ "apc-media",
  "clap",
  "rmcp",
  "serde",

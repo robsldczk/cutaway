@@ -1,6 +1,8 @@
 //! Real-time playback (cpal). A feeder thread renders ahead into a ring buffer through the
 //! shared mixer; the device callback only copies samples. Playhead events at ~60 Hz.
 //! The feeder can run the output through the safety limiter (playback leveling).
+//! The room runs in the feeder, never in the device callback; after a seek the `Renderer`
+//! warms it up, so what plays matches the bounce from the first sample.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
@@ -12,7 +14,7 @@ use crossbeam_channel::{unbounded, Receiver, Sender};
 
 use crate::error::{AudioError, Result};
 use crate::level::Limiter;
-use crate::mixer::{Mixer, SourceSet};
+use crate::mixer::{Renderer, SourceSet};
 use crate::schedule::PlaySchedule;
 
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
@@ -165,36 +167,58 @@ impl Engine {
 
     fn spawn_feeder(&self) {
         let sh = self.shared.clone();
+        let rate = self.rate;
         let mut limiter = Limiter::new(self.rate);
-        thread::spawn(move || loop {
-            if Arc::strong_count(&sh) == 1 {
-                break;
-            }
-            if !sh.playing.load(Ordering::Relaxed) {
-                thread::sleep(Duration::from_millis(5));
-                continue;
-            }
-            let content = sh.content.lock().ok().and_then(|c| c.clone());
-            let Some((sched, sources)) = content else {
-                thread::sleep(Duration::from_millis(5));
-                continue;
-            };
-            let gen = sh.generation.load(Ordering::Relaxed);
-            let queued = sh.ring.lock().map(|r| r.len() / 2).unwrap_or(0);
-            if queued >= AHEAD_FRAMES {
-                thread::sleep(Duration::from_millis(3));
-                continue;
-            }
-            let start = sh.start_frame.load(Ordering::Relaxed);
-            let written = sh.played.load(Ordering::Relaxed) + queued as u64;
-            let mut block = vec![0.0f32; BLOCK * 2];
-            Mixer::render(&sched, &sources, start + written, &mut block);
-            if sh.limit.load(Ordering::Relaxed) {
-                limiter.process(&mut block);
-            }
-            if sh.generation.load(Ordering::Relaxed) == gen {
-                if let Ok(mut r) = sh.ring.lock() {
-                    r.extend(block);
+        thread::spawn(move || {
+            let mut renderer: Option<(Arc<PlaySchedule>, Renderer)> = None;
+            // The feeder counts its own frames within a generation: `played + queued` reads
+            // two values the device callback changes one after the other, so it can come out
+            // a block short, and frames must reach the room once, in order.
+            let mut seen_gen = None;
+            let mut next_frame = 0u64;
+            loop {
+                if Arc::strong_count(&sh) == 1 {
+                    break;
+                }
+                if !sh.playing.load(Ordering::Relaxed) {
+                    thread::sleep(Duration::from_millis(5));
+                    continue;
+                }
+                let content = sh.content.lock().ok().and_then(|c| c.clone());
+                let Some((sched, sources)) = content else {
+                    thread::sleep(Duration::from_millis(5));
+                    continue;
+                };
+                let gen = sh.generation.load(Ordering::Relaxed);
+                let queued = sh.ring.lock().map(|r| r.len() / 2).unwrap_or(0);
+                if seen_gen != Some(gen) {
+                    seen_gen = Some(gen);
+                    next_frame = sh.start_frame.load(Ordering::Relaxed)
+                        + sh.played.load(Ordering::Relaxed)
+                        + queued as u64;
+                }
+                if queued >= AHEAD_FRAMES {
+                    thread::sleep(Duration::from_millis(3));
+                    continue;
+                }
+                let current = renderer
+                    .as_ref()
+                    .is_some_and(|(s, _)| Arc::ptr_eq(s, &sched));
+                if !current {
+                    renderer = Some((sched.clone(), Renderer::new(&sched, rate)));
+                }
+                let mut block = vec![0.0f32; BLOCK * 2];
+                if let Some((_, r)) = renderer.as_mut() {
+                    r.render(&sched, &sources, next_frame, &mut block);
+                }
+                if sh.limit.load(Ordering::Relaxed) {
+                    limiter.process(&mut block);
+                }
+                if sh.generation.load(Ordering::Relaxed) == gen {
+                    if let Ok(mut r) = sh.ring.lock() {
+                        r.extend(block);
+                        next_frame += BLOCK as u64;
+                    }
                 }
             }
         });
@@ -217,7 +241,7 @@ impl Engine {
                 .content
                 .lock()
                 .ok()
-                .and_then(|c| c.as_ref().map(|(s, _)| s.duration_s))
+                .and_then(|c| c.as_ref().map(|(s, _)| s.end_s()))
                 .unwrap_or(0.0);
             let stop_at = sh.stop_at.lock().ok().and_then(|s| *s).unwrap_or(end);
             if playing && pos >= stop_at {
@@ -263,6 +287,8 @@ impl Engine {
         if let Ok(mut s) = self.shared.stop_at.lock() {
             *s = until_s;
         }
+        // a block the feeder started before the new position was set must not count
+        self.reset_ring();
         self.shared.playing.store(true, Ordering::Relaxed);
     }
 
@@ -362,11 +388,13 @@ mod tests {
             pan: 0.0,
             linear_fade: false,
             owner: "o".into(),
+            space: None,
         };
         engine.load(
             PlaySchedule {
                 clips: vec![clip],
                 duration_s: 1.0,
+                ..Default::default()
             },
             Arc::new(set),
         );
@@ -385,5 +413,61 @@ mod tests {
         assert!(engine.position_s() >= 0.25, "{}", engine.position_s());
         engine.seek(0.5);
         assert!((engine.position_s() - 0.5).abs() < 0.01);
+    }
+
+    /// Playback runs on past the last clip while the room rings out (skips without a device).
+    #[test]
+    fn plays_on_into_the_rooms_tail() {
+        if std::env::var("CI").is_ok() {
+            eprintln!("skipped: no audio device on CI");
+            return;
+        }
+        let Ok(engine) = Engine::start() else {
+            eprintln!("skipped: no output device");
+            return;
+        };
+        let dir = tempfile::tempdir().unwrap();
+        let sr = engine.sample_rate();
+        let noise: Vec<f32> = (0..sr / 10)
+            .map(|i| 0.02 * ((i * 7919 % 101) as f32 / 50.0 - 1.0))
+            .collect();
+        let p = dir.path().join("n.wav");
+        apc_media::wav::write_wav(&p, sr, 1, &noise).unwrap();
+        let mut set = SourceSet::new(sr);
+        set.add("n", p);
+        let clip = ScheduledClip {
+            source_id: "n".into(),
+            src_in: 0.0,
+            src_out: 0.1,
+            start_s: 0.0,
+            gain_db: 0.0,
+            fade_in_s: 0.005,
+            fade_out_s: 0.005,
+            lane: "sfx1".into(),
+            loop_len_s: None,
+            pan: 0.0,
+            linear_fade: false,
+            owner: "o".into(),
+            space: Some(crate::schedule::ClipSpace {
+                dry_gain: 1.0,
+                send_gain: 1.0,
+                lowpass_hz: 20_000.0,
+            }),
+        };
+        engine.load(
+            PlaySchedule {
+                clips: vec![clip],
+                duration_s: 0.1,
+                room: Some(crate::room::RoomShape::new(0.2, 0.5, 0.5)),
+                tail_s: 0.3,
+            },
+            Arc::new(set),
+        );
+        engine.play(0.0, None);
+        std::thread::sleep(Duration::from_millis(250));
+        assert!(engine.is_playing(), "still ringing after the clip's end");
+        std::thread::sleep(Duration::from_millis(350));
+        assert!(!engine.is_playing(), "stops when the tail is over");
+        assert!(engine.position_s() >= 0.35, "{}", engine.position_s());
     }
 }

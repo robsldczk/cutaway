@@ -465,3 +465,65 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - Linking spotted buckets to folders by keyword again: `9b18780` removed that because one keyword pulled a whole folder into the wrong bucket. Per-sound matching gets the sounds without that.
   - Moving without review, or sorting files already in folders: too much change to a shared folder for one AI pass.
 - **Known:** spotted cues are grouped by substring in `category_of`, so "ring" catches *spring* and *whimpering*, and "hum" catches *thump*. Phones holds UFO, Time Spring and turkey cues, and now their sounds too. Not fixed here; changing it needs a re-spot.
+
+### D75 The room reverb: a 16-line FDN in plain Rust (2026-11-04)
+- **Context:** every sound of a scene plays through one room, in the real-time engine and the offline bounce with identical results. Target: a natural tail, no metallic ringing, low CPU, permissive licence. Sound effects are mostly transients (doors, foil, steps), so the first 100 ms of the tail matters as much as the late tail.
+- **Measured** on one click at 48 kHz, three rooms (decay 0.41, 0.74 and 1.73 s asked for), in a throwaway harness outside the repo:
+
+  | | Decay vs asked | Late-tail ringing (p99, ~10 dB is noise) | Echo density at 80 ms (1 = noise) | L/R correlation | CPU |
+  |---|---|---|---|---|---|
+  | **FDN16, modulated (chosen)** | 11–15 % short | 9.9–11.8 dB | 0.66–0.92 | 0.0 | 57–83 ns/frame |
+  | fundsp `reverb_stereo` | about 2× long | 9.0–11.7 dB | 0.02–0.49 | 0.42–0.46 | 78 ns/frame |
+  | fundsp `reverb2_stereo` | about 3× long | 9.1–11.3 dB | 0.39–0.74 | 0.39–0.42 | 214 ns/frame |
+  | fundsp `reverb3_stereo` | 2–3× long | 12.9–22.4 dB | 0.89–0.90 | 0.19–0.28 | 50 ns/frame |
+  | Freeverb | 25–50 % long | 12.7–14.0 dB | 0.80–0.86 | 0.0 | 15 ns/frame |
+
+  57–83 ns per frame is under 0.5 % of one core at 48 kHz.
+- **Choice:** our own FDN in `apc-audio/src/room.rs`: 16 lines, Hadamard mix, one-pole damping per line, four input diffusers per side, pre-delay, and a slow drift on each line of about 2.5 cents at most. No new dependency and no licence question.
+- **Why not fundsp** (MIT/Apache, a good library): its tail is as clean as ours, but the first echoes of `reverb_stereo` are sparse, which flutters on transients, and the sides stay correlated. It would also bring about ten crates into the audio path. Its calibration could be fixed; the sparse start could not without changing its graph.
+- **Why not Freeverb:** the comb bank rings measurably more than the FDN on the measure above, and its decay comes from a feedback value rather than a time.
+- **Details that matter:**
+  - The damping pole is the exact one-pole through the wanted DC and Nyquist loss, `(r − 1) / (r + 1)`, always inside the unit circle. Jot's usual approximation gives a pole above 1 in a small dark room, and the loop blows up.
+  - The drift is a function of the absolute frame, so a seek lands on the same modulation as the bounce.
+  - A non-finite sample is dropped at the input, and a tiny constant keeps the feedback out of denormals.
+- **Not done:** this was measured, not listened to. Rob judges the sound by ear; the settings curves are in `RoomShape::new`.
+
+### D76 The room bus: one room per scene, depth as one macro (Rob, 2026-11-04)
+- **Rob:** the sound effects of a scene live in one shared room and go through its reverb on a shared bus. Each scene has its own room, stored in the document, edited in the project setup's Sounds tab. Depth moves a sound two ways at once: dry/wet balance, and placement further back (level and a gentle high roll-off), as one macro that is easy to retune.
+- **Room settings** (`Scene::room`, each 0…1). The default is a small furnished room:
+
+  | Setting | Default | Curve (`RoomShape::new`) |
+  |---|---|---|
+  | size | 0.35 | decay 0.25 … 2.8 s (exponential), pre-delay 2 … 40 ms, line lengths ×0.35 … ×1 |
+  | damping | 0.5 | high decay at 0.85 … 0.2 of the low decay |
+  | wet | 0.5 | linear output level of the room |
+
+- **Starting depth curve** (`depth.rs`, the only place it lives), linear in dB from 0 close to 1 far:
+
+  | | Close | Far |
+  |---|---|---|
+  | level offset (dry and send) | 0 dB | −6 dB |
+  | dry on top of that | 0 dB | −8 dB (so −14 dB in all) |
+  | send on top of that | −20 dB | +4 dB (so −2 dB in all) |
+  | roll-off (one pole, on dry and send) | none | 3 kHz, log between |
+
+  Measured on noise in a room at size 0.6, wet 0.8: the room against the sound goes from −30.8 to −4.8 dB, the sound drops 12.7 dB, and its brightness falls by a factor of five.
+- **Choices the specs left open:**
+  - **What goes through the room:** the `sfx` and `ambience` lanes. Music is outside the story's space, and vocal sounds on a dialogue lane belong with the dialogue (dialogue processing is out of scope). Room tone stays dry. `Placement::in_room` is the one place to change this. `set_sound_depth` keeps a value on the others but says `in_room: false`, so a CLI or MCP user isn't misled.
+  - **Close is not fully dry:** a close sound still sends at −20 dB, because "every sound goes through the room". So existing sounds at depth 0 gain a faint room after the update, about 30 dB under the sound with a typical room. Their direct signal is untouched. Set a scene's wet to 0 for exactly the old sound.
+  - **Depth of existing sounds:** 0, so nothing moves back by itself.
+  - **The room's tail** rings on past the last clip in playback and in the bounce (`PlaySchedule::tail_s`), so a scene with sounds near its end bounces longer by up to the decay time. A scene with no sound in the room is unchanged to the sample. The transport's playhead waits at the scene's end meanwhile.
+  - **Pan and the room:** the send is panned like the dry signal, so a sound's side carries a little into the room. A lane's pan now adds to a clip's instead of replacing it (only a clip with its own pan notices).
+- **Bounce equals playback.** The mixer stays stateless; a `Renderer` owns the room and both clients run it. Output doesn't depend on block size (tested bit for bit). A seek warms the room with the last 1.5 decay times of the send, so playback from anywhere matches the bounce, exactly within that window and below −80 dB beyond it. The roll-off is applied to the whole clip at decode, so it needs no state at all. Playback's leveling and limiter stay playback-only (D69), so that difference remains by design.
+- **File format:** schema 2. Opening an older file writes the defaults into its scene and sound rows in one transaction, with no undo step and no `rev` bump. Written rather than left to serde defaults, so retuning a default later can't change the sound of a finished scene. An older app refuses a schema 2 file. **Syncthing:** every machine on the share needs this version before a migrated file reaches it.
+- **Auto fade.** The prototype and handover §5.6 make only the fade **out** automatic, and only setting the fade out turns it off; the fade in starts at 20 ms. Followed as such. The Edit page's fade drag sends both values, so only a changed fade out counts as set by hand. Older sounds keep their fades with auto off; a new sound on a dialogue lane keeps its short edges.
+- **Anchors:** M7's `Anchor` already covers all three targets, so no new kind: a word (`word`), a line edge (`edge`), and a pause, which is the end of the word before it. That is also how the prototype names it (*After "toxic."*).
+- **Exact undo:** `serde_json` gets `float_roundtrip`. Undo reads the old value back from the log as text, and 12 % of full-precision values came back changed in the last bit (243,103 of 2,000,000 in a gain-range sweep).
+- **Not carried into FCPXML:** depth, the room and clip pan stay in the mix. FCPXML keeps gain and fades; a room has no equivalent there, so a Resolve or Logic session gets the sounds dry and centred. The bounce has everything.
+- **Options not taken:** one room per location (Rob decided per scene); a send for dialogue (out of scope); rendering the room inside the device callback (the feeder already works ahead, and the callback only copies samples).
+
+### D77 Gain range of a sound: the Edit tool keeps its wider range (2026-11-04)
+- **Conflict:** the Arrange brief sets −24 … +6 dB for a sound's gain. The Edit page's gain tool already reaches −40 … +12 dB, and its inspector takes any number, through `update_placement`.
+- **Choice:** `set_sound_gain` clamps to −24 … +6, which is what the UI, CLI and MCP will use for Arrange. The Edit tool stays as it is: the codebase wins (handover §1), and narrowing it would quietly change what an existing control can do. A sound already outside the range keeps its value until a gain command touches it.
+- **For card B:** the loudness ring must cope with a value beyond its ends, as the Edit page can set one. For Rob to confirm, or to narrow Edit to match.
+

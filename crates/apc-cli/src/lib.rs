@@ -215,6 +215,204 @@ pub enum SfxCmd {
         #[arg(long)]
         apply: bool,
     },
+    /// The sounds placed in a scene, with their ids.
+    List {
+        #[arg(long)]
+        scene: Option<String>,
+    },
+    /// Place a bucket or library sound in a scene.
+    Add {
+        asset: String,
+        #[arg(long)]
+        scene: String,
+        /// The bucket it comes from.
+        #[arg(long)]
+        bucket: Option<String>,
+        /// Starting depth, 0 close … 1 far.
+        #[arg(long, default_value_t = 0.0)]
+        depth: f64,
+        /// Anchor to this line …
+        #[arg(long)]
+        line: Option<String>,
+        /// … and word of it …
+        #[arg(long)]
+        word: Option<usize>,
+        /// … at its end (the pause after a word) instead of its start.
+        #[arg(long)]
+        end: bool,
+        /// Free scene time instead of an anchor.
+        #[arg(long, allow_negative_numbers = true)]
+        at: Option<f64>,
+    },
+    /// Move a sound onto an anchor, to free time, or by an offset.
+    Move {
+        id: String,
+        #[arg(long)]
+        line: Option<String>,
+        #[arg(long)]
+        word: Option<usize>,
+        #[arg(long)]
+        end: bool,
+        #[arg(long, allow_negative_numbers = true)]
+        at: Option<f64>,
+        /// Seconds after the anchor or time.
+        #[arg(long, allow_negative_numbers = true)]
+        offset: Option<f64>,
+    },
+    /// Trim a sound's start or end by seconds (positive moves the edge later).
+    Trim {
+        id: String,
+        /// start or end.
+        edge: String,
+        #[arg(allow_negative_numbers = true)]
+        delta: f64,
+    },
+    /// Set a sound's fades. --out turns auto off, --auto hands the fade out back to the length.
+    Fade {
+        id: String,
+        #[arg(long = "in")]
+        fade_in: Option<f64>,
+        #[arg(long = "out")]
+        fade_out: Option<f64>,
+        #[arg(long)]
+        auto: bool,
+    },
+    /// Set a sound's loudness in dB (−24 … +6).
+    Gain {
+        id: String,
+        #[arg(allow_negative_numbers = true)]
+        db: f64,
+    },
+    /// Set a sound's pan (−1 left … +1 right).
+    Pan {
+        id: String,
+        #[arg(allow_negative_numbers = true)]
+        pan: f64,
+    },
+    /// Set how far back a sound sits (0 close … 1 far).
+    Depth { id: String, depth: f64 },
+    /// Slip the audio inside a sound's window: a new source in point.
+    Slip { id: String, in_s: f64 },
+    /// Take a sound off the timeline.
+    Remove { id: String },
+    /// Several edits as one undo step: JSON like
+    /// '[{"op":"gain","placement_id":"pl_1","gain_db":-3},{"op":"depth", ...}]'.
+    Batch { edits: String },
+    /// Each scene's room.
+    Rooms,
+    /// Set a scene's room (each 0 … 1; left out stays).
+    Room {
+        scene: String,
+        #[arg(long)]
+        size: Option<f64>,
+        #[arg(long)]
+        damping: Option<f64>,
+        #[arg(long)]
+        wet: Option<f64>,
+    },
+}
+
+/// The edge of an anchor from the CLI's `--end`.
+fn anchor_edge(end: bool) -> &'static str {
+    if end {
+        "end"
+    } else {
+        "start"
+    }
+}
+
+/// The sound subcommands that are one service call.
+fn sound_call(sess: &mut Session, cmd: &SfxCmd) -> Option<anyhow::Result<Value>> {
+    Some(match cmd {
+        SfxCmd::List { scene } => call(sess, "list_sounds", json!({ "scene": scene })),
+        SfxCmd::Add {
+            asset,
+            scene,
+            bucket,
+            depth,
+            line,
+            word,
+            end,
+            at,
+        } => call(
+            sess,
+            "place_from_bucket",
+            json!({
+                "scene": scene, "asset_id": asset, "bucket_id": bucket, "depth": depth,
+                "anchor_line_id": line, "anchor_word": word, "anchor_edge": anchor_edge(*end),
+                "at_s": at,
+            }),
+        ),
+        SfxCmd::Move {
+            id,
+            line,
+            word,
+            end,
+            at,
+            offset,
+        } => call(
+            sess,
+            "move_sound",
+            json!({
+                "placement_id": id, "anchor_line_id": line, "anchor_word": word,
+                "anchor_edge": anchor_edge(*end), "at_s": at, "offset_s": offset,
+            }),
+        ),
+        SfxCmd::Trim { id, edge, delta } => call(
+            sess,
+            "trim_sound",
+            json!({ "placement_id": id, "edge": edge, "delta_s": delta }),
+        ),
+        SfxCmd::Fade {
+            id,
+            fade_in,
+            fade_out,
+            auto,
+        } => call(
+            sess,
+            "set_sound_fades",
+            json!({
+                "placement_id": id, "fade_in_s": fade_in, "fade_out_s": fade_out,
+                "auto": auto.then_some(true),
+            }),
+        ),
+        SfxCmd::Gain { id, db } => call(
+            sess,
+            "set_sound_gain",
+            json!({ "placement_id": id, "gain_db": db }),
+        ),
+        SfxCmd::Pan { id, pan } => call(
+            sess,
+            "set_sound_pan",
+            json!({ "placement_id": id, "pan": pan }),
+        ),
+        SfxCmd::Depth { id, depth } => call(
+            sess,
+            "set_sound_depth",
+            json!({ "placement_id": id, "depth": depth }),
+        ),
+        SfxCmd::Slip { id, in_s } => call(
+            sess,
+            "slip_sound",
+            json!({ "placement_id": id, "in_s": in_s }),
+        ),
+        SfxCmd::Remove { id } => call(sess, "remove_sound", json!({ "placement_id": id })),
+        SfxCmd::Batch { edits } => serde_json::from_str::<Value>(edits)
+            .context("the edits are not valid JSON")
+            .and_then(|edits| call(sess, "batch_sounds", json!({ "edits": edits }))),
+        SfxCmd::Rooms => call(sess, "scene_rooms", json!({})),
+        SfxCmd::Room {
+            scene,
+            size,
+            damping,
+            wet,
+        } => call(
+            sess,
+            "set_scene_room",
+            json!({ "scene": scene, "size": size, "damping": damping, "wet": wet }),
+        ),
+        _ => return None,
+    })
 }
 
 /// Reads a secret without echo (or the first line of stdin when it isn't a terminal).
@@ -422,6 +620,10 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                     "import_sounds",
                     json!({ "paths": paths.iter().map(|p| s(p)).collect::<Vec<_>>() }),
                 ),
+                Cmd::Sfx { cmd } => match sound_call(&mut sess, cmd) {
+                    Some(r) => r,
+                    None => Err(anyhow!("unknown sound command")),
+                },
                 Cmd::Export {
                     format,
                     scene,

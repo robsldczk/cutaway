@@ -239,6 +239,7 @@ A right-hand glass drawer (B), available on every page.
 
 **Other features:**
 - **Drag in from Finder:** drop files on the bucket to import them into the show library (sorted into folders and tagged), or drop them on a cue to attach them as candidates.
+- *Changed in implementation (D76):* Import › Sounds also holds the **Rooms** section: one row per scene with size, damping and wet. It stays folded until opened, and a slider sends one command on release.
 - **Auditioning:** click to play; Space plays the selected sound; Left/Right steps through candidates. Sounds play loudness-matched, like takes.
 - **Manual editing:** add, rename, retag, merge and delete cues. Duplicates across scenes can be merged into one show-level cue.
 - **Spotting:** "Spot this scene" runs the AI suggestion pass. New cues are marked so you can accept or dismiss them.

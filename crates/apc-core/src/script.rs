@@ -538,6 +538,7 @@ pub fn apply_version(
             order,
             tightness: old.map(|s| s.tightness).unwrap_or(1.0),
             story: crate::story::merge_scene(old.map(|s| &s.story), &sc.story),
+            room: old.map(|s| s.room).unwrap_or_default(),
         })?;
     }
     for s in doc.scenes.values() {

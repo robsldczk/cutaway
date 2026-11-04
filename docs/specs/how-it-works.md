@@ -110,6 +110,7 @@ Rules:
 - **Splice warnings:** flag a splice that lands mid-phrase with little pause or a large pitch jump.
 - **Audition loudness:** integrated LUFS is measured per utterance at ingest and used as a playback offset only, so takes are compared at equal loudness.
   - *Changed in implementation (D69):* scene playback levels per recording (the median take LUFS of each source), not per take, so performances keep their dynamics; take and sound auditions match per item. Leveling and an output safety limiter are on by default (`playback.level`) and never reach bounces or exports.
+- *Changed in implementation (D75, D76):* sound effects and ambience of a scene play through that scene's one room, on a shared reverb bus; each scene has its own room. A sound's depth (0 close … 1 far) moves it towards the room and further back. Playback and the bounce run the same code and match; dialogue, music and room tone never reach the room. The room's tail rings on past the last clip in both.
 - **Format:** export keeps the source sample rate and bit depth.
 
 ## Export

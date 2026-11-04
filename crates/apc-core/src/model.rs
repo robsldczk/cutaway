@@ -199,6 +199,33 @@ pub struct Scene {
     /// What the writers know about the scene (Throughline beat, Fountain synopsis).
     #[serde(default)]
     pub story: SceneStory,
+    /// The room the scene's sounds share (each scene has its own, D76).
+    #[serde(default)]
+    pub room: SceneRoom,
+}
+
+/// The one room all sound effects of a scene play in: they meet on a shared reverb bus, so
+/// they sit in the same space. `apc_audio::room::RoomShape` turns these into a sound.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, schemars::JsonSchema)]
+#[serde(default)]
+pub struct SceneRoom {
+    /// 0 small … 1 large: sets the decay time and the pre-delay.
+    pub size: f64,
+    /// 0 bright … 1 dark: how much faster the highs die away.
+    pub damping: f64,
+    /// 0 dry … 1 full: overall level of the room.
+    pub wet: f64,
+}
+
+impl Default for SceneRoom {
+    /// A small furnished room: present, but no one would call it a hall.
+    fn default() -> Self {
+        SceneRoom {
+            size: 0.35,
+            damping: 0.5,
+            wet: 0.5,
+        }
+    }
 }
 
 /// Story context of a scene, replaced by each script version. Read-only in the app.
@@ -906,8 +933,36 @@ pub struct Placement {
     /// Silent but kept in place (Edit page clip mute).
     #[serde(default)]
     pub muted: bool,
+    /// −1 left … +1 right.
+    #[serde(default)]
+    pub pan: f64,
+    /// 0 close … 1 far: how far back the sound sits in its scene's room.
+    #[serde(default)]
+    pub depth: f64,
+    /// The fade out follows the length (`auto_fade_out_s`). Setting it by hand turns this
+    /// off. Off in projects from before it existed, so their fades stay as they were set.
+    #[serde(default)]
+    pub auto_fade: bool,
 }
 entity!(Placement, Placement, parent = scene_id);
+
+impl Placement {
+    /// The automatic fade out of a sound of this length: short sounds get
+    /// `min(0.3 s, 30 %)`, beds over 8 s a slow 2 s.
+    pub fn auto_fade_out_s(len_s: f64) -> f64 {
+        if len_s > 8.0 {
+            2.0
+        } else {
+            (len_s * 0.3).clamp(0.0, 0.3)
+        }
+    }
+
+    /// Whether the sound plays in the scene's room. Music is outside the story's space and
+    /// vocal sounds belong with the dialogue, so depth means nothing for them (D76).
+    pub fn in_room(&self) -> bool {
+        matches!(self.lane, Lane::Sfx | Lane::Ambience)
+    }
+}
 
 #[derive(
     Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default, schemars::JsonSchema,
