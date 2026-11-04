@@ -653,7 +653,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **An actor's vocal sounds** on a dialogue lane get the same. A take auditioned alone stays dry, so takes compare fairly. Music and room tone stay dry.
 - **This replaces D76's rule that dialogue never touches the room.** The guarantee that's left: a voice at wet 0 bounces exactly as it did, sample for sample.
 - **Every scene now rings out** a little past its last line in playback and the bounce, as scenes with sounds already did. Bounces are per scene, so nothing downstream shifts. FCPXML is unchanged: it carries no room.
-- **Dev › Room mix** holds each voice's wet and each scene's Wet. Wet left Import › Sounds › Rooms; Size and Damping stay there. The transport's read-out still names it, being a read-out, not a control. The Dev tab sits behind the developer switch in Settings.
+- *Superseded by D92:* wet lives in Import › Rooms, not in the Dev tab.
 
 ### D91 Search in the bucket, actions on Arrange (Rob, 2026-11-04)
 - **Search:** a bar on the docked bucket (Arrange and Edit). It narrows this scene's buckets, by sound or bucket name and keywords, and lists matches from the rest of the library under them, up to 30, to play and drag. Esc clears it. Import › Sounds keeps its Epidemic search.
@@ -662,4 +662,56 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Tagging:** drop a sound on the action's row, or beside it in the field, where the row catches at its full height and the tooltip names it. A sound anchors to the action (M7) and follows it. A ball moved there hangs on it the same way.
 - **An action has no time of its own:** several in one pause share an instant unless their spacers are on. So a sound hangs on its action with an offset, at the place in the pause where the row sits, which keeps the ball beside its action. `place_from_bucket` gained `offset_s` for this.
 - **First layout:** the column now takes its place at once, without a glide. An action above the first line would otherwise slide it down each time Arrange opens.
+
+### D92 Import › Rooms, and ambience isn't a bucket (Rob, 2026-11-04)
+- **Rob:** the ambience and its assignment are janky, and a room's ambience shouldn't be a bucket among the SFX. A tab of its own for room setup, less crowded: dry and wet, the ambience (one per room), and how much wet goes into the character tracks.
+- **The tab:** Files, Sounds, Rooms. A list of rooms; one room at a time, with Space (size, damping, wet) and Ambience; the voices beside it, as they go with the character, not the room. It replaces the Rooms panel on Sounds and Dev › Room mix (D90). One room per location: see D97.
+- **Out of the buckets:** `studio::is_ambience_bucket`: the `room-tone` folder's bucket, and spotted "… ambience" buckets with nothing in their folder. Hidden from `buckets`, kept in the document so spotting still knows its cues. Loose ambience leaves Loose SFX too.
+- **A trap in Episode 2:** spotting linked "Airfield ambience" and "Time Spring Command ambience" to `sfx/airfield` and `sfx/time-spring`, folders of real effects. Hiding by name alone would have lost those sounds, so a bucket with files in a folder of its own keeps them and shows as "Airfield".
+- **The choices** (`ambience_sounds`): hidden buckets' sounds, what this scene's cues asked for first, then every other ambience in the library. "Add a file…" brings one into the room tone folder and straight into the room. Every choice plays on the preview player.
+- **Loop chips stay** on bucket rows: D85's rule for a long sound dropped on the canvas is Rob's, and he didn't take it back.
+
+### D93 Loops turn around inside the file (Rob, 2026-11-04)
+- **Rob:** it should loop and crossfade from somewhere in the middle and somewhere not too close to the end. Replaces D86's seam from the file's very end to its very start: files often fade in and out there.
+- **Now:** the file plays to 85 %, then a crossfade of up to 3 s goes back to 45 %, and that stretch repeats. It's cut from what follows the turn, so the last 15 % sets the limit on a short file. The first round is the file itself, unchanged.
+- **For every loop:** room tone and looped sounds, in playback and the bounce. FCPXML still repeats the whole file (D85). The Edit page's seam marks follow.
+
+### D94 Directions before the first line are on the timeline (Rob, 2026-11-04)
+- **Rob:** they're part of the timeline, sounds can be placed there, and they count as break spacers.
+- **Now:** a direction before the first line takes its spacer time from the start of the scene, and the line follows it. Before, the scene began on the first word. A spacer turned off takes none, and tightness applies as to any spacer.
+- **What changes in Episode 2:** scenes grow by their opening directions, about a second each up to 2.5: scene 1 has 8 and scene 9 has 15. Dialogue moves later; anchored sounds move with it; sounds at a free time stay where they are, so they shift against the dialogue.
+- **On Arrange** these rows have real time on the map, so a ball sits beside them and a sound on one starts at its start.
+
+### D95 Filing a sound that comes in from the Finder (Rob, 2026-11-04)
+- **Rob:** drop, and it guesses deterministically where the sound lives or proposes a new bucket. Enter, or correct the name (a new name is a new bucket), or click the right bucket's chip and Enter: it's in, and already in the scene. This replaced a first try with a zone per bucket, which didn't work well.
+- **The sheet** (`FileSheet`) opens where the sound was dropped on Arrange with the layer on, Edit and Import › Sounds. Nothing is imported until Enter; Esc leaves nothing behind. Typing narrows the chips. Several files go to one bucket, and the first goes in the scene.
+- **The guess:** `studio::bucket_by_name`. Words of a bucket's name score 3, its folder's 2, its keywords' 1, and the file's first word, the kind of sound in a library name, counts double. Ties go to the earlier bucket. With no match, `proposed_bucket`: what a library name opens with ("ES_Metal, Impact" → "Metal"), or the first two words. No AI and nothing stored, so the same name always gets the same answer.
+- **In the scene:** on Arrange at the height it was dropped, snapping as any drop does, even over the column or the panel. On Edit at the playhead, as before. The drop rules (D85) apply.
+- **Ambience** is a chip too, and the guess for a file named as one: it goes to the current scene's room, not the timeline.
+- **Not tried by hand:** no OS drag can be sent from a session. The browser tests call what Tauri's drop event calls, through a hook that exists only in dev builds.
+
+### D96 Less on screen (Rob, 2026-11-04)
+- The "Cuts a word" tag is gone from Arrange's cards; the handles still turn amber.
+- The hints under the transport are gone, and the one inside it. The help overlay (?) keeps the keys.
+
+### D97 A place is one room (Rob, 2026-11-04)
+- **Rob:** the base level for an ambience is −28 dB. Locations that are the same share the room tone, with an optional second one for day and night. He shouldn't have to fill everything in by hand. And ambience sounds get a drop zone.
+- **Found:** he'd already set an ambience on eight scenes of Episode 2, with levels by ear. So nothing moves: `Scene.tone` stays, and sharing happens when it's read (`Document::room_tone_for`). A scene without one plays what its location has, for its time of day if set apart, then what the setting it belongs to has (Throughline's parents, so the Situation Room plays the TARMAC hallway's), then the location's room tone. Options: move ambience onto `Location`, cleaner but a migration of his work.
+- **One row per location** in Import › Rooms. Choosing or levelling writes to every scene of the place in one step (`SetRoomAmbience`). The room's size, damping and wet are shared too, which replaces D76's room per scene: `SetSceneRoom` reaches every scene of the location, so the transport's size slider stays in step.
+- **Night:** a scene is night if its time of day says night, evening, dusk or dark. Day and Night tabs show only where a place has both kinds of scene. With no night ambience the night scenes play the day's. "Continuous" and "Later" count as day; a heading doesn't say more.
+- **−28 dB** is where a new ambience starts, and the default for location room tones. Scene 2 of Episode 2 is at −6, the old start, and stays there until Rob moves it.
+- **Drop zone:** a dashed zone in the room's Ambience; the whole Rooms tab takes a drop for the room open. Elsewhere it's the Ambience chip (D95). The first file becomes the ambience; others wait among the choices. Files go in the show's room tone folder.
+
+### D98 A direction's length (Rob, 2026-11-04)
+- **Rob:** change the length of a direction, to fit the timing of its sounds.
+- **Now:** the bottom edge of an action row on Arrange drags, like a pause, with its length beside it. It's the existing spacer (`set_spacer`), so a direction between lines widens that pause, and one before the first line pushes the scene on. Lines and anchored sounds after it follow. One undo step, 0.1 to 30 s, in steps of 0.05 s.
+- **The row's height** follows its time, at the scale of the pause rows, so a long direction looks long.
+- **A direction turned off** turns on when dragged: asking for length means it should take time.
+
+### D99 Snapping off on Arrange (Rob, 2026-11-04)
+- **Rob:** a button and holding ⌥ turn snapping off for sounds on Arrange, to position them precisely.
+- **The button:** Snap in the header, beside Sounds and Follow, remembered per viewer. Off, nothing catches: moves, trims, drops and the opened sound.
+- **⌥ was pan.** Both stay, by direction, the way a plain drag splits depth and time: ⌥ sideways pans, ⌥ up or down moves in time with no snap. Pressed during a move or a trim, it lets go there and then. This changes handover 4, where any ⌥ drag pans.
+- **In the opened view** ⌥ on the edges trims without snapping; ⌥ on the middle still slips.
+- **A sound put down free has no anchor,** so it stays at its time when the lines around it move.
 

@@ -123,6 +123,19 @@ On branch `soundeffects-ui`, from `dev` after cards A and B. D80–D82.
 - Checked on the demo session only, not on a copy of Episode 2.
 - Not listened to: no audio device in the tests.
 
+## Rooms tab, smooth ambience, directions on the timeline, sorting drops (D92–D96, 2026-11-04)
+
+**Built:** Import › Rooms lists one room per location, holding its size, damping, wet and its one ambience (a second for night where a place has both), with the voices' wet beside it. Ambience no longer lists among the SFX buckets. Loops turn around inside the file on a long crossfade. Directions before the first line take time, and sounds can sit on them. Dropping audio from the Finder opens a sheet with the bucket guessed by name: Enter files it and places it. The Cuts a word tag and the hints along the bottom are gone.
+
+**Verified:** Rust tests for the layout, the loop, sorting and hidden ambience; Playwright for the tab and the sheet, with the drop's events called by hand. Not listened to, and no real Finder drag.
+
+**Rob, by ear and by hand:**
+- Scene 2's ambience is at −6, the old start: bring it down in Rooms › Canteen. It reaches scenes 11 and 15 too.
+- Drop a WAV from the Finder beside a line: does the sheet open there, and does Enter land the sound at that spot? Tauri's position is taken as CSS pixels on macOS, unproven until tried.
+- Play past a loop's turn at 85 % of the file: does it glide?
+- Open scene 1 and scene 9: are the opening directions the right length? Their spacers set it.
+- Check any sound placed at a free time before a scene's first line: dialogue moved, it didn't.
+
 ## Bucket search, voices in the room, actions on Arrange (D90, D91, 2026-11-04)
 
 **Built:** a search bar on the docked bucket, over this scene's buckets and the whole library. Each voice takes a little of its scene's room. Dev › Room mix holds each voice's wet and each scene's Wet. Arrange shows every action line in full, and a sound can be tagged to one.

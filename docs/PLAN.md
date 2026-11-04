@@ -632,6 +632,21 @@ Decisions: D90, D91.
 - [x] Arrange shows the action lines between the dialogue, and a sound can snap to one and hang on it.
 - [x] Tests, docs, RUN notes.
 
+### Rooms tab, smooth ambience, directions on the timeline, sorting drops (Rob, 2026-11-04)
+
+Decisions: D92–D99.
+
+- [x] Import › Rooms, its own tab, calmer: a list of rooms, one room's Space, Wet and Ambience, and the voices' wet beside it. Replaces the Rooms panel and Dev › Room mix.
+- [x] Ambience leaves the SFX buckets: "… ambience" and Room tone buckets no longer show there; their sounds are the room's choices, one per room.
+- [x] Loops turn around inside the file: from about 85 % back to about 45 %, on a long crossfade, away from the file's ends.
+- [x] Directions before the first line take time, like break spacers, and sounds can be placed on them.
+- [x] Remove the "Cuts a word" tag and the hints along the bottom.
+- [x] Dropping audio from the Finder: a sheet guesses the bucket or proposes one. Enter files it and puts it in the scene.
+- [x] One room per location: ambience, size, damping and wet shared, with an optional night ambience. New ambience at −28 dB. Drop zones for ambience.
+- [x] A direction's length drags on Arrange.
+- [x] Snap button and ⌥ on Arrange.
+- [x] Tests, docs, RUN notes.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -694,3 +709,4 @@ Decisions: D90, D91.
 - 2026-11-04 ⇧ Space from a selected sound on Arrange (D88). Rooms entered in the real Episode 2 at Rob's request: 16 `set_scene_room` commands with the app closed, rehearsed on a copy, and compared with a backup afterwards: only the 16 scenes' rooms changed.
 - 2026-11-04 Arrange moves evenly (D89): the column's overshoot was two motions adding up, 170 to 260 px past its mark, not a curve. One move now, on one curve, measured frame by frame in a test. The pop lost its overshoot too.
 - 2026-11-04 Bucket search, voices in the room, Room mix in Dev, actions on Arrange (D90, D91). Each voice now takes a little of its scene's room, 0.25 by default, and every scene rings out a little past its last line. Wet moved to Dev › Room mix. Actions read in full between the cards and take sounds. Not listened to: the voice send is Rob's to judge.
+- 2026-11-04 Rooms tab, smooth ambience, directions on the timeline, sorting drops (D92–D96). Ambience leaves the SFX buckets for Import › Rooms, one per room. Loops turn around from 85 % to 45 % on a crossfade of up to 3 s. Directions before the first line take time, so Episode 2's scenes grow. A Finder drop opens a sheet with the bucket guessed by name: Enter files it and places it. Same locations share a room and its ambience (D97), new ambience starts at −28 dB, and ambience has its own drop zones. The Cuts a word tag and the hints are gone. A real Finder drag and the loop by ear wait for Rob.
