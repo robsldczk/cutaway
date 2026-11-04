@@ -471,6 +471,28 @@ impl ShowLibrary {
             .collect()
     }
 
+    /// The files straight in a folder, not in its subfolders (`sfx`: the loose sounds).
+    pub fn direct(&self, folder: &str) -> Vec<&Entry> {
+        let folder = folder.trim_matches('/');
+        self.entries
+            .iter()
+            .filter(|e| e.rel.rsplit_once('/').map(|(d, _)| d) == Some(folder))
+            .collect()
+    }
+
+    /// The sound effects: every file under `sfx/`.
+    pub fn sfx_entries(&self) -> Vec<&Entry> {
+        let prefix = format!("{}/", self.sfx);
+        self.entries
+            .iter()
+            .filter(|e| e.rel.starts_with(&prefix))
+            .collect()
+    }
+
+    pub fn has_rel(&self, rel: &str) -> bool {
+        self.entries.iter().any(|e| e.rel == rel)
+    }
+
     /// The bucket folders: first-level folders of `sfx/` and `music/`, without track stems.
     pub fn folders(&self) -> Vec<BucketFolder> {
         let mut out = Vec::new();
@@ -587,6 +609,60 @@ impl ShowLibrary {
         Ok(())
     }
 
+    /// Moves a loose sound effect into a folder of `sfx/` (the clean up, D74). Only a rename:
+    /// the content, and so the sound's id and metadata, stay. Never overwrites. Returns the
+    /// new path under `Sound/`.
+    pub fn move_loose(&mut self, rel: &str, folder: &str) -> Result<String> {
+        let folder = folder.trim_matches('/');
+        let in_sfx = folder.strip_prefix(&format!("{}/", self.sfx));
+        if !in_sfx.is_some_and(|f| !f.is_empty() && f != ".." && f != "." && !f.contains('/')) {
+            return Err(SoundError::Invalid(format!(
+                "{folder} is not a folder of {}",
+                self.sfx
+            )));
+        }
+        if rel.rsplit_once('/').map(|(d, _)| d) != Some(self.sfx.as_str()) {
+            return Err(SoundError::Invalid(format!("{rel} is not a loose sound")));
+        }
+        let ix = self
+            .index
+            .files
+            .get(rel)
+            .cloned()
+            .ok_or_else(|| SoundError::Invalid(format!("{rel} is not in the library")))?;
+        let name = rel.rsplit('/').next().unwrap_or(rel);
+        let to = format!("{folder}/{name}");
+        let dest = self.root.join(&to);
+        if dest.exists() {
+            return Err(SoundError::Invalid(format!("{to} already exists")));
+        }
+        std::fs::create_dir_all(self.root.join(folder))?;
+        std::fs::rename(self.root.join(rel), &dest)?;
+        self.index.files.remove(rel);
+        self.index.files.insert(to.clone(), ix.clone());
+        let entry = self.entry(&to, &ix);
+        self.entries.retain(|e| e.rel != rel);
+        self.entries.push(entry);
+        self.save_index();
+        Ok(to)
+    }
+
+    /// Keeps what a clean up moved in `Sound/Cutaway/moves/`, one file per run so two
+    /// machines can't conflict, as the way back. `stamp` names the file.
+    pub fn log_moves(&self, stamp: &str, moves: &[(String, String)]) -> Result<PathBuf> {
+        let dir = self.root.join("Cutaway").join("moves");
+        std::fs::create_dir_all(&dir)?;
+        let list: Vec<serde_json::Value> = moves
+            .iter()
+            .map(|(from, to)| serde_json::json!({ "from": from, "to": to }))
+            .collect();
+        let json = serde_json::to_string_pretty(&serde_json::json!({ "moves": list }))
+            .map_err(|e| SoundError::Invalid(e.to_string()))?;
+        let file = dir.join(format!("{stamp}.json"));
+        write_atomic(&file, json.as_bytes())?;
+        Ok(file)
+    }
+
     /// Moves every copy of a sound to `Sound/Cutaway/Trash/`.
     pub fn delete(&mut self, id: &str) -> Result<()> {
         let rels: Vec<String> = self
@@ -669,6 +745,61 @@ mod tests {
             100,
         );
         Show::create(&root, None).unwrap()
+    }
+
+    #[test]
+    fn a_loose_sound_moves_into_a_folder_and_stays_the_same_sound() {
+        let dir = tempfile::tempdir().unwrap();
+        let show = show(dir.path());
+        let local = dir.path().join("local");
+        let (mut lib, _) = ShowLibrary::open_with(&show, &local).unwrap();
+        let rel = "sfx/ES_Ambience, Lakeside, Night - Epidemic Sound.wav";
+        let id = lib
+            .entries()
+            .iter()
+            .find(|e| e.rel == rel)
+            .unwrap()
+            .asset
+            .id
+            .clone();
+        let to = lib.move_loose(rel, "sfx/outdoors").unwrap();
+        assert_eq!(
+            to,
+            "sfx/outdoors/ES_Ambience, Lakeside, Night - Epidemic Sound.wav"
+        );
+        assert!(lib.path_of(&to).exists() && !lib.path_of(rel).exists());
+        assert_eq!(
+            lib.by_id(&id).unwrap().rel,
+            to,
+            "the id comes from the content"
+        );
+        assert!(lib.direct("sfx").is_empty());
+        // the index moved with it: nothing is hashed again
+        assert_eq!(lib.scan().unwrap().hashed, 0);
+    }
+
+    #[test]
+    fn a_move_stays_inside_sfx_and_never_overwrites() {
+        let dir = tempfile::tempdir().unwrap();
+        let show = show(dir.path());
+        let local = dir.path().join("local");
+        let (mut lib, _) = ShowLibrary::open_with(&show, &local).unwrap();
+        let rel = "sfx/ES_Ambience, Lakeside, Night - Epidemic Sound.wav";
+        for bad in ["music/Stings", "sfx/..", "sfx/a/b", "sfx", "../x"] {
+            assert!(lib.move_loose(rel, bad).is_err(), "{bad}");
+        }
+        assert!(lib
+            .move_loose(
+                "sfx/doors/ES_Doors, Wood, Slam - Epidemic Sound.wav",
+                "sfx/x"
+            )
+            .is_err());
+        wav(
+            &lib.path_of("sfx/doors/ES_Ambience, Lakeside, Night - Epidemic Sound.wav"),
+            100,
+        );
+        assert!(lib.move_loose(rel, "sfx/doors").is_err());
+        assert!(lib.path_of(rel).exists(), "a refused move leaves the file");
     }
 
     #[test]

@@ -4,6 +4,7 @@
 pub mod epidemic;
 pub mod error;
 pub mod library;
+pub mod matching;
 pub mod providers;
 pub mod secrets;
 pub mod show_library;
