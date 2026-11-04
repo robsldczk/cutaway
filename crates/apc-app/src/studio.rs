@@ -1,7 +1,7 @@
 //! Studio mode for an open episode (D64–D66): the lock file and sync warnings of an episode
 //! in a shared pipeline, and buckets as folders of the show's library.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
@@ -12,13 +12,18 @@ use apc_core::ids::new_id;
 use apc_core::project::{EpisodePaths, SHOW_PREFIX};
 use apc_core::show::is_conflict_copy;
 use apc_core::*;
-use apc_sound::show_library::{bucket_name, BucketFolder};
+use apc_sound::matching::{best, SoundWords};
+use apc_sound::show_library::{bucket_name, BucketFolder, Entry};
 
 use crate::error::Result;
 use crate::service::Service;
 
 /// A lock older than this is a leftover (a crash, a machine that went to sleep).
 const LOCK_STALE_H: i64 = 12;
+/// The bucket of the sounds straight in `sfx/`.
+pub const LOOSE_BUCKET: &str = "Loose SFX";
+/// An ambience cue only takes a bed this long, not a one-shot that shares a word (D40).
+const AMBIENCE_MIN_S: f64 = 10.0;
 
 #[derive(Serialize, Deserialize)]
 struct Lock {
@@ -206,14 +211,11 @@ pub fn link_folders(svc: &mut Service) -> Result<usize> {
             });
         }
         let mut order = doc.buckets.len() as u32;
-        for f in &folders {
-            if taken.contains(&f.rel) {
-                continue;
-            }
+        let mut add = |name: String, keywords: Vec<String>, folder: String| {
             planned.push(SoundBucket {
                 id: new_id("bk"),
-                name: bucket_name(&f.name),
-                keywords: vec![f.name.replace(['-', '_'], " ").to_lowercase()],
+                name,
+                keywords,
                 scene_ids: vec![],
                 cue_ids: vec![],
                 kept: vec![],
@@ -226,9 +228,20 @@ pub fn link_folders(svc: &mut Service) -> Result<usize> {
                 order,
                 character: None,
                 search_offset: 0,
-                folder: Some(f.rel.clone()),
+                folder: Some(folder),
             });
             order += 1;
+        };
+        for f in &folders {
+            if !taken.contains(&f.rel) {
+                let keyword = f.name.replace(['-', '_'], " ").to_lowercase();
+                add(bucket_name(&f.name), vec![keyword], f.rel.clone());
+            }
+        }
+        // sounds straight in sfx/ have no folder of their own: they share one bucket
+        let loose = l.loose_folder(false);
+        if !taken.contains(&loose) && !l.direct(&loose).is_empty() {
+            add(LOOSE_BUCKET.to_string(), vec![], loose);
         }
         (folders.len(), planned)
     };
@@ -252,17 +265,198 @@ pub fn link_folders(svc: &mut Service) -> Result<usize> {
     Ok(n)
 }
 
-/// The sounds in a bucket's folder, without those taken out in this episode.
+/// The sounds in a bucket's folder, without those taken out in this episode. The bucket of
+/// `sfx/` itself holds the loose sounds, not the whole library.
 pub fn folder_sounds(svc: &Service, b: &SoundBucket) -> Vec<Asset> {
     let (Some(f), Some(lib)) = (&b.folder, &svc.show_lib) else {
         return Vec::new();
     };
-    lib.lock()
-        .map(|l| l.in_folder(f))
-        .unwrap_or_default()
+    let Ok(l) = lib.lock() else {
+        return Vec::new();
+    };
+    let sounds = if *f == l.loose_folder(false) {
+        l.direct(f).into_iter().map(|e| e.asset.clone()).collect()
+    } else {
+        l.in_folder(f)
+    };
+    sounds
         .into_iter()
         .filter(|a| !b.dismissed.contains(&a.id))
         .collect()
+}
+
+/// Is this the bucket of the loose sounds?
+pub fn is_loose_bucket(svc: &Service, b: &SoundBucket) -> bool {
+    match (&b.folder, &svc.show_lib) {
+        (Some(f), Some(lib)) => lib.lock().is_ok_and(|l| *f == l.loose_folder(false)),
+        _ => false,
+    }
+}
+
+/// What file-name matching adds to the buckets (D74). Worked out when asked, never stored:
+/// the pipeline's files change under the episode, and so would a stored list.
+#[derive(Default)]
+pub struct Matches {
+    by_bucket: BTreeMap<String, Vec<Asset>>,
+    /// Every sound some bucket matched, in any scene.
+    claimed: BTreeSet<String>,
+}
+
+impl Matches {
+    pub fn of(&self, bucket_id: &str) -> &[Asset] {
+        self.by_bucket
+            .get(bucket_id)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+    }
+
+    pub fn claimed(&self, asset_id: &str) -> bool {
+        self.claimed.contains(asset_id)
+    }
+}
+
+/// What one bucket asks for: a query per cue (its tags, or failing those its description)
+/// and whether that cue is an ambience. Without cues, a query per keyword.
+fn queries(doc: &Document, b: &SoundBucket, scene: Option<&str>) -> Vec<(Vec<String>, bool)> {
+    if b.cue_ids.is_empty() && !b.ai_suggested {
+        return b
+            .keywords
+            .iter()
+            .map(|k| (vec![k.clone()], false))
+            .collect();
+    }
+    b.cue_ids
+        .iter()
+        .filter_map(|id| doc.cues.get(id))
+        .filter(|c| scene.is_none_or(|s| c.scene_id == s))
+        .map(|c| {
+            let tags = if c.tags.is_empty() {
+                c.description.split_whitespace().map(String::from).collect()
+            } else {
+                c.tags.clone()
+            };
+            (tags, c.cue_type == CueType::Ambience)
+        })
+        .collect()
+}
+
+/// Can this sound be in this bucket at all (its folder's files are there anyway)?
+fn candidate(b: &SoundBucket, e: &Entry, words: &SoundWords) -> bool {
+    let own = b
+        .folder
+        .as_ref()
+        .is_some_and(|f| e.rel.starts_with(&format!("{f}/")));
+    let d = e.asset.duration_s;
+    !own && !b.kept.contains(&e.asset.id)
+        && !b.dismissed.contains(&e.asset.id)
+        && b.length_min_s.is_none_or(|m| d >= m)
+        && b.length_max_s.is_none_or(|m| d <= m)
+        && !b.exclude.iter().any(|x| words.has(x))
+}
+
+/// Matches the library's sound effects to the buckets, by their file names. With `scene`, a
+/// bucket gets what that scene's cues ask for; `claimed` always covers the whole episode.
+pub fn matches(svc: &Service, scene: Option<&str>) -> Matches {
+    let Some(lib) = &svc.show_lib else {
+        return Matches::default();
+    };
+    let Ok(l) = lib.lock() else {
+        return Matches::default();
+    };
+    let doc = svc.doc();
+    let loose = l.loose_folder(false);
+    let sounds: Vec<(&Entry, SoundWords)> = l
+        .sfx_entries()
+        .into_iter()
+        .map(|e| (e, SoundWords::new(&e.rel)))
+        .collect();
+    let mut out = Matches::default();
+    for b in doc.buckets.values() {
+        if b.character.is_some() || is_music(doc, b) || b.folder.as_ref() == Some(&loose) {
+            continue;
+        }
+        let open: Vec<(&Entry, &SoundWords)> = sounds
+            .iter()
+            .filter(|(e, w)| candidate(b, e, w))
+            .map(|(e, w)| (*e, w))
+            .collect();
+        let long: Vec<(&Entry, &SoundWords)> = open
+            .iter()
+            .filter(|(e, _)| e.asset.duration_s >= AMBIENCE_MIN_S)
+            .copied()
+            .collect();
+        let mut found: BTreeSet<String> = BTreeSet::new();
+        let mut list: Vec<Asset> = Vec::new();
+        for (tags, ambience) in queries(doc, b, None) {
+            for e in best(&tags, if ambience { &long } else { &open }) {
+                out.claimed.insert(e.asset.id.clone());
+            }
+        }
+        for (tags, ambience) in queries(doc, b, scene) {
+            for e in best(&tags, if ambience { &long } else { &open }) {
+                if found.insert(e.asset.id.clone()) {
+                    list.push(e.asset.clone());
+                }
+            }
+        }
+        out.by_bucket.insert(b.id.clone(), list);
+    }
+    out
+}
+
+/// A bucket's sounds from the library: its folder's files and what matching adds.
+pub fn bucket_sounds(svc: &Service, b: &SoundBucket) -> Vec<Asset> {
+    let mut sounds = folder_sounds(svc, b);
+    for a in matches(svc, None).of(&b.id) {
+        if !sounds.iter().any(|x| x.id == a.id) {
+            sounds.push(a.clone());
+        }
+    }
+    sounds
+}
+
+/// Points the episode's show sounds at their files again after a file moved in the pipeline.
+/// Playback and export read the stored path, so it has to be right.
+pub fn relink_sounds(svc: &mut Service) -> Result<usize> {
+    let Some(lib) = svc.show_lib.clone() else {
+        return Ok(0);
+    };
+    let moved: Vec<Asset> = {
+        let Ok(l) = lib.lock() else {
+            return Ok(0);
+        };
+        svc.doc()
+            .assets
+            .values()
+            .filter_map(|a| {
+                let rel = a.file.strip_prefix(SHOW_PREFIX)?;
+                if l.has_rel(rel) {
+                    return None;
+                }
+                let e = l.by_hash(&a.hash)?;
+                Some(Asset {
+                    file: e.asset.file.clone(),
+                    ..a.clone()
+                })
+            })
+            .collect()
+    };
+    if moved.is_empty() {
+        return Ok(0);
+    }
+    let n = moved.len();
+    let r = svc
+        .bus
+        .execute_fn("relink_show_sounds", &json!({ "sounds": n }), |tx| {
+            for a in &moved {
+                tx.put(a)?;
+            }
+            Ok(json!({ "relinked": n }))
+        })?;
+    if r.seq.is_some() {
+        svc.after_write()?;
+    }
+    Ok(n)
 }
 
 /// Provider ids of the sounds in a bucket's folder (a search skips what is there).
@@ -339,6 +533,7 @@ pub fn rescan(svc: &mut Service) -> Result<serde_json::Value> {
         .map_err(|_| crate::error::AppError::Other("library lock poisoned".into()))?
         .scan()?;
     let linked = link_folders(svc)?;
+    relink_sounds(svc)?;
     svc.bus.refresh()?;
     Ok(
         json!({ "files": report.files, "hashed": report.hashed, "removed": report.removed, "folders": report.folders, "new_buckets": linked }),

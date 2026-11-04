@@ -429,9 +429,11 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
                 .lines
                 .values()
                 .any(|l| &l.scene_id == s && l.character.as_deref() == Some(ch.as_str())),
-            (Some(s), None) => b.scene_ids.contains(s),
+            // a bucket of no scene is for the whole show, so every scene can use it
+            (Some(s), None) => b.scene_ids.contains(s) || b.scene_ids.is_empty(),
         })
         .collect();
+    let matched = crate::studio::matches(svc, sid.as_deref());
     // characters' vocal buckets first, in cast order
     let cast = |b: &SoundBucket| {
         b.character
@@ -464,25 +466,54 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
             .cloned()
             .collect();
         // in a show, the files in the bucket's folder are its sounds too
+        let loose = crate::studio::is_loose_bucket(svc, b);
         for a in crate::studio::folder_sounds(svc, b) {
+            // a loose sound that matched shows in the bucket that wanted it
+            if loose && matched.claimed(&a.id) {
+                continue;
+            }
             if !sounds.iter().any(|x| x.id == a.id || x.hash == a.hash) {
                 sounds.push(a);
             }
         }
-        let kept: Vec<Value> = sounds.iter().map(|a| asset_view(svc, a)).collect();
+        let own = sounds.len();
+        // and so are the sounds whose file names answer its cues
+        for a in matched.of(&b.id) {
+            if !sounds.iter().any(|x| x.id == a.id || x.hash == a.hash) {
+                sounds.push(a.clone());
+            }
+        }
+        let show_wide = b.scene_ids.is_empty() && b.character.is_none();
+        if sounds.is_empty() && (loose || (sid.is_some() && show_wide)) {
+            continue;
+        }
+        let kept: Vec<Value> = sounds
+            .iter()
+            .enumerate()
+            .map(|(i, a)| {
+                let mut v = asset_view(svc, a);
+                v["matched"] = json!(i >= own);
+                v
+            })
+            .collect();
         out.push(json!({
             "id": b.id, "name": b.name, "keywords": b.keywords, "scenes": scene_labels(&doc, b), "scene_ids": b.scene_ids,
             "kept": kept, "previews": b.previews, "length_min_s": b.length_min_s, "length_max_s": b.length_max_s,
             "exclude": b.exclude, "ai_suggested": b.ai_suggested, "folder": b.folder,
-            "character": b.character, "color_index": cast(b),
+            "character": b.character, "color_index": cast(b), "show_wide": show_wide,
             "anchors": b.cue_ids.iter().filter_map(|c| doc.cues.get(c)).filter_map(|c| c.anchor.clone()).collect::<Vec<_>>(),
         }));
     }
     let epidemic = svc.api_key(KeyedService::Epidemic).is_some();
     let elevenlabs = svc.api_key(KeyedService::Elevenlabs).is_some();
     let (scenes, pending) = spot_status(&doc);
+    let loose = svc.show_lib.as_ref().map_or(0, |l| {
+        l.lock()
+            .map_or(0, |l| l.direct(&l.loose_folder(false)).len())
+    });
     Ok(json!({
         "buckets": out,
+        "loose": loose,
         "show": svc.paths.show.as_ref().map(|s| s.name().to_string()),
         "connected": { "epidemic": epidemic, "elevenlabs": elevenlabs },
         "spot": { "scenes": scenes.len(), "pending": pending.len() },
@@ -659,7 +690,7 @@ pub fn search(
         "library" => {
             let lib = svc.library();
             let local: Vec<Asset> = svc.doc().assets.values().cloned().collect();
-            let in_folder: Vec<String> = crate::studio::folder_sounds(svc, &snap)
+            let in_folder: Vec<String> = crate::studio::bucket_sounds(svc, &snap)
                 .into_iter()
                 .map(|a| a.id)
                 .collect();

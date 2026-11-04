@@ -437,6 +437,19 @@ pub struct SpotBucketsP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct CleanupMove {
+    /// The loose file, its path under `Sound/`.
+    pub file: String,
+    /// The folder under `Sound/` it goes to (`sfx/kitchen`); made if it doesn't exist.
+    pub to: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct ApplyCleanupP {
+    pub moves: Vec<CleanupMove>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct SearchEpidemicP {
     pub query: String,
     /// Results to skip (the `next_offset` of the previous page).
@@ -746,6 +759,9 @@ registry! {
     "buckets", BucketsP, Read, true, "Sound buckets (all, or a scene's) with keywords, kept sounds and previews.";
     "spot_buckets", SpotBucketsP, Write, true, "Spot script: AI sound spotting (script only, one AI call per scene) grouped into buckets with keywords. A scene, the new and changed scenes, or all with `all`.";
     "start_spotting", SpotBucketsP, Write, false, "Spot script in the background (the UI polls job_status).";
+    "plan_cleanup", NoParams, Read, true, "Clean up: AI reads the names of the loose sound effects and proposes a folder for each. Nothing moves; pass the moves you accept to apply_cleanup.";
+    "start_cleanup", NoParams, Read, false, "plan_cleanup in the background (the UI polls job_status).";
+    "apply_cleanup", ApplyCleanupP, Write, true, "Move loose sound effects into folders of sfx/ in the shared pipeline, and repoint this episode's sounds. Never overwrites. The moves are logged in Sound/Cutaway/moves/.";
     "search_epidemic", SearchEpidemicP, Read, true, "Search Epidemic Sound freely (10 per page). Nothing is stored or downloaded; add a result to a bucket with bucket_add_preview.";
     "bucket_add_preview", BucketAddPreviewP, Write, true, "Add an Epidemic Sound result to a bucket by hand, as a preview a fresh search keeps (not downloaded).";
     "create_bucket", CreateBucketP, Write, true, "Create a sound bucket (name, keywords, scenes, length and leave-out filters).";
@@ -1347,6 +1363,16 @@ impl Service {
                 });
                 Ok(json!({ "job_id": job }))
             }
+            "plan_cleanup" => crate::cleanup::plan(self),
+            "start_cleanup" => {
+                let file = self.paths.file.clone();
+                let job = self.jobs.spawn("cleanup", file, move |svc, _| crate::cleanup::plan(svc));
+                Ok(json!({ "job_id": job }))
+            }
+            "apply_cleanup" => {
+                let p: ApplyCleanupP = parse(params)?;
+                crate::cleanup::apply(self, p.moves)
+            }
             "search_epidemic" => {
                 let p: SearchEpidemicP = parse(params)?;
                 crate::buckets::search_free(self, &p.query, p.offset)
@@ -1411,9 +1437,10 @@ impl Service {
             }
             "bucket_remove" => {
                 let p: BucketAssetP = parse(params)?;
-                // a sound of the bucket's folder is hidden in this episode; the file stays
+                // a sound of the bucket's folder, or matched to it, is hidden in this episode;
+                // the file stays
                 if let Some(b) = self.doc().buckets.get(&p.bucket_id).cloned() {
-                    if crate::studio::folder_sounds(self, &b).iter().any(|a| a.id == p.asset_id) {
+                    if crate::studio::bucket_sounds(self, &b).iter().any(|a| a.id == p.asset_id) {
                         return crate::buckets::hide(self, &p.bucket_id, &p.asset_id);
                     }
                 }

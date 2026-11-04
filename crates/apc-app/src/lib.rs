@@ -3,6 +3,7 @@
 
 pub mod bridge;
 pub mod buckets;
+pub mod cleanup;
 pub mod demo;
 pub mod dev;
 pub mod error;

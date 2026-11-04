@@ -209,6 +209,12 @@ pub enum SfxCmd {
     },
     /// Add files to the show library.
     Import { paths: Vec<PathBuf> },
+    /// AI proposes a folder for each loose sound effect (one AI call). Nothing moves without --apply.
+    CleanUp {
+        /// Move the files in the shared pipeline as proposed.
+        #[arg(long)]
+        apply: bool,
+    },
 }
 
 /// Reads a secret without echo (or the first line of stdin when it isn't a terminal).
@@ -396,6 +402,19 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                     "search_epidemic",
                     json!({ "query": query, "offset": offset }),
                 ),
+                Cmd::Sfx {
+                    cmd: SfxCmd::CleanUp { apply: false },
+                } => call(&mut sess, "plan_cleanup", json!({})),
+                Cmd::Sfx {
+                    cmd: SfxCmd::CleanUp { apply: true },
+                } => {
+                    let plan = call(&mut sess, "plan_cleanup", json!({}))?;
+                    call(
+                        &mut sess,
+                        "apply_cleanup",
+                        json!({ "moves": plan["moves"] }),
+                    )
+                }
                 Cmd::Sfx {
                     cmd: SfxCmd::Import { paths },
                 } => call(
