@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEPTH_STEP, GAIN_STEP_DB, PAN_STEP, soundKey, TIME_FINE_S, TIME_STEP_S } from './keymap';
 
-const k = (key: string, mods: Partial<{ altKey: boolean; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }> = {}) => soundKey({ key, altKey: false, shiftKey: false, metaKey: false, ctrlKey: false, ...mods });
+const k = (key: string, mods: Partial<{ altKey: boolean; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean; code: string }> = {}) => soundKey({ key, altKey: false, shiftKey: false, metaKey: false, ctrlKey: false, ...mods });
 
 describe('keys on the selected sounds', () => {
   it('←/→ push back and bring forward', () => {
@@ -22,6 +22,16 @@ describe('keys on the selected sounds', () => {
     expect(k('.')).toEqual({ kind: 'time', delta: TIME_STEP_S });
     expect(k(',')).toEqual({ kind: 'time', delta: -TIME_STEP_S });
     expect(k('>', { shiftKey: true })).toEqual({ kind: 'time', delta: TIME_FINE_S });
+  });
+
+  it('the fine move works on a German layout, where ⇧ gives ; and :', () => {
+    expect(k(';', { shiftKey: true, code: 'Comma' })).toEqual({ kind: 'time', delta: -TIME_FINE_S });
+    expect(k(':', { shiftKey: true, code: 'Period' })).toEqual({ kind: 'time', delta: TIME_FINE_S });
+  });
+
+  it('a ; or : typed on another key is left alone', () => {
+    expect(k(';', { code: 'Semicolon' })).toBe(null);
+    expect(k(':', { shiftKey: true, code: 'Semicolon' })).toBe(null);
   });
 
   it('⌫ removes and Esc clears', () => {

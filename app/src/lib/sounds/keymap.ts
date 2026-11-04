@@ -16,7 +16,7 @@ export const TIME_STEP_S = 0.1;
 export const TIME_FINE_S = 0.01;
 
 /** What a key does to the selected sounds, or nothing: the key keeps its usual meaning. */
-export function soundKey(e: Pick<KeyboardEvent, 'key' | 'altKey' | 'shiftKey' | 'metaKey' | 'ctrlKey'>): SoundKey | null {
+export function soundKey(e: Pick<KeyboardEvent, 'key' | 'altKey' | 'shiftKey' | 'metaKey' | 'ctrlKey'> & { code?: string }): SoundKey | null {
   if (e.metaKey || e.ctrlKey) return null;
   const k = e.key;
   if (k === 'Escape') return { kind: 'clear' };
@@ -27,9 +27,9 @@ export function soundKey(e: Pick<KeyboardEvent, 'key' | 'altKey' | 'shiftKey' | 
     return e.altKey ? { kind: 'pan', delta: dir * PAN_STEP } : { kind: 'depth', delta: dir * DEPTH_STEP };
   }
   if ((k === 'ArrowUp' || k === 'ArrowDown') && e.shiftKey) return { kind: 'gain', delta: (k === 'ArrowUp' ? 1 : -1) * GAIN_STEP_DB };
-  if (k === ',' || k === '.' || k === '<' || k === '>') {
-    const back = k === ',' || k === '<';
-    return { kind: 'time', delta: (back ? -1 : 1) * (e.shiftKey ? TIME_FINE_S : TIME_STEP_S) };
-  }
+  // what ⇧ gives on these keys depends on the layout (German: ; and :), so go by the key too
+  const back = k === ',' || k === '<' || (e.shiftKey && e.code === 'Comma');
+  const on = k === '.' || k === '>' || (e.shiftKey && e.code === 'Period');
+  if (back || on) return { kind: 'time', delta: (back ? -1 : 1) * (e.shiftKey ? TIME_FINE_S : TIME_STEP_S) };
   return null;
 }
