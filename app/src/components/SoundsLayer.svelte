@@ -332,7 +332,9 @@
   function start() {
     if (!gesture) return;
     gesture.moved = true;
-    dragging = gesture.base.map((b) => b.id);
+    // the grabbed one first: it is the one in focus
+    const id = gesture.id;
+    dragging = [id, ...gesture.base.map((b) => b.id).filter((x) => x !== id)];
   }
 
   function dragTime(g: Gesture, wanted: number) {
@@ -1092,7 +1094,7 @@
     white-space: nowrap;
     pointer-events: none;
     z-index: 2;
-    color: color-mix(in srgb, rgb(var(--c, var(--ink-rgb))) 70%, rgb(var(--highlight-rgb)));
+    color: color-mix(in srgb, rgb(var(--c, var(--ink-rgb))) 70%, rgb(var(--ink-rgb)));
     transition:
       left 0.6s var(--ease-settle) var(--dl, 0s),
       top 0.6s var(--ease-settle) var(--dl, 0s),

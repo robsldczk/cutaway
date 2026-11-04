@@ -316,6 +316,7 @@
   }
 </script>
 
+<div class="col" class:masked={on}>
 <div class="arr" style="left: {on ? `${COLUMN_LEFT}px` : '50%'}; width: {on ? `${columnW}px` : `min(${Math.round(600 * sc)}px, 86%)`}; transform: translate({on ? '0' : '-50%'}, -{off.toFixed(1)}px); transition: {slide}, left .85s cubic-bezier(.65,0,.35,1), width .85s cubic-bezier(.65,0,.35,1)">
   {#each rows as r, i (r.it.line_id)}
     {@const t = takeOf(r.it)}
@@ -370,14 +371,27 @@
   {/each}
   {#if dropY != null}<div class="drop" style="top: {dropY}px"></div>{/if}
 </div>
+</div>
 {#if !on}<div class="side tchip" style="left: calc(50% - {Math.round(300 * sc)}px - 24px)">{fmt(app.pos)}</div>{/if}
 <SoundsLayer {map} {spineX} {off} {slide} {on} lines={app.lines} />
 
 <style>
+  .col {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  /* beside the sounds the column sits under the header's left end and scrolls past the
+     transport: it fades out before it reaches them */
+  .col.masked {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 76px, #000 140px, #000 calc(100% - 110px), transparent calc(100% - 30px));
+    mask-image: linear-gradient(to bottom, transparent 76px, #000 140px, #000 calc(100% - 110px), transparent calc(100% - 30px));
+  }
   .arr {
     position: absolute;
     left: 50%;
     top: 50%;
+    pointer-events: auto;
   }
   .wmuted {
     color: var(--text-dim);

@@ -20,7 +20,7 @@
   const show = $derived(app.status?.show ?? null);
 </script>
 
-<header class="hdr" class:wide>
+<header class="hdr" class:wide class:fit={app.page === 'arrange'}>
   <div class="title">
     <div class="epm">
       <button class="ep" aria-haspopup="menu" aria-expanded={menu} title={app.status?.path ?? brand.displayName} onclick={() => (menu = !menu)}>{#if show}<span class="showname">{show.name}</span>{/if}{app.view?.episode ?? app.status?.name ?? brand.displayName}<Icon name="chevron" size={10} stroke={2.4} /></button>
@@ -48,7 +48,7 @@
         </select>
         Sc. {sc.number} · {sc.place}<Icon name="chevron" size={10} stroke={2.4} />
       </label>
-    {:else if sc && app.page !== 'import' && app.page !== 'dev'}<span class="muted2">Sc. {sc.number} · {sc.place}{sc.time_of_day ? ` · ${sc.time_of_day}` : ''}</span>{/if}
+    {:else if sc && app.page !== 'import' && app.page !== 'dev'}<span class="muted2 where" title={sc.heading}>Sc. {sc.number} · {sc.place}{sc.time_of_day ? ` · ${sc.time_of_day}` : ''}</span>{/if}
     <span class="dot" class:saving title={saving ? 'Saving…' : 'Saved'}></span>
   </div>
   <nav class="glass switch" aria-label="Pages">
@@ -97,6 +97,29 @@
   .hdr.wide {
     left: 28px;
     right: 28px;
+  }
+  /* Arrange has the most buttons: the scene's name gives way, not the row */
+  @media (min-width: 1180px) {
+    .hdr.fit {
+      flex-wrap: nowrap;
+    }
+    .hdr.fit .title {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .hdr.fit .switch,
+    .hdr.fit .right {
+      flex: none;
+    }
+    .hdr.fit .ep {
+      white-space: nowrap;
+    }
+    .hdr.fit .where {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
   }
   .scene {
     position: relative;
