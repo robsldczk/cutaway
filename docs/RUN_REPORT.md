@@ -67,6 +67,38 @@ Details: `docs/design/round2-screens.md` (the spec files are read-only in this c
 - The "Music" bucket is the whole `music/` folder, stems included.
 - 2 of 7 full Playwright runs had timing failures in editor and smoke specs under machine load. They are unrelated to this work and passed on rerun.
 
+## SFX into the buckets (D74, 2026-11-04)
+
+**Built:**
+- Library sounds reach buckets by file name, worked out each time the buckets are read. Nothing is stored or copied.
+- Sounds in `sfx/` that no bucket wants wait in a **Loose SFX** bucket.
+- Buckets of no scene appear in every scene's docked bucket, under **Whole show**.
+- **Clean up** on Import › Sounds: one AI call on the loose file names, then a review sheet. Only ticked files move.
+- `cutaway sfx clean-up` prints the plan; `--apply` moves it. Each run is logged in `Sound/Cutaway/moves/`.
+
+**Measured on a copy of Episode 2:**
+
+| | Before | After |
+|---|---|---|
+| Spotted buckets without sounds | 13 of 18 | 0 |
+| SFX in some bucket | 68 of 104 | 104 of 104 |
+| SFX reachable from the docked bucket | 26 | 104 |
+
+One live clean-up plan on the copy proposed 23 moves and left 13 loose. No files moved in the real pipeline.
+
+**Verify:** `cargo test -p apc-sound matching`, `cargo test -p apc-app --test sfx_matching`, `cd app && npx playwright test tests/studio.spec.ts`.
+
+**Rob:**
+1. Open Episode 2, Import › Sounds. Check that spotted buckets have sensible sounds (each shows "matched" in its panel).
+2. Press **Clean up 36 loose** and read the list before moving. Untick anything doubtful, such as a one-sound new folder.
+3. Syncthing carries the moves to other machines; other episodes repoint their sounds when next opened.
+
+**Known:**
+- Matching only reads names, so roughly four cues in ten found nothing when the scoring was prototyped (burrito, turkey, phones: the library has no such sounds).
+- There's no undo button for a clean up; `Sound/Cutaway/moves/<stamp>.json` lists what moved.
+- Phones holds cues that aren't phones ("ring" in *spring*), so it shows their sounds too. See D74.
+- Playwright 15/18. The 3 failures (two in `editor.spec.ts`, one in `smoke.spec.ts`) fail the same way on `dev` at bc2d9e4, without this work.
+
 ## What was built
 
 | Milestone | State | Notes |

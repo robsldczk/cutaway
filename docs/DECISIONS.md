@@ -347,7 +347,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - **Deleting** a folder bucket that holds files is refused, with a message pointing to the folder. An empty one goes, along with its empty folder.
   - **Renames:** renaming a bucket never moves its folder (other episodes point at its files). A file moved in the Finder is found again by hash.
   - **Vocals** stay in the episode's own `Library/Vocals/` (they are cut from the episode's recordings, so not markers as first thought). Export and playback resolve both kinds through `EpisodePaths::asset_path`.
-- **Options not taken:** a library database in the show (a sync hazard, D66); storing folder membership in the document (stale as soon as the pipeline changes); moving files between folders (the pipeline is shared, so Cutaway only adds copies).
+- **Options not taken:** a library database in the show (a sync hazard, D66); storing folder membership in the document (stale as soon as the pipeline changes); moving files between folders (the pipeline is shared, so Cutaway only adds copies). *Moving is now allowed as a confirmed clean up, and spotting matches folders by bucket name only: see D74.*
 
 ### D66 Sync safety in a Syncthing share (2026-11-02)
 - **Context:** the episode file is SQLite in WAL mode. Syncthing copies files independently and can carry a `.cutaway` without its `-wal`. Two machines editing the same episode produce a conflict copy that can't be merged.
@@ -440,3 +440,28 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - Keeping a separate direction and feedback summary per take. This splits a single conversation, and Rob asked for it read whole.
   - Sending the whole gap with no limit. A lunch break between takes would swamp the note.
   - A new gap entity in the document. The take fields already hold both sides, and a new collection would need format and command changes for no visible gain.
+
+### D74 Show sounds reach the buckets by file name; a manual clean up files them (Rob, 2026-11-04)
+- **Rob:** the SFX in the show were meant to be read into the buckets, and mostly weren't. Match by file name for now. An AI pass, triggered by hand, "cleans up" and also moves SFX into their folders.
+- **Found on Episode 2 (104 SFX, 167 cues):**
+  - All files were scanned, but only first-level folders became buckets, so the 36 files straight in `sfx/` were in none.
+  - Since `9b18780`, a spotted bucket matches a folder by its name only, so 13 of the 18 spotted buckets pointed at folders that don't exist. They held 119 of the cues, and no sound.
+  - Folder buckets have no scenes, so the docked bucket hid them: 26 SFX were reachable there.
+- **Choice:**
+  - **File-name matching (`apc-sound::matching`).** One query per cue (its tags, in order) or, for a hand-made or folder bucket without cues, per keyword. Tags score on the file's words and its folder: first tag 3, others 2, +2 for a tag of several words, +1 when it hits the name's first part or the folder. Weak words (materials, wide categories) score 1, noise words nothing. 3 is a match, at most 5 sounds per query. Tuned on Episode 2 with a prototype of the scoring: 88 of 154 non-music cues found a sound, and the threshold drops most false hits ("metal" alone no longer gives a telescope every metal impact).
+  - **Never stored.** Matches are worked out with each `buckets` call, like folder membership in D65, so a new file shows on rescan and nothing goes stale. No format change and nothing to undo. It takes about 0.2 s of CPU on Episode 2.
+  - **Filters.** A bucket's length and leave-out filters apply. An ambience cue only takes sounds of 10 s or more. Music buckets, vocal buckets and music files stay out.
+  - **A match is a reference.** Nothing is copied, so a match doesn't create a spotted bucket's missing folder or duplicate audio over Syncthing. Removing a match hides it in this episode, like a folder sound.
+  - **Scenes.** With a scene, a bucket shows what that scene's cues ask for.
+  - **Whole show.** Buckets of no scene are offered in every scene's docked bucket, under "Whole show", closed. Empty ones are left out.
+  - **Loose SFX.** One bucket on `sfx/` itself holds the loose sounds no bucket matched. It disappears when none are left.
+  - **Clean up (`sound_sort`, `plan_cleanup`, `apply_cleanup`).** One AI call on names only. It covers loose files in `sfx/` only: folders Rob already filed stay as they are, and music is left alone. The AI may pick a folder on disk, a spotted bucket's folder, or a new one, and answers null when unsure.
+  - **Moves are confirmed.** They change the shared pipeline for every machine and episode, so the AI only proposes. The sheet lists the moves, each can be unticked, and nothing moves until *Move N files*. `cutaway sfx clean-up` only prints the plan; `--apply` moves it.
+  - **Move safety.** A move is a rename inside `sfx/`, one level deep, and never overwrites. A file that can't move is reported and the others go on. Each run writes `Sound/Cutaway/moves/<stamp>.json` (one file per run, so machines can't conflict) as the way back. There is no undo button.
+  - **Moved files stay linked.** Hash ids and `library.json` are unaffected. Playback and export read an asset's stored path, which D65's "found again by hash" didn't cover, so `relink_sounds` repoints `show:` assets by hash on open, on rescan and after a clean up. Other episodes catch up when they next open.
+- **Options not taken:**
+  - Storing matches on the bucket: stale as soon as the pipeline changes (D65), and would need a format change.
+  - Using `bucket_keep` for matches: it copies files into the bucket's folder.
+  - Linking spotted buckets to folders by keyword again: `9b18780` removed that because one keyword pulled a whole folder into the wrong bucket. Per-sound matching gets the sounds without that.
+  - Moving without review, or sorting files already in folders: too much change to a shared folder for one AI pass.
+- **Known:** spotted cues are grouped by substring in `category_of`, so "ring" catches *spring* and *whimpering*, and "hum" catches *thump*. Phones holds UFO, Time Spring and turkey cues, and now their sounds too. Not fixed here; changing it needs a re-spot.
