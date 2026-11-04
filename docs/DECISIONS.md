@@ -631,10 +631,18 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 ### D87 The Sounds toggle eases (Rob, 2026-11-04)
 - **Rob:** on and off was too wild with its overshoot; it should be premium, eased and sleek. This replaces handover 6's "playful" toggle (shrink into the spine, overshoot on return).
 - **Now:** the balls glide a fifth of the way toward the spine and fade, scaling only to 82 %. In: an expo-out, no overshoot, 0.7 s. Out: 0.4 s. The stagger is at most a quarter of a second in all, however many sounds. A browser test fails on an overshooting curve there.
-- **The column and panel** keep their ease-in-out and ease-out; they never overshot. **A dropped sound's pop** keeps its overshoot: handover 6 calls it rare, and Rob spoke of the toggle.
+- *Superseded in part by D89:* the column did swing past its mark, and the pop no longer overshoots.
 
 ### D88 ⇧ Space from a selected sound (Rob, 2026-11-04)
 - **Rob:** with a sound selected on Arrange, ⇧ Space plays from its start.
 - **Several selected:** from the first of them. Pressed during playback it starts there again, the way ⇧ Space does from the locator. The playhead and locator move there, as a scrub does.
 - **Nothing selected:** the locator, as on every other page. A ball that only has the keyboard's focus counts as selected, as it does for the other sound keys. The opened sound counts too.
+
+### D89 Arrange moves evenly (Rob, 2026-11-04)
+- **Rob:** the animation on Arrange still overshoots. He wants an even, eased move.
+- **Found:** D87 eased the balls, but the big overshoot was the dialogue column, and no easing could have fixed it. Its `left` ran over 0.85 s while its centring `translate(-50%)` ran over 0.3 s, and the two add up. Going 92 → 420 px it swung to −81, off the screen; coming back it reached 684. D87 said it never overshot, because its curves don't: that was wrong, and only measuring the move shows it.
+- **Now:** the column has one horizontal motion, `left` and `width` in pixels, with no translate. The toggle's parts share `--ease-move` and `--dur-move` (0.7 s): the column's move across and up or down, and the panel. The balls use the same curve. The transition exists only during the toggle, so resizing the window doesn't animate.
+- **A dropped sound's pop** fades in from 82 % on the same curve, with no overshoot. That was the last overshooting curve in the app. It replaces handover 6's "slight overshoot".
+- **Tests:** a browser test measures every frame of the toggle and fails if anything turns back, and another fails on any overshooting curve in the code.
+- **Left as they are:** the merged group's wobble and swirl, which are slow loops, not moves.
 
