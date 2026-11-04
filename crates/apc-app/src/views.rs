@@ -664,6 +664,10 @@ pub struct PlacementView {
     pub fade_curve: FadeCurve,
     pub gain_db: f64,
     pub muted: bool,
+    pub pan: f64,
+    /// 0 close … 1 far.
+    pub depth: f64,
+    pub auto_fade: bool,
     /// Asset in point and the asset's length (trim limits).
     pub in_s: f64,
     pub asset_len_s: f64,
@@ -746,6 +750,9 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
             fade_curve: p.fade_curve,
             gain_db: p.gain_db,
             muted: p.muted,
+            pan: p.pan,
+            depth: p.depth,
+            auto_fade: p.auto_fade,
             in_s: p.in_s,
             asset_len_s: doc
                 .assets

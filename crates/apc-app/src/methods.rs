@@ -15,6 +15,10 @@ use apc_export::{bounce, cutlist, fcpxml, srt, EpisodeTimeline, ExportScope};
 
 use crate::error::{AppError, Result};
 use crate::service::Service;
+use crate::sound_edit::{
+    BatchSoundsP, MoveSoundP, PlacementP, SceneRoomP, SlipSoundP, SoundDepthP, SoundFadesP,
+    SoundGainP, SoundPanP, TrimSoundP,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Access {
@@ -772,6 +776,18 @@ registry! {
     "bucket_generate", BucketGenerateP, Write, true, "Generate sounds for a bucket (ElevenLabs) and keep them.";
     "place_from_bucket", PlaceFromBucketP, Write, true, "Place a bucket sound on the timeline. A preview downloads first (returns a job_id).";
     "play_sound", PlaySoundP, Read, false, "Audition a bucket sound (kept or preview).";
+    "list_sounds", SceneP, Read, true, "The sounds placed in a scene with their ids, timing, anchor, gain, pan, depth and fades.";
+    "move_sound", MoveSoundP, Write, true, "Move a placed sound: onto an anchor (a word, a line edge, or the pause after a word: anchor_word with anchor_edge end), to free time (at_s), or by offset_s from where it hangs. Anchored sounds follow their line.";
+    "trim_sound", TrimSoundP, Write, true, "Trim a placed sound's start or end. Never longer than the source; the automatic fade follows.";
+    "set_sound_fades", SoundFadesP, Write, true, "Set a sound's fades. A fade out set by hand turns auto off; auto true hands it back to the length.";
+    "set_sound_gain", SoundGainP, Write, true, "Set a sound's loudness, -24 to +6 dB.";
+    "set_sound_pan", SoundPanP, Write, true, "Set a sound's pan, -1 left to +1 right.";
+    "set_sound_depth", SoundDepthP, Write, true, "Set how far back a sound sits in its scene's room, 0 close to 1 far: wetter, quieter and darker as it goes back.";
+    "slip_sound", SlipSoundP, Write, true, "Slip the audio inside a sound's window: a new source in point, same place and length.";
+    "remove_sound", PlacementP, Write, true, "Take a placed sound off the timeline. Undoable.";
+    "batch_sounds", BatchSoundsP, Write, true, "Several sound edits as one undo step (a multi-select move, gain or depth change); if one fails, none applies. Each edit is {op: move|trim|fades|gain|pan|depth|slip|remove, ...the fields of that method}.";
+    "scene_rooms", NoParams, Read, true, "Each scene's room: size, damping, wet, what they come to (decay, pre-delay) and how many sounds play in it.";
+    "set_scene_room", SceneRoomP, Write, true, "Set a scene's room: size, damping, wet (0 to 1 each; left out stays). Each scene has its own room, shared by all its sounds.";
 }
 
 pub fn method(name: &str) -> Option<MethodInfo> {
@@ -1448,6 +1464,22 @@ impl Service {
                 let p: PlaySoundP = parse(params)?;
                 crate::buckets::play(self, p.asset_id, p.remote_id, p.from_s)
             }
+            "list_sounds" => {
+                let p: SceneP = parse(params)?;
+                let sc = scene_id(self, p.scene.as_deref())?;
+                Ok(serde_json::to_value(crate::sound_edit::list(self, &sc)?)?)
+            }
+            "move_sound" => self.sound_edit::<MoveSoundP>(params),
+            "trim_sound" => self.sound_edit::<TrimSoundP>(params),
+            "set_sound_fades" => self.sound_edit::<SoundFadesP>(params),
+            "set_sound_gain" => self.sound_edit::<SoundGainP>(params),
+            "set_sound_pan" => self.sound_edit::<SoundPanP>(params),
+            "set_sound_depth" => self.sound_edit::<SoundDepthP>(params),
+            "slip_sound" => self.sound_edit::<SlipSoundP>(params),
+            "remove_sound" => self.sound_edit::<PlacementP>(params),
+            "batch_sounds" => crate::sound_edit::batch(self, parse(params)?),
+            "scene_rooms" => Ok(serde_json::to_value(crate::sound_edit::rooms(self)?)?),
+            "set_scene_room" => crate::sound_edit::set_room(self, parse(params)?),
             "rescan_library" => crate::studio::rescan(self),
             "create_show" | "create_episode" | "open_project" | "create_demo" | "open_show"
             | "show_view" | "show_backdrop" | "set_show_backdrop" | "open_episode" | "close_show"
@@ -1456,6 +1488,12 @@ impl Service {
             }
             other => Err(AppError::UnknownMethod(other.into())),
         }
+    }
+
+    /// A sound method: its parameters are one command.
+    fn sound_edit<P: DeserializeOwned + Into<Command>>(&mut self, params: &Value) -> Result<Value> {
+        let p: P = parse(params)?;
+        Ok(self.exec(&p.into())?.result)
     }
 
     fn status(&mut self) -> Result<Value> {

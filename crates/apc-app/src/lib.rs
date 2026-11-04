@@ -13,6 +13,7 @@ pub mod player;
 pub mod service;
 pub mod shows;
 pub mod sound;
+pub mod sound_edit;
 pub mod studio;
 pub mod views;
 pub mod vocals;
