@@ -311,6 +311,7 @@ mod tests {
             order: vec!["a".into(), "b".into()],
             tightness: 1.0,
             story: Default::default(),
+            room: Default::default(),
         };
         (d, s)
     }
@@ -464,6 +465,9 @@ mod tests {
                 fade_curve: Default::default(),
                 gain_db: 0.0,
                 muted: false,
+                pan: 0.0,
+                depth: 0.0,
+                auto_fade: false,
             },
         );
         doc.locations.insert(

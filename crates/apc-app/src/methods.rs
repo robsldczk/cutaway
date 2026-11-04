@@ -324,10 +324,17 @@ pub struct PlaceSoundP {
     pub anchor_line_id: Option<String>,
     #[serde(default)]
     pub anchor_word: Option<usize>,
+    /// Which edge of the line or word: `start` (default) or `end`. The pause after a word is
+    /// that word's end.
+    #[serde(default)]
+    pub anchor_edge: Edge,
     #[serde(default)]
     pub at_s: Option<f64>,
     #[serde(default)]
     pub offset_s: f64,
+    /// Where it starts in the room: 0 close … 1 far.
+    #[serde(default)]
+    pub depth: f64,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -555,6 +562,12 @@ pub struct PlaceFromBucketP {
     pub anchor_line_id: Option<String>,
     #[serde(default)]
     pub anchor_word: Option<usize>,
+    /// Which edge of the line or word: `start` (default) or `end`.
+    #[serde(default)]
+    pub anchor_edge: Edge,
+    /// Where it starts in the room: 0 close … 1 far.
+    #[serde(default)]
+    pub depth: f64,
 }
 
 #[derive(Deserialize, JsonSchema)]

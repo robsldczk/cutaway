@@ -977,6 +977,8 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         at_s,
         anchor_line_id,
         anchor_word,
+        anchor_edge,
+        depth,
     } = q;
     let vocal_of = bucket_id
         .as_ref()
@@ -1002,8 +1004,10 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         character,
         anchor_line_id,
         anchor_word,
+        anchor_edge,
         at_s,
         offset_s: 0.0,
+        depth,
     };
     if let Some(aid) = asset_id {
         return crate::sound::place(svc, crate::methods::PlaceSoundP { asset_id: aid, ..p });

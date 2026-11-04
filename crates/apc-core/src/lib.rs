@@ -17,6 +17,7 @@ pub mod model;
 pub mod project;
 pub mod script;
 pub mod show;
+pub mod sounds;
 pub mod store;
 pub mod story;
 pub mod text;

@@ -215,6 +215,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             order: vec!["l1".into(), "l2".into()],
             tightness: 1.0,
             story: Default::default(),
+            room: Default::default(),
         },
     );
     d.assets.insert(
@@ -258,6 +259,9 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             fade_curve: Default::default(),
             gain_db: -3.0,
             muted: false,
+            pan: 0.0,
+            depth: 0.0,
+            auto_fade: false,
         },
     );
     (paths, d)

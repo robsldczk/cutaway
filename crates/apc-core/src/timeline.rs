@@ -974,6 +974,7 @@ pub(crate) mod tests {
             order: vec!["a".into(), "x".into(), "b".into()],
             tightness: 1.0,
             story: Default::default(),
+            room: Default::default(),
         };
         (d, sc)
     }
@@ -1277,6 +1278,9 @@ pub(crate) mod tests {
             fade_curve: Default::default(),
             gain_db: 0.0,
             muted: false,
+            pan: 0.0,
+            depth: 0.0,
+            auto_fade: false,
         };
         let before = placement_start(&layout_scene(&d, &sc, &p), &pl);
         d.boxes.get_mut("b").unwrap().gap_s = Some(2.0);

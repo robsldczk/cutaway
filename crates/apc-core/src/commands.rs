@@ -12,6 +12,7 @@ use crate::error::{CoreError, Result};
 use crate::fountain::ParsedScript;
 use crate::ids::new_id;
 use crate::model::*;
+use crate::sounds;
 use crate::timeline::{effective_gap, layout_scene, placement_start, ItemKind, SceneLayout};
 
 /// Analysis output applied in one undoable step.
@@ -292,6 +293,53 @@ pub enum Command {
         placement_id: String,
         at_s: f64,
     },
+    /// Moves a sound: onto an anchor (a word, a line edge or the pause after a word), to free
+    /// scene time with `at_s`, or just `offset_s` from where it hangs.
+    MoveSound {
+        placement_id: String,
+        #[serde(default)]
+        anchor: Option<Anchor>,
+        #[serde(default)]
+        at_s: Option<f64>,
+        #[serde(default)]
+        offset_s: Option<f64>,
+    },
+    /// Fades of a sound. Setting the fade out by hand turns auto off; `auto: true` hands the
+    /// fade out back to the length.
+    SetSoundFades {
+        placement_id: String,
+        #[serde(default)]
+        fade_in_s: Option<f64>,
+        #[serde(default)]
+        fade_out_s: Option<f64>,
+        #[serde(default)]
+        auto: Option<bool>,
+    },
+    /// Loudness of a sound in dB, −24 … +6.
+    SetSoundGain {
+        placement_id: String,
+        gain_db: f64,
+    },
+    /// Pan of a sound, −1 left … +1 right.
+    SetSoundPan {
+        placement_id: String,
+        pan: f64,
+    },
+    /// How far back a sound sits, 0 close … 1 far.
+    SetSoundDepth {
+        placement_id: String,
+        depth: f64,
+    },
+    /// Slips the audio inside the sound's window: a new source in point, same place and length.
+    SlipSound {
+        placement_id: String,
+        in_s: f64,
+    },
+    /// The room of a scene (each scene has its own).
+    SetSceneRoom {
+        scene_id: String,
+        room: SceneRoom,
+    },
     /// Creates or replaces a sound bucket.
     PutBucket {
         bucket: SoundBucket,
@@ -395,6 +443,13 @@ impl Command {
             Command::UnanchorPlacement { .. } => "unanchor_placement",
             Command::DeletePlacement { .. } => "delete_placement",
             Command::SplitPlacement { .. } => "split_placement",
+            Command::MoveSound { .. } => "move_sound",
+            Command::SetSoundFades { .. } => "set_sound_fades",
+            Command::SetSoundGain { .. } => "set_sound_gain",
+            Command::SetSoundPan { .. } => "set_sound_pan",
+            Command::SetSoundDepth { .. } => "set_sound_depth",
+            Command::SlipSound { .. } => "slip_sound",
+            Command::SetSceneRoom { .. } => "set_scene_room",
             Command::PutBucket { .. } => "put_bucket",
             Command::DeleteBucket { .. } => "delete_bucket",
             Command::BucketKeep { .. } => "bucket_keep",
@@ -952,6 +1007,7 @@ impl Command {
                     return Err(CoreError::not_found("asset", &placement.asset_id));
                 }
                 let mut p = placement.clone();
+                sounds::check_new(tx.doc(), &mut p)?;
                 p.layer = free_layer(tx.doc(), &p, &pacing);
                 tx.put(&p)?;
                 if let Some(cid) = &p.cue_id {
@@ -977,6 +1033,11 @@ impl Command {
                 if updated.id != cur.id {
                     return Err(CoreError::invalid("a placement id can't change"));
                 }
+                // the Edit page writes here: a hand-set fade out ends auto all the same
+                if patch.get("auto_fade").is_none() && updated.fade_out_s != cur.fade_out_s {
+                    updated.auto_fade = false;
+                }
+                sounds::settle(tx.doc(), &mut updated);
                 if patch.get("layer").is_none() {
                     updated.layer = free_layer(tx.doc(), &updated, &pacing);
                 }
@@ -1015,16 +1076,43 @@ impl Command {
                 let mut a = p.clone();
                 a.len_s = cut;
                 a.fade_out_s = a.fade_out_s.min(0.01);
+                // the cut is a splice: no automatic fade out in the middle of the sound
+                a.auto_fade = false;
                 let mut b = p.clone();
                 b.id = new_id("pl");
                 b.in_s = p.in_s + cut;
                 b.len_s = p.len_s - cut;
                 b.offset_s = p.offset_s + cut;
                 b.fade_in_s = 0.01;
+                sounds::settle(tx.doc(), &mut a);
+                sounds::settle(tx.doc(), &mut b);
                 tx.put(&a)?;
                 tx.put(&b)?;
                 Ok(json!({ "ids": [a.id, b.id] }))
             }
+            Command::MoveSound {
+                placement_id,
+                anchor,
+                at_s,
+                offset_s,
+            } => sounds::move_sound(tx, placement_id, anchor.as_ref(), *at_s, *offset_s, &pacing),
+            Command::SetSoundFades {
+                placement_id,
+                fade_in_s,
+                fade_out_s,
+                auto,
+            } => sounds::set_fades(tx, placement_id, *fade_in_s, *fade_out_s, *auto),
+            Command::SetSoundGain {
+                placement_id,
+                gain_db,
+            } => sounds::set_gain(tx, placement_id, *gain_db),
+            Command::SetSoundPan { placement_id, pan } => sounds::set_pan(tx, placement_id, *pan),
+            Command::SetSoundDepth {
+                placement_id,
+                depth,
+            } => sounds::set_depth(tx, placement_id, *depth),
+            Command::SlipSound { placement_id, in_s } => sounds::slip(tx, placement_id, *in_s),
+            Command::SetSceneRoom { scene_id, room } => sounds::set_room(tx, scene_id, room),
             Command::PutBucket { bucket } => {
                 let mut b = bucket.clone();
                 b.keywords.retain(|k| !k.trim().is_empty());
@@ -1176,7 +1264,7 @@ fn bucket(tx: &Tx, id: &str) -> Result<SoundBucket> {
         .ok_or_else(|| CoreError::not_found("bucket", id))
 }
 
-fn placement(tx: &Tx, id: &str) -> Result<Placement> {
+pub(crate) fn placement(tx: &Tx, id: &str) -> Result<Placement> {
     tx.doc()
         .placements
         .get(id)
@@ -1244,7 +1332,7 @@ pub fn cue_status(doc: &Document, c: &SoundCue) -> CueStatus {
 }
 
 /// Lowest layer of the lane where the placement doesn't overlap another sound.
-fn free_layer(doc: &Document, p: &Placement, pacing: &crate::timeline::Pacing) -> u32 {
+pub(crate) fn free_layer(doc: &Document, p: &Placement, pacing: &crate::timeline::Pacing) -> u32 {
     let Some(scene) = doc.scenes.get(&p.scene_id) else {
         return p.layer;
     };
@@ -1306,7 +1394,7 @@ fn first_locked(doc: &Document, scene: &Scene, pacing: &crate::timeline::Pacing)
 }
 
 /// Rounds to whole milliseconds (stored timing values).
-fn ms(x: f64) -> f64 {
+pub(crate) fn ms(x: f64) -> f64 {
     (x * 1000.0).round() / 1000.0
 }
 
@@ -1591,6 +1679,7 @@ fn trim_placement(
     delta: f64,
     pacing: &crate::timeline::Pacing,
 ) -> Result<Value> {
+    let delta = sounds::finite("delta_s", delta)?;
     let mut p = placement(tx, placement_id)?;
     let asset_len = tx
         .doc()
@@ -1620,6 +1709,7 @@ fn trim_placement(
     };
     p.fade_in_s = p.fade_in_s.min(p.len_s / 2.0);
     p.fade_out_s = p.fade_out_s.min(p.len_s / 2.0);
+    sounds::settle(tx.doc(), &mut p);
     p.layer = free_layer(tx.doc(), &p, pacing);
     tx.put(&p)?;
     Ok(json!({ "delta_s": d }))
