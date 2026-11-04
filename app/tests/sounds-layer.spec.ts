@@ -89,7 +89,7 @@ async function centre(l: Locator) {
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 }
 
-const undoSteps = async () => (await rpc<{ state: string }[]>('history', { limit: 200 })).filter((r) => r.state === 'done').length;
+const undoSteps = async () => (await rpc<{ state: string }[]>('history', { limit: 100000 })).filter((r) => r.state === 'done').length;
 const sound = async (id: string) => (await list()).find((s) => s.id === id)!;
 
 /** Runs a gesture and checks that it was one undo step, whose undo brings back what was. */
@@ -320,7 +320,7 @@ test('keys: every ball can be reached and announces itself', async ({ page }) =>
   const ball = page.getByTestId('sound-ball').first();
   await ball.focus();
   await expect(ball).toHaveAttribute('aria-label', /Foil_crackle, Layer test sounds, starts .*, 2\.5 seconds, loudness 0 dB, Pan center, depth Room 50 percent/);
-  await page.keyboard.press('Enter');
+  await page.keyboard.press('Shift+Enter');
   await expect(ball).toHaveAttribute('aria-pressed', 'true');
 });
 
@@ -628,4 +628,536 @@ test('previews: a drag that ends where it began right after a nudge', async ({ p
   await expect.poll(async () => (await sound(a)).depth).toBeCloseTo(0.45, 3);
   await page.keyboard.press('ControlOrMeta+z');
   await expect(ballOf(page, a)).toHaveAttribute('data-depth', '0.300');
+});
+
+// ---- the opened sound ----
+
+type Full = Sound & { in_s: number; fade_in_s: number };
+const full = async (id: string) => (await list()).find((s) => s.id === id) as Full;
+const view = (page: Page) => page.getByTestId('opened-sound');
+const part = (page: Page, p: string) => page.getByTestId(`opened-${p}`);
+
+/** Opens by double click; the view glides the sound's line to the middle, so it waits for that. */
+async function openSound(page: Page, id: string) {
+  await ballOf(page, id).dblclick();
+  await expect(view(page)).toBeVisible();
+  await page.waitForTimeout(450);
+}
+
+test('opened: a double click opens it beside the spine, joined to its line by a wedge', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await openSound(page, a);
+  const v = view(page);
+  await expect(v).toContainText('Foil_crackle');
+  await expect(page.getByTestId('opened-reading')).toContainText('Layer test sounds');
+  await expect(page.getByTestId('opened-reading')).toContainText('Close');
+  await expect(page.getByTestId('opened-reading')).toContainText('Pan center');
+  await expect(page.getByTestId('opened-wedge')).toHaveAttribute('d', /M\d/);
+  await expect(page.getByTestId('opened-used')).toHaveAttribute('d', /Z$/);
+  await expect(page.getByTestId('opened-playhead')).toHaveCount(1);
+  const card = (await v.boundingBox())!;
+  const spine = (await page.getByTestId('arrange-row').first().boundingBox())!;
+  expect(card.x).toBeGreaterThan(spine.x + spine.width);
+  await page.screenshot({ path: 'test-results/opened-sound.png' });
+});
+
+test('opened: the playhead runs through the view, and the view stays open', async ({ page }) => {
+  const a = await place(0.5, 0.2);
+  await open(page);
+  await openSound(page, a);
+  const head = page.getByTestId('opened-playhead');
+  const before = await head.getAttribute('d');
+  await page.keyboard.press('Space');
+  await expect.poll(() => head.getAttribute('d')).not.toBe(before);
+  await expect(view(page)).toBeVisible();
+  await page.keyboard.press('Space');
+});
+
+test('opened: a double click on the length line opens it too', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await page.getByTestId('sound-line').first().dblclick();
+  await expect(view(page)).toBeVisible();
+  await expect(ballOf(page, a)).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('opened: Enter opens the sound in focus, Esc closes and gives the focus back', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await ballOf(page, a).focus();
+  await page.keyboard.press('Enter');
+  await expect(view(page)).toBeVisible();
+  await expect(view(page)).toBeFocused();
+  await expect(page.getByTestId('sounds-said')).toContainText('Opened');
+  await page.keyboard.press('Escape');
+  await expect(view(page)).toBeHidden();
+  await expect(ballOf(page, a)).toBeFocused();
+  // the sound stays selected; a second Esc clears it
+  await expect(ballOf(page, a)).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Escape');
+  await expect(ballOf(page, a)).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('opened: a click outside closes, the transport does not', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await openSound(page, a);
+  await page.getByRole('button', { name: 'Favorite take (F)' }).click();
+  await expect(view(page)).toBeVisible();
+  await page.getByTestId('arrange-row').first().click();
+  await expect(view(page)).toBeHidden();
+});
+
+test('opened: a sound in a hidden bucket closes, and so does one that goes', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await openSound(page, a);
+  await foil(page).getByRole('button', { name: 'Fade Layer test sounds' }).click();
+  await expect(view(page)).toBeHidden();
+  await foil(page).getByRole('button', { name: 'Show Layer test sounds' }).click();
+  await openSound(page, a);
+  await rpc('remove_sound', { placement_id: a });
+  await page.keyboard.press('s');
+  await expect(view(page)).toBeHidden();
+});
+
+test('opened: the bottom edge trims, snapping to the dialogue, in one step', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await rpc('command', { cmd: 'set_sound_fades', placement_id: a, auto: true });
+  await open(page);
+  await openSound(page, a);
+  const before = await full(a);
+  const after = await oneStep(page, async () => {
+    await drag(page, await centre(part(page, 'out')), 0, -60);
+  });
+  const s = after.find((x) => x.id === a)!;
+  expect(s.len_s).toBeLessThan(before.len_s);
+  expect(s.start_s).toBe(before.start_s);
+  expect(s.fade_out_s).toBeCloseTo(Math.min(0.3, s.len_s * 0.3), 3);
+});
+
+/** Pixels from a part of the view to a time, read off the view's own edges. */
+async function pxTo(page: Page, a: string, from: number, to: number) {
+  const s = await full(a);
+  const top = await centre(part(page, 'in'));
+  const bottom = await centre(part(page, 'out'));
+  return ((to - from) / s.len_s) * (bottom.y - top.y);
+}
+
+const spokenLines = async () => (await rpc<{ items: { kind: string; line_id: string; start_s: number; end_s: number }[] }>('scene_view', { scene: '1' })).items.filter((i) => i.kind === 'line' && i.end_s > i.start_s);
+
+/** The other specs change the demo's lines: a sound placed to run over the end of a line. */
+async function overALine() {
+  const line = (await spokenLines()).find((l) => l.end_s >= 1)!;
+  return { line, id: await place(line.end_s - 1, 0.2) };
+}
+
+test('opened: an edge near a line snaps to it, within about 8 px', async ({ page }) => {
+  const { line, id: a } = await overALine();
+  await open(page);
+  await openSound(page, a);
+  const s = await full(a);
+  const end = line.end_s;
+  const dy = await pxTo(page, a, s.start_s + s.len_s, end);
+  const c = await centre(part(page, 'out'));
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x, c.y + dy / 2, { steps: 3 });
+  await page.mouse.move(c.x, c.y + dy + 4, { steps: 3 });
+  await expect(page.getByTestId('opened-tip')).toContainText(/Ends/);
+  await page.mouse.up();
+  await expect.poll(async () => (await full(a)).len_s).toBeCloseTo(end - s.start_s, 3);
+});
+
+test('opened: past the snap distance the edge goes free', async ({ page }) => {
+  const a = await place(0.5, 0.2);
+  await open(page);
+  await openSound(page, a);
+  const s = await full(a);
+  const ts = (await spokenLines()).flatMap((l) => [l.start_s, l.end_s]);
+  const px = await pxTo(page, a, 0, 1);
+  // a spot well clear of every line edge
+  let want = s.start_s + s.len_s - 0.2;
+  while (ts.some((t) => Math.abs(t - want) * px < 20) && want > s.start_s + 0.4) want -= 0.02;
+  await drag(page, await centre(part(page, 'out')), 0, (want - s.start_s - s.len_s) * px);
+  await expect.poll(async () => (await full(a)).len_s).toBeCloseTo(want - s.start_s, 1);
+  const len = (await full(a)).len_s;
+  expect(ts.some((t) => Math.abs(s.start_s + len - t) < 0.002)).toBe(false);
+});
+
+test('opened: a start trimmed onto a line hangs on it, as one step', async ({ page }) => {
+  const { line, id: a } = await overALine();
+  await open(page);
+  await openSound(page, a);
+  const s = await full(a);
+  const dy = await pxTo(page, a, s.start_s, line.end_s);
+  const after = await oneStep(page, async () => {
+    await drag(page, await centre(part(page, 'in')), 0, dy + 3);
+  });
+  const t = after.find((x) => x.id === a)!;
+  expect(t.start_s).toBeCloseTo(line.end_s, 3);
+  expect(t.anchor?.line_id).toBe(line.line_id);
+});
+
+test('opened: over the waveform, scroll scrubs and ⇧ scroll sets the loudness', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await openSound(page, a);
+  const c = await centre(part(page, 'move'));
+  await page.mouse.move(c.x, c.y);
+  const head = page.getByTestId('opened-playhead');
+  const before = await head.getAttribute('d');
+  await page.mouse.wheel(0, 40);
+  await expect.poll(() => head.getAttribute('d')).not.toBe(before);
+  await page.keyboard.down('Shift');
+  await page.mouse.wheel(0, -40);
+  await page.keyboard.up('Shift');
+  await expect.poll(async () => (await sound(a)).gain_db).toBeGreaterThan(0);
+});
+
+test('opened: the top edge trims and the audio stays where it was', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await openSound(page, a);
+  const before = await full(a);
+  await oneStep(page, async () => {
+    await drag(page, await centre(part(page, 'in')), 0, 50);
+  });
+  const s = await full(a);
+  const moved = s.start_s - before.start_s;
+  expect(moved).toBeGreaterThan(0);
+  expect(s.in_s).toBeCloseTo(before.in_s + moved, 2);
+  expect(s.len_s).toBeCloseTo(before.len_s - moved, 2);
+});
+
+test('opened: the corner dots set the fades; only the fade out turns auto off', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await openSound(page, a);
+  await oneStep(page, async () => {
+    await drag(page, await centre(part(page, 'fadeIn')), 0, 40);
+  });
+  expect((await full(a)).fade_in_s).toBeGreaterThan(0.1);
+  expect((await full(a)).auto_fade).toBe(true);
+  await oneStep(page, async () => {
+    await drag(page, await centre(part(page, 'fadeOut')), 0, -40);
+  });
+  expect((await full(a)).fade_out_s).toBeGreaterThan(0.3);
+  expect((await full(a)).auto_fade).toBe(false);
+});
+
+test('opened: a press on a dot that goes nowhere changes nothing', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await openSound(page, a);
+  const steps = await undoSteps();
+  await part(page, 'fadeOut').click();
+  await page.waitForTimeout(300);
+  expect(await undoSteps()).toBe(steps);
+  expect((await full(a)).auto_fade).toBe(true);
+});
+
+test('opened: dragging the middle moves the sound, ⌥ slips the audio inside', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await rpc('command', { cmd: 'trim_placement', placement_id: a, edge: 'start', delta_s: 0.5 });
+  await rpc('command', { cmd: 'trim_placement', placement_id: a, edge: 'end', delta_s: -0.5 });
+  await open(page);
+  await openSound(page, a);
+  const base = await full(a);
+  await oneStep(page, async () => {
+    await page.keyboard.down('Alt');
+    await drag(page, await centre(part(page, 'move')), 0, 30);
+    await page.keyboard.up('Alt');
+  });
+  const slipped = await full(a);
+  expect(slipped.in_s).toBeLessThan(base.in_s);
+  expect(slipped.start_s).toBe(base.start_s);
+  expect(slipped.len_s).toBe(base.len_s);
+  await oneStep(page, async () => {
+    await drag(page, await centre(part(page, 'move')), 0, 50);
+  });
+  const moved = await full(a);
+  expect(moved.start_s).toBeGreaterThan(base.start_s);
+  expect(moved.in_s).toBe(slipped.in_s);
+});
+
+test('opened: Esc during a gesture cancels it and keeps the view', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await openSound(page, a);
+  const before = await full(a);
+  const c = await centre(part(page, 'out'));
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x, c.y - 40, { steps: 4 });
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expect(view(page)).toBeVisible();
+  expect((await full(a)).len_s).toBe(before.len_s);
+  await expect(page.getByTestId('opened-readout')).toContainText(`${before.len_s.toFixed(1)} of`);
+});
+
+test('opened: the quick buttons, one step each', async ({ page }) => {
+  const { id: a } = await overALine();
+  await open(page);
+  await openSound(page, a);
+  const at = (await full(a)).start_s;
+  const spoken = await spokenLines();
+  const end = Math.min(...spoken.map((l) => l.end_s).filter((t) => t > at + 0.05));
+  const next = Math.min(...spoken.map((l) => l.start_s).filter((t) => t > at + 0.05));
+  const button = (name: string) => view(page).getByRole('button', { name, exact: true });
+
+  const steps = await undoSteps();
+  await button('End with line').click();
+  await expect.poll(undoSteps).toBe(steps + 1);
+  await expect.poll(async () => (await full(a)).len_s).toBeCloseTo(Math.min(2.5, end - at), 2);
+  await expect(button('End with line')).toHaveAttribute('aria-pressed', 'true');
+
+  await button('Until next line').click();
+  await expect.poll(undoSteps).toBe(steps + 2);
+  await expect.poll(async () => (await full(a)).len_s).toBeCloseTo(Math.min(2.5, next - at), 2);
+
+  await button('Full').click();
+  await expect.poll(async () => (await full(a)).len_s).toBeCloseTo(2.5, 2);
+  await expect(button('Full')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('opened: the Auto fade button hands the fade back to the length', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await rpc('command', { cmd: 'set_sound_fades', placement_id: a, fade_out_s: 1 });
+  await open(page);
+  await openSound(page, a);
+  const auto = view(page).getByRole('button', { name: 'Auto fade' });
+  await expect(auto).toHaveAttribute('aria-pressed', 'false');
+  await oneStep(page, () => auto.click());
+  await expect(auto).toHaveAttribute('aria-pressed', 'true');
+  expect((await full(a)).fade_out_s).toBeCloseTo(0.3, 3);
+});
+
+test('opened: every part answers to the keys, a burst is one step', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await ballOf(page, a).focus();
+  await page.keyboard.press('Enter');
+  await expect(view(page)).toBeFocused();
+  const base = await full(a);
+
+  await page.keyboard.press('Tab');
+  await expect(view(page).getByRole('button', { name: /close/ })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(part(page, 'in')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(part(page, 'move')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(part(page, 'out')).toBeFocused();
+
+  await oneStep(page, async () => {
+    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowUp');
+  });
+  expect((await full(a)).len_s).toBeCloseTo(base.len_s - 0.3, 3);
+
+  await page.keyboard.press('Tab');
+  await expect(part(page, 'fadeIn')).toBeFocused();
+  await oneStep(page, async () => {
+    await page.keyboard.press('ArrowDown');
+  });
+  expect((await full(a)).fade_in_s).toBeCloseTo(base.fade_in_s + 0.1, 3);
+
+  await page.keyboard.press('Tab');
+  await expect(part(page, 'fadeOut')).toBeFocused();
+  await oneStep(page, async () => {
+    await page.keyboard.press('ArrowUp');
+  });
+  expect((await full(a)).auto_fade).toBe(false);
+  await expect(page.getByTestId('sounds-said')).toContainText('Fade out');
+
+  // loudness, depth and pan keep their keys in here
+  await oneStep(page, async () => {
+    await page.keyboard.press('Shift+ArrowUp');
+  });
+  await expect(page.getByTestId('opened-reading')).toContainText('+1 dB');
+});
+
+test('opened: Tab stays in the view and comes round', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await ballOf(page, a).focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  for (let i = 0; i < 12; i++) await page.keyboard.press('Tab');
+  await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('[data-testid="opened-sound"]'))).toBe(true);
+});
+
+test('opened: what it changes reaches the Edit page, and the reverse', async ({ page }) => {
+  const a = await place(1, 0.2);
+  await open(page);
+  await openSound(page, a);
+  await drag(page, await centre(part(page, 'fadeOut')), 0, -30);
+  await expect.poll(async () => (await full(a)).auto_fade).toBe(false);
+  const ev = await rpc<{ placements: { id: string; fade_out_s: number; auto_fade: boolean }[] }>('edit_view', { scene: '1' });
+  const onEdit = ev.placements.find((p) => p.id === a)!;
+  expect(onEdit.fade_out_s).toBe((await full(a)).fade_out_s);
+  expect(onEdit.auto_fade).toBe(false);
+  await rpc('command', { cmd: 'update_placement', placement_id: a, patch: { fade_in_s: 0.4 } });
+  await expect(page.getByTestId('opened-readout')).toContainText('fade in 0.40', { timeout: 4000 });
+});
+
+test('keys: Tab walks the balls in time, one Tab stop for the layer', async ({ page }) => {
+  const late = await place(4, 0.2);
+  const early = await place(0.5, 0.6);
+  await open(page);
+  await expect(ballOf(page, early)).toHaveAttribute('tabindex', '0');
+  await expect(ballOf(page, late)).toHaveAttribute('tabindex', '-1');
+  await ballOf(page, early).focus();
+  await page.keyboard.press('Tab');
+  await expect(ballOf(page, late)).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(ballOf(page, early)).toBeFocused();
+});
+
+test('keys: ⇧Enter builds a selection, ⌘A takes all, and it is said aloud', async ({ page }) => {
+  const a = await place(0.5, 0.2);
+  const b = await place(3, 0.6);
+  await open(page);
+  await ballOf(page, a).focus();
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Enter');
+  await expect(ballOf(page, a)).toHaveAttribute('aria-pressed', 'true');
+  await expect(ballOf(page, b)).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('sounds-said')).toContainText('2 sounds selected');
+  await oneStep(page, async () => {
+    await page.keyboard.press('ArrowRight');
+  });
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('sounds-said')).toContainText('Selection cleared');
+  await page.keyboard.press('ControlOrMeta+a');
+  await expect(ballOf(page, a)).toHaveAttribute('aria-pressed', 'true');
+  await expect(ballOf(page, b)).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('keys: an eye reached with Tab works with Enter; after a click Space still plays', async ({ page }) => {
+  await place(1, 0.2);
+  await open(page);
+  const eye = foil(page).getByRole('button', { name: 'Fade Layer test sounds' });
+  await eye.focus();
+  await page.keyboard.press('Enter');
+  await expect(foil(page).getByRole('button', { name: 'Show Layer test sounds' })).toBeVisible();
+  await expect(page.getByTestId('sounds-said')).toContainText('Layer test sounds faded');
+  await foil(page).getByRole('button', { name: 'Show Layer test sounds' }).click();
+  await page.locator('body').click({ position: { x: 5, y: 400 } });
+  const eye2 = foil(page).getByRole('button', { name: 'Fade Layer test sounds' });
+  await eye2.click();
+  await page.keyboard.press('Space');
+  const play = page.getByRole('button', { name: 'Play or stop (Space)' });
+  await expect(play).toHaveAttribute('data-playing', 'true');
+  await expect(foil(page).getByRole('button', { name: 'Show Layer test sounds' })).toBeVisible();
+  await page.keyboard.press('Space');
+  await expect(play).toHaveAttribute('data-playing', 'false');
+});
+
+test('reduced motion: the opened view and the glide do not animate', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const a = await place(1, 0.2);
+  await open(page);
+  await ballOf(page, a).dblclick();
+  await expect(view(page)).toBeVisible();
+  expect(await view(page).evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+  const glide = await page.locator('.world').evaluate((el) => getComputedStyle(el).transitionDuration);
+  expect(glide).toBe('0s');
+});
+
+// ---- the room in the transport ----
+
+const chip = (page: Page) => page.getByTestId('room-chip');
+const roomOf = async () => (await rpc<{ room: { size: number; wet: number; damping: number } }[]>('scene_rooms'))[0].room;
+
+async function setSize(page: Page, v: number) {
+  await page.getByRole('slider', { name: "Size of this scene's room" }).evaluate((el: HTMLInputElement, x) => {
+    el.value = String(x);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }, v);
+}
+
+test('room: the transport reads the scene’s room, and only beside the sounds', async ({ page }) => {
+  const r = await roomOf();
+  await open(page);
+  await expect(chip(page)).toHaveText(`Room ${Math.round(r.size * 100)} · wet ${Math.round(r.wet * 100)}`);
+  await page.keyboard.press('s');
+  await expect(chip(page)).toBeHidden();
+  await page.keyboard.press('s');
+  await expect(chip(page)).toBeVisible();
+  await page.keyboard.press('1');
+  await expect(chip(page)).toBeHidden();
+});
+
+test('room: the quick size is one undo step and keeps the rest of the room', async ({ page }) => {
+  const r = await roomOf();
+  await open(page);
+  await chip(page).click();
+  const steps = await undoSteps();
+  await setSize(page, 0.81);
+  await expect.poll(undoSteps).toBe(steps + 1);
+  await expect.poll(roomOf).toEqual({ ...r, size: 0.81 });
+  await expect(chip(page)).toContainText('Room 81');
+  await page.getByRole('slider', { name: "Size of this scene's room" }).blur();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect.poll(roomOf).toEqual(r);
+  await expect(chip(page)).toContainText(`Room ${Math.round(r.size * 100)}`);
+});
+
+test('room: the shortcut opens the settings at this scene, and Back comes back', async ({ page }) => {
+  await open(page);
+  await chip(page).click();
+  await page.getByTestId('room-settings').click();
+  await expect(page.getByTestId('scene-room').first()).toBeVisible();
+  await expect(page.getByRole('slider', { name: 'Size of scene 1' })).toBeFocused();
+  await page.getByRole('button', { name: /Back to Arrange/ }).click();
+  await expect(page.getByTestId('arrange-row').first()).toBeVisible();
+});
+
+test('room: one source of truth, a change in the settings shows in the read-out', async ({ page }) => {
+  const r = await roomOf();
+  const sc = await rpc<{ id: string }[]>('list_scenes');
+  await open(page);
+  await rpc('command', { cmd: 'set_scene_room', scene_id: sc[0].id, room: { ...r, wet: 0.2 } });
+  await page.keyboard.press('ArrowDown');
+  await expect(chip(page)).toContainText('wet 20');
+  await rpc('undo');
+});
+
+test('room: Esc closes the pop-up and gives the focus back', async ({ page }) => {
+  await open(page);
+  await chip(page).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('room-pop')).toBeVisible();
+  await page.getByRole('slider', { name: "Size of this scene's room" }).focus();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('room-pop')).toBeHidden();
+  await expect(chip(page)).toBeFocused();
+});
+
+test('one document: pan and depth show in the Edit inspector, and the reverse', async ({ page }) => {
+  const a = await place(1, 0.4);
+  await rpc('command', { cmd: 'set_sound_pan', placement_id: a, pan: -0.5 });
+  await open(page);
+  await page.keyboard.press('3');
+  await page.getByRole('button', { name: 'Foil_crackle' }).first().click();
+  await page.keyboard.press('i');
+  const panField = page.getByRole('textbox', { name: /^Pan/ });
+  const depthField = page.getByRole('textbox', { name: /^Depth/ });
+  await expect(panField).toHaveValue('−50');
+  await expect(depthField).toHaveValue('40');
+  await depthField.fill('70');
+  await depthField.blur();
+  await expect.poll(async () => (await sound(a)).depth).toBeCloseTo(0.7, 3);
+  await panField.fill('25');
+  await panField.blur();
+  await expect.poll(async () => (await sound(a)).pan).toBeCloseTo(0.25, 3);
+  await page.keyboard.press('2');
+  await expect(ballOf(page, a)).toHaveAttribute('data-depth', '0.700');
+  await expect(ballOf(page, a)).toHaveAttribute('aria-label', /Pan R 25/);
 });

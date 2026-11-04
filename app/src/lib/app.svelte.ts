@@ -108,6 +108,10 @@ class AppState {
   busy = $state(false);
   /** Import page sub-tab. */
   importTab = $state<ImportTab>('files');
+  /** The page the room shortcut came from: Back returns there. */
+  importBack = $state<Page | null>(null);
+  /** Import › Sounds opens its Rooms on the current scene once. */
+  roomsAsked = $state(false);
   // Edit page (Logic-style control bar)
   editBucket = $state(true);
   editInspector = $state(false);
@@ -131,6 +135,8 @@ class AppState {
   soundsOn = $state(storedSounds());
   /** Arrange: selected sounds; the last one is the primary. */
   soundSel = $state<string[]>([]);
+  /** Arrange: the sound open in its vertical editor. */
+  soundOpen = $state<string | null>(null);
   /** Arrange: buckets faded out with their eye. View only: this page, this session, never
    *  the document or the mix. */
   hiddenBuckets = $state<string[]>([]);
@@ -261,6 +267,7 @@ class AppState {
     this.editSel = null;
     this.editMany = [];
     this.soundSel = [];
+    this.soundOpen = null;
     this.hiddenBuckets = [];
     this.openBucket = null;
     this.overlay = null;
@@ -360,6 +367,7 @@ class AppState {
       this.locator = this.pos;
       this.passageTo = null;
       this.soundSel = [];
+      this.soundOpen = null;
     }
     if (this.wantsSounds) await this.loadEdit();
   }
@@ -410,6 +418,7 @@ class AppState {
 
   setPage(p: Page) {
     this.page = p;
+    if (p !== 'import') this.importBack = null;
     if (this.wantsSounds) void this.loadEdit();
   }
 
@@ -426,11 +435,19 @@ class AppState {
   /** ⇧B: between the editor and the full bucket, keeping scene and playhead. */
   toggleFullBucket() {
     if (this.page === 'import') {
-      if (this.view) this.setPage('edit');
+      if (this.view) this.setPage(this.importBack ?? 'edit');
     } else {
       this.importTab = 'sounds';
       this.setPage('import');
     }
+  }
+
+  /** The room's home: the Sounds tab of the project setup, at this scene. */
+  openRooms() {
+    this.importBack = this.page;
+    this.roomsAsked = true;
+    this.importTab = 'sounds';
+    this.setPage('import');
   }
 
   /** Waits for a background job, reporting progress; resolves with its final state. */

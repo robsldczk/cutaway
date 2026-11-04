@@ -3,7 +3,7 @@
   // A ball is the same sound clip the Edit page shows: everything here reads `app.edit`, and
   // every change is a command sent once, on release. What a gesture shows until then is a
   // local preview. The rules live in lib/sounds; this file draws them and wires up gestures.
-  import { onMount, untrack } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { call } from '../lib/bridge';
   import { charColor, rgba } from '../lib/colors';
@@ -11,12 +11,14 @@
   import { depthAt, groups, layoutBalls, type Field, type Shown } from '../lib/sounds/balls';
   import { soundKey } from '../lib/sounds/keymap';
   import { assignLanes, type Lanes, type Settled } from '../lib/sounds/lanes';
+  import { partAt, partText, reshape, reshapeCommands, type OpenState, type Ops, type Part } from '../lib/sounds/opened';
   import { arc, circle, focusBody, focusFade, linePath, panLine, restOfSource, ringPoint, spinePaths } from '../lib/sounds/paths';
   import { announce, autoFadeOut, ballsInBand, bandSelect, clickSelect, dbOfRing, dbText, depthCommands, GAIN_MAX_DB, GAIN_MIN_DB, gainCommands, groupDelta, moveCommands, normRect, oneStep, panCommands, panText, pressSelect, removeCommands, ringAt, ringOf, timeDrag, toggleHidden, zone, type Cmd, type Rect, type SoundState } from '../lib/sounds/select';
   import { settledOf, Settler, snapshot, withFresh } from '../lib/sounds/settle';
   import { nearestTarget, snapTargets, startLabel, type SnapTarget } from '../lib/sounds/snap';
   import type { TimeMap } from '../lib/sounds/timemap';
   import type { Bucket, BucketsView, ItemView, Job, PlacementView } from '../lib/types';
+  import OpenedSound from './OpenedSound.svelte';
   import SceneBucket from './SceneBucket.svelte';
 
   let { map, spineX, off, slide, on, lines }: { map: TimeMap; spineX: number; off: number; slide: string; on: boolean; lines: ItemView[] } = $props();
@@ -31,15 +33,22 @@
   const HOVER_LEAVE_MS = 90;
   const MIN_TRIM_S = 0.2;
   const SEEK_MS = 150;
+  /** Where the opened view sits. */
+  const CARD_GAP = 96;
+  const CARD_W = 372;
+  const CARD_MIN_W = 300;
+  const CARD_TOP = 84;
+  const CARD_BELOW = 124;
 
   type Sound = PlacementView & { bucket: string; bucketName: string; tone: string };
-  type Patch = Partial<Pick<PlacementView, 'start_s' | 'len_s' | 'depth' | 'pan' | 'gain_db' | 'fade_out_s'>>;
+  type Patch = Partial<Pick<PlacementView, 'start_s' | 'len_s' | 'in_s' | 'depth' | 'pan' | 'gain_db' | 'fade_in_s' | 'fade_out_s' | 'auto_fade'>>;
 
   // ---- what the document says, with the gesture's preview on top ----
 
   let buckets = $state<BucketsView | null>(null);
   let preview = $state.raw<Record<string, Patch>>({});
   let stageW = $state(1440);
+  let stageH = $state(900);
   let world = $state<HTMLDivElement>();
   let root = $state<HTMLDivElement>();
 
@@ -183,7 +192,9 @@
   // ---- what is drawn ----
 
   const primary = $derived(sel.length ? (byId.get(sel[sel.length - 1]) ?? null) : null);
-  const focusId = $derived(dragging[0] ?? hover ?? (sel.length === 1 ? sel[0] : null));
+  const openId = $derived(app.soundOpen);
+  const opened = $derived(openId ? (byId.get(openId) ?? null) : null);
+  const focusId = $derived(openId ?? dragging[0] ?? hover ?? (sel.length === 1 ? sel[0] : null));
 
   const lineEnd = (s: Sound) => Math.max(map.y(s.start_s + s.len_s), map.y(s.start_s) + 4);
 
@@ -278,10 +289,10 @@
   let band = $state<(Rect & { hit: string[] }) | null>(null);
   let popping = $state<string[]>([]);
 
-  function stateOf(id: string): SoundState {
+  function stateOf(id: string): OpenState {
     const s = byId.get(id);
     if (!s) throw new Error(`no sound ${id}`);
-    return { id, start_s: s.start_s, len_s: s.len_s, offset_s: s.offset_s, anchor: s.anchor, depth: s.depth, pan: s.pan, gain_db: s.gain_db };
+    return { id, start_s: s.start_s, len_s: s.len_s, offset_s: s.offset_s, anchor: s.anchor, depth: s.depth, pan: s.pan, gain_db: s.gain_db, in_s: s.in_s, asset_len_s: s.asset_len_s, fade_in_s: s.fade_in_s, fade_out_s: s.fade_out_s, auto_fade: s.auto_fade };
   }
 
   function point(e: MouseEvent) {
@@ -291,7 +302,7 @@
   }
 
   /** The value a delta gives each sound, as the preview shows it. */
-  function patchAll(base: SoundState[], f: (b: SoundState) => Patch) {
+  function patchAll<B extends { id: string }>(base: B[], f: (b: B) => Patch) {
     const next = { ...preview };
     for (const b of base) next[b.id] = { ...next[b.id], ...f(b) };
     preview = next;
@@ -310,7 +321,7 @@
    *  way. Whatever finishes calls this, and the last one out clears it, so a preview can
    *  neither outlive its owners nor go before the document has the value. */
   function letGo(ids: string[]) {
-    const held = new Set([...(gesture?.base ?? []), ...(burst?.base ?? [])].map((b) => b.id));
+    const held = new Set([...(gesture?.base ?? []), ...(burst?.base ?? []), ...(shaping ? [{ id: shaping }] : [])].map((b) => b.id));
     clearPreview(ids.filter((id) => !held.has(id) && !landing[id]));
   }
 
@@ -534,17 +545,23 @@
 
   // ---- keys and the wheel: bursts that end in one command ----
 
-  type BurstKind = 'gain' | 'depth' | 'pan' | 'time';
-  let burst: { kind: BurstKind; base: SoundState[]; delta: number; timer: ReturnType<typeof setTimeout> } | null = null;
+  type BurstKind = 'gain' | 'depth' | 'pan' | 'time' | Part;
+  let burst: { kind: BurstKind; base: OpenState[]; delta: number; timer: ReturnType<typeof setTimeout> } | null = null;
 
-  const limit = (kind: BurstKind, base: SoundState[], delta: number) => {
+  const isPart = (kind: BurstKind): kind is Part => kind !== 'gain' && kind !== 'depth' && kind !== 'pan' && kind !== 'time';
+  /** A key press on the opened sound: its part at the delta. */
+  const shaped = (kind: Part, b: OpenState, delta: number) => reshape(kind, b, partAt(kind, b) + delta);
+
+  const limit = (kind: BurstKind, base: OpenState[], delta: number) => {
+    if (isPart(kind)) return shaped(kind, base[0], delta).at - partAt(kind, base[0]);
     if (kind === 'gain') return groupDelta(base.map((b) => b.gain_db), delta, GAIN_MIN_DB, GAIN_MAX_DB);
     if (kind === 'depth') return groupDelta(base.map((b) => b.depth), delta, 0, 1);
     if (kind === 'pan') return groupDelta(base.map((b) => b.pan), delta, -1, 1);
     return groupDelta(base.map((b) => b.start_s), delta, 0, Infinity);
   };
 
-  function say(kind: BurstKind, b: SoundState, delta: number) {
+  function say(kind: BurstKind, b: OpenState, delta: number) {
+    if (isPart(kind)) return partText(kind, b, shaped(kind, b, delta));
     if (kind === 'gain') return `Loudness ${dbText(b.gain_db + delta)}`;
     if (kind === 'depth') return `${zone(b.depth + delta)} · ${Math.round((b.depth + delta) * 100)}%`;
     if (kind === 'pan') return panText(b.pan + delta);
@@ -562,11 +579,18 @@
     b.delta = limit(kind, b.base, b.delta + delta);
     b.timer = setTimeout(flushBurst, BURST_MS);
     const d = b.delta;
-    patchAll(b.base, (x) => (kind === 'gain' ? { gain_db: x.gain_db + d } : kind === 'depth' ? { depth: x.depth + d } : kind === 'pan' ? { pan: x.pan + d } : { start_s: x.start_s + d }));
+    patchAll(b.base, (x) => (isPart(kind) ? shaped(kind, x, d).patch : kind === 'gain' ? { gain_db: x.gain_db + d } : kind === 'depth' ? { depth: x.depth + d } : kind === 'pan' ? { pan: x.pan + d } : { start_s: x.start_s + d }));
+    // the opened view shows its own values as they change
+    if (isPart(kind)) return;
     const lead = b.base[b.base.length - 1];
     const at = shown(lead.id);
-    tip = { x: at.x + at.r + 12, y: at.y - 12, text: b.base.length > 1 ? `${b.base.length} sounds · ${say(kind, lead, d)}` : say(kind, lead, d) };
+    tip = { x: at.x + at.r + 12, y: at.y - 12, text: burstText(b, d) };
   }
+
+  const burstText = (b: NonNullable<typeof burst>, d: number) => {
+    const text = say(b.kind, b.base[b.base.length - 1], d);
+    return b.base.length > 1 ? `${b.base.length} sounds · ${text}` : text;
+  };
 
   function flushBurst() {
     const b = burst;
@@ -575,7 +599,8 @@
     clearTimeout(b.timer);
     tip = null;
     settler.release();
-    const cmds = !b.delta ? [] : b.kind === 'gain' ? gainCommands(b.base, b.delta) : b.kind === 'depth' ? depthCommands(b.base, b.delta) : b.kind === 'pan' ? panCommands(b.base, b.delta) : moveCommands(b.base, b.delta, null, null);
+    const cmds = !b.delta ? [] : isPart(b.kind) ? reshapeCommands(b.kind, b.base[0], shaped(b.kind, b.base[0], b.delta), true) : b.kind === 'gain' ? gainCommands(b.base, b.delta) : b.kind === 'depth' ? depthCommands(b.base, b.delta) : b.kind === 'pan' ? panCommands(b.base, b.delta) : moveCommands(b.base, b.delta, null, null);
+    if (cmds.length) speak(burstText(b, b.delta));
     void commit(cmds, b.base.map((x) => x.id));
   }
 
@@ -596,10 +621,23 @@
       cancelGesture();
       return true;
     }
+    if (panel?.key(e)) return true;
     const at = focusedBall();
-    if (e.key === 'Enter' && at) {
-      app.soundSel = clickSelect(sel, at, e.shiftKey);
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
+      app.soundSel = inTimeOrder.filter((id) => !hiddenOf(id));
       return true;
+    }
+    if (e.key === 'Tab' && at) return tabTo(at, e.shiftKey ? -1 : 1);
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) {
+      if (e.shiftKey && at) {
+        app.soundSel = clickSelect(sel, at, true);
+        return true;
+      }
+      const id = at ?? sel[sel.length - 1];
+      if (id && !e.shiftKey) {
+        openSound(id);
+        return true;
+      }
     }
     const ids = sel.length ? sel : at ? [at] : [];
     if (!ids.length) return false;
@@ -608,11 +646,155 @@
     if (a.kind === 'clear') app.soundSel = [];
     else if (a.kind === 'remove') {
       flushBurst();
+      speak(ids.length > 1 ? `${ids.length} sounds removed` : `${byId.get(ids[0])?.name ?? 'Sound'} removed`);
       app.soundSel = [];
       void commit(removeCommands(ids), []);
     } else nudge(a.kind, a.delta, ids);
     return true;
   }
+
+  // ---- reaching the balls: one Tab stop for the layer, then Tab goes through them in time ----
+
+  let rover = $state<string | null>(null);
+  const tabStop = $derived(!on ? null : rover && byId.has(rover) && !hiddenOf(rover) ? rover : (inTimeOrder.find((id) => !hiddenOf(id)) ?? null));
+  const ballEl = (id: string) => root?.querySelector<HTMLElement>(`[data-sound="${id}"]`) ?? null;
+
+  function tabTo(from: string, dir: 1 | -1) {
+    const order = inTimeOrder.filter((id) => !hiddenOf(id));
+    const next = order[order.indexOf(from) + dir];
+    // past either end, Tab leaves the layer as usual
+    if (!next) return false;
+    ballEl(next)?.focus();
+    return true;
+  }
+
+  // ---- the opened sound ----
+
+  let panel = $state<{ key(e: KeyboardEvent): boolean } | null>(null);
+  let shaping: string | null = null;
+  let wasOpen: string | null = null;
+
+  function openSound(id: string) {
+    if (!byId.has(id) || hiddenOf(id)) return;
+    if (gesture) cancelGesture();
+    flushBurst();
+    app.soundSel = [id];
+    wasOpen = id;
+    app.soundOpen = id;
+    hover = null;
+    tip = null;
+    const s = byId.get(id);
+    // the sound's line comes to the middle, unless the playhead is running
+    if (s && !app.playing) app.scrubTo(clamp(s.start_s + Math.min(s.len_s, 6) / 2, 0, sceneEnd));
+    speak(`Opened ${s?.name ?? 'sound'}`);
+  }
+
+  /** `refocus`: the keyboard came from the ball, so it goes back there. A click outside has
+   *  put the focus where it wanted it. */
+  function closeSound(refocus: boolean) {
+    const id = wasOpen;
+    if (!app.soundOpen) return;
+    flushBurst();
+    app.soundOpen = null;
+    speak('Closed');
+    if (!refocus) return;
+    void tick().then(() => {
+      const back = id && byId.has(id) && !hiddenOf(id) ? id : tabStop;
+      if (back) ballEl(back)?.focus();
+    });
+  }
+
+  // a sound that goes, or goes out of sight, closes (handover 5.7); if the focus goes with
+  // it, it lands on the ball
+  $effect(() => {
+    if (!app.soundOpen || (on && opened && !isHidden(opened))) return;
+    const el = document.activeElement;
+    untrack(() => closeSound(!el || el === document.body || !!el.closest('[data-testid="opened-sound"]')));
+  });
+
+  // a click outside closes; the transport and the header are for listening meanwhile
+  $effect(() => {
+    if (!app.soundOpen) return;
+    const down = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('[data-testid="opened-sound"], [data-keeps-sound]')) return;
+      closeSound(false);
+    };
+    window.addEventListener('mousedown', down, true);
+    return () => window.removeEventListener('mousedown', down, true);
+  });
+
+  const card = $derived.by(() => {
+    const left = spineX + CARD_GAP;
+    return { left, top: CARD_TOP, width: clamp(rightEdge - left - 12, CARD_MIN_W, CARD_W), height: Math.max(320, stageH - CARD_TOP - CARD_BELOW) };
+  });
+  const wedgeLine = $derived.by(() => {
+    if (!opened) return { x: 0, y0: 0, y1: 0 };
+    const y = (v: number) => stageH / 2 + v - off;
+    return { x: laneX(liveLanes.get(opened.id) ?? 0), y0: y(map.y(opened.start_s)), y1: y(lineEnd(opened)) };
+  });
+
+  const ops: Ops = {
+    begin() {
+      flushBurst();
+      shaping = app.soundOpen;
+      if (shaping) dragging = [shaping];
+      settler.hold();
+    },
+    preview(patch) {
+      if (shaping) patchAll([{ id: shaping }], () => patch);
+    },
+    finish(cmds, said) {
+      const id = shaping;
+      shaping = null;
+      dragging = [];
+      settler.release();
+      if (!id) return;
+      if (said) speak(said);
+      void commit(cmds, [id]);
+    },
+    cancel() {
+      const id = shaping;
+      shaping = null;
+      dragging = [];
+      settler.release();
+      if (id) letGo([id]);
+    },
+    apply(patch, cmds, said) {
+      const id = app.soundOpen;
+      if (!id) return;
+      flushBurst();
+      patchAll([{ id }], () => patch);
+      speak(said);
+      void commit(cmds, [id]);
+    },
+    nudge(part, delta) {
+      if (app.soundOpen) nudge(part, delta, [app.soundOpen]);
+    },
+  };
+
+  // ---- what a screen reader hears ----
+
+  let spoken = $state('');
+  function speak(text: string) {
+    // the same words twice must still be read out
+    spoken = spoken === text ? `${text}\u00a0` : text;
+  }
+
+  let heardSel = 0;
+  $effect(() => {
+    const n = sel.length;
+    const last = heardSel;
+    heardSel = n;
+    if (n === last && n !== 1) return;
+    untrack(() => {
+      // opening says so itself
+      if (app.soundOpen) return;
+      if (n > 1) speak(`${n} sounds selected`);
+      else if (n === 1) speak(`${byId.get(sel[0])?.name ?? 'Sound'} selected`);
+      else if (last) speak('Selection cleared');
+    });
+  });
 
   function ballAt(e: WheelEvent) {
     const p = point(e);
@@ -629,7 +811,9 @@
     let d = e.deltaY || e.deltaX;
     if (e.deltaMode === 1) d *= 40;
     if (e.shiftKey) {
-      const id = ballAt(e);
+      // the view covers the balls behind it: over it, ⇧ scroll is the open sound's
+      const over = !!(e.target as Element | null)?.closest?.('[data-testid="opened-sound"]');
+      const id = over ? app.soundOpen : ballAt(e);
       if (!id) return false;
       nudge('gain', -d * 0.075, sel.includes(id) ? sel : [id]);
       return true;
@@ -648,6 +832,7 @@
     app.soundsUi = { key: onKey, wheel: onWheel };
     return () => {
       app.soundsUi = null;
+      app.soundOpen = null;
       flushBurst();
       if (gesture) cancelGesture();
       settler.cancel();
@@ -737,7 +922,10 @@
     hidden: app.hiddenBuckets,
     toggle: (id: string, solo: boolean) => {
       hover = null;
-      app.hiddenBuckets = toggleHidden(app.hiddenBuckets, allBuckets, id, solo);
+      const next = toggleHidden(app.hiddenBuckets, allBuckets, id, solo);
+      const name = placeable.find((b) => b.id === id)?.name ?? 'Other sounds';
+      speak(!next.length && solo ? 'All buckets shown' : solo ? `Only ${name} shown` : next.includes(id) ? `${name} faded` : `${name} shown`);
+      app.hiddenBuckets = next;
     },
     color: (id: string) => {
       const t = toneOf.get(id);
@@ -751,7 +939,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="snd" class:live={on} bind:this={root} bind:clientWidth={stageW} ondragover={dragOver} ondragleave={dragLeave} ondrop={drop}>
+<div class="snd" class:live={on} bind:this={root} bind:clientWidth={stageW} bind:clientHeight={stageH} ondragover={dragOver} ondragleave={dragLeave} ondrop={drop}>
   <div class="lasso" class:live={on} style="left: {spineX - 16}px; width: {Math.max(0, rightEdge - spineX + 16)}px" onmousedown={bandDown} role="presentation" data-testid="sounds-field"></div>
 
   <div class="world" bind:this={world} style={stageStyle} role="group" aria-label="Sounds of the scene">
@@ -776,13 +964,13 @@
       {#each sounds as s (s.id)}
         {#if !isHidden(s)}
           {@const y0 = map.y(s.start_s)}
-          <div class="hit" role="presentation" style="left: {laneX(liveLanes.get(s.id) ?? 0) - 4}px; top: {(y0 - 3).toFixed(1)}px; height: {(lineEnd(s) - y0 + 6).toFixed(1)}px" onmouseenter={() => hoverIn(s.id)} onmouseleave={() => hoverOut(s.id)} onmousedown={(e) => lineDown(e, s)} data-testid="sound-line"></div>
+          <div class="hit" role="presentation" style="left: {laneX(liveLanes.get(s.id) ?? 0) - 4}px; top: {(y0 - 3).toFixed(1)}px; height: {(lineEnd(s) - y0 + 6).toFixed(1)}px" onmouseenter={() => hoverIn(s.id)} onmouseleave={() => hoverOut(s.id)} onmousedown={(e) => lineDown(e, s)} ondblclick={() => openSound(s.id)} data-testid="sound-line"></div>
         {/if}
       {/each}
       {#if focus}
         {#key focus.s.id}
-          <div class="head" role="presentation" title="Drag to move the start" style="left: {focus.x - 6}px; top: {(focus.y0 - 6).toFixed(1)}px; --c: var({focus.s.tone})" onmousedown={(e) => focus && headDown(e, focus.s)} onmouseenter={() => focus && hoverIn(focus.s.id)} onmouseleave={() => focus && hoverOut(focus.s.id)} data-testid="line-head"></div>
-          <div class="tail" role="presentation" title="Drag to trim, the fade follows" style="left: {focus.x - 8}px; top: {(focus.y1 - 3).toFixed(1)}px" onmousedown={(e) => focus && trimDown(e, focus.s)} onmouseenter={() => focus && hoverIn(focus.s.id)} onmouseleave={() => focus && hoverOut(focus.s.id)} data-testid="line-tail"></div>
+          <div class="head" role="presentation" title="Drag to move the start" style="left: {focus.x - 6}px; top: {(focus.y0 - 6).toFixed(1)}px; --c: var({focus.s.tone})" onmousedown={(e) => focus && headDown(e, focus.s)} ondblclick={() => focus && openSound(focus.s.id)} onmouseenter={() => focus && hoverIn(focus.s.id)} onmouseleave={() => focus && hoverOut(focus.s.id)} data-testid="line-head"></div>
+          <div class="tail" role="presentation" title="Drag to trim, the fade follows" style="left: {focus.x - 8}px; top: {(focus.y1 - 3).toFixed(1)}px" onmousedown={(e) => focus && trimDown(e, focus.s)} ondblclick={() => focus && openSound(focus.s.id)} onmouseenter={() => focus && hoverIn(focus.s.id)} onmouseleave={() => focus && hoverOut(focus.s.id)} data-testid="line-tail"></div>
         {/key}
       {/if}
     </div>
@@ -813,7 +1001,7 @@
       {@const out = !on}
       {@const delay = staggering ? staggerOf(inTimeOrder.indexOf(s.id), sounds.length) : b.delay}
       {@const box = `left: ${(b.x - b.r).toFixed(1)}px; top: ${(b.y - b.r).toFixed(1)}px; width: ${(2 * b.r).toFixed(1)}px; height: ${(2 * b.r).toFixed(1)}px; --dl: ${delay}s; --tx: ${(laneX(liveLanes.get(s.id) ?? 0) - b.x).toFixed(0)}px`}
-      <button type="button" class="ball" class:sel={selSet.has(s.id)} class:drag={dragSet.has(s.id)} class:faded class:tucked={b.tucked} class:out class:stagger={staggering} class:pulse={playing(s)} class:pop={popping.includes(s.id)} class:band={band?.hit.includes(s.id)} tabindex={faded || out ? -1 : 0} aria-pressed={selSet.has(s.id)} aria-label={announce({ name: s.name, bucket: s.bucketName, start_s: s.start_s, len_s: s.len_s, gain_db: s.gain_db, pan: s.pan, depth: s.depth }, fmt)} data-sound={s.id} data-testid="sound-ball" data-depth={s.depth.toFixed(3)} data-start={s.start_s.toFixed(3)} style="{box}; --c: var({s.tone}); --d: {s.depth.toFixed(3)}; --pn: {s.pan.toFixed(3)}; --apn: {Math.abs(s.pan).toFixed(3)}; --g: {ringOf(s.gain_db).toFixed(3)}" onmouseenter={() => hoverIn(s.id)} onmouseleave={() => hoverOut(s.id)} onmousedown={(e) => ballDown(e, s.id)} onfocus={() => hoverIn(s.id)} onblur={() => hoverOut(s.id)}></button>
+      <button type="button" class="ball" class:sel={selSet.has(s.id)} class:drag={dragSet.has(s.id)} class:faded class:tucked={b.tucked} class:out class:stagger={staggering} class:pulse={playing(s)} class:pop={popping.includes(s.id)} class:band={band?.hit.includes(s.id)} tabindex={s.id === tabStop ? 0 : -1} aria-pressed={selSet.has(s.id)} aria-describedby="sound-keys" aria-label={announce({ name: s.name, bucket: s.bucketName, start_s: s.start_s, len_s: s.len_s, gain_db: s.gain_db, pan: s.pan, depth: s.depth }, fmt)} data-sound={s.id} data-testid="sound-ball" data-depth={s.depth.toFixed(3)} data-start={s.start_s.toFixed(3)} style="{box}; --c: var({s.tone}); --d: {s.depth.toFixed(3)}; --pn: {s.pan.toFixed(3)}; --apn: {Math.abs(s.pan).toFixed(3)}; --g: {ringOf(s.gain_db).toFixed(3)}" onmouseenter={() => hoverIn(s.id)} onmouseleave={() => hoverOut(s.id)} onmousedown={(e) => ballDown(e, s.id)} ondblclick={() => openSound(s.id)} onfocus={() => { rover = s.id; hoverIn(s.id); }} onblur={() => hoverOut(s.id)}></button>
       <div class="mer" class:faded class:tucked={b.tucked} class:out class:drag={dragSet.has(s.id)} class:stagger={staggering} style={box}>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={panLine(s.pan)} class:on={focusId === s.id || selSet.has(s.id)} vector-effect="non-scaling-stroke" /></svg>
       </div>
@@ -840,7 +1028,15 @@
 
     {#if tip}<div class="tip tn" style="left: {tip.x}px; top: {tip.y}px" data-testid="sound-tip">{tip.text}</div>{/if}
   </div>
+  <p class="sr" id="sound-keys">Left and right arrows set depth, Option with them pan, Shift up and down loudness, comma and period move it, Enter opens it, Shift Enter adds it to the selection, Tab goes to the next sound.</p>
+  <p class="sr" role="status" aria-live="polite" data-testid="sounds-said">{spoken}</p>
 </div>
+
+{#if opened}
+  {#key opened.id}
+    <OpenedSound bind:this={panel} s={stateOf(opened.id)} assetId={opened.asset_id} peaks={opened.peaks} name={opened.name} bucket={opened.bucketName} tone={opened.tone} {lines} {targets} box={card} line={wedgeLine} {ops} onclose={closeSound} />
+  {/key}
+{/if}
 
 {#if app.editBucket}<SceneBucket given={buckets} reload={loadBuckets} {eyes} off={!on} />{/if}
 
@@ -1272,7 +1468,17 @@
     pointer-events: none;
     z-index: 30;
   }
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   @media (prefers-reduced-motion: reduce) {
+    .world,
     .ball,
     .mer,
     .blab,

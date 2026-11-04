@@ -1,5 +1,6 @@
 // Keys on the sounds layer. The step sizes live here. Arrows already mean lines and takes on
 // Arrange, so they only change meaning while sounds are selected (D78).
+import type { Part } from './opened';
 
 export type SoundKey =
   | { kind: 'depth'; delta: number }
@@ -32,4 +33,16 @@ export function soundKey(e: Pick<KeyboardEvent, 'key' | 'altKey' | 'shiftKey' | 
   const on = k === '.' || k === '>' || (e.shiftKey && e.code === 'Period');
   if (back || on) return { kind: 'time', delta: (back ? -1 : 1) * (e.shiftKey ? TIME_FINE_S : TIME_STEP_S) };
   return null;
+}
+
+type Key = Pick<KeyboardEvent, 'key' | 'altKey' | 'shiftKey' | 'metaKey' | 'ctrlKey'>;
+
+/** ↑ and ↓ on a part of the opened sound, in the view's own direction: up is earlier. ⇧ stays
+ *  loudness. ⌥ is the fine step, and on the body it slips, as ⌥ drag does. */
+export function partKey(e: Key, part: Part): { part: Part; delta: number } | null {
+  if (e.metaKey || e.ctrlKey || e.shiftKey) return null;
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return null;
+  const dir = e.key === 'ArrowUp' ? -1 : 1;
+  if (part === 'move' && e.altKey) return { part: 'slip', delta: dir * TIME_STEP_S };
+  return { part, delta: dir * (e.altKey ? TIME_FINE_S : TIME_STEP_S) };
 }

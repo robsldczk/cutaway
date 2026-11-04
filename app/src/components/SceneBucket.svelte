@@ -78,7 +78,7 @@
 </script>
 
 {#snippet eye(id: string, name: string, faded: boolean)}
-  <button class="eye" aria-pressed={!faded} aria-label="{faded ? 'Show' : 'Fade'} {name}" title="{faded ? 'Show' : 'Fade'} {name} · ⌥ click to show only this bucket" onclick={(e) => eyes?.toggle(id, e.altKey)} data-testid="bucket-eye">
+  <button class="eye" onmousedown={(e) => e.preventDefault()} aria-pressed={!faded} aria-label="{faded ? 'Show' : 'Fade'} {name}" title="{faded ? 'Show' : 'Fade'} {name} · ⌥ click to show only this bucket" onclick={(e) => eyes?.toggle(id, e.altKey)} data-testid="bucket-eye">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
       {#if faded}<path d="M4 4l16 16" />{:else}<circle cx="12" cy="12" r="3" />{/if}
@@ -86,7 +86,7 @@
   </button>
 {/snippet}
 
-<aside class="glass panel" class:beside={!!eyes} class:off aria-hidden={off} inert={off} aria-label="Bucket for scene {app.view?.scene.number ?? ''}" ondragend={() => (app.dragSound = null)}>
+<aside class="glass panel" class:beside={!!eyes} class:off aria-hidden={off} inert={off} data-own-keys aria-label="Bucket for scene {app.view?.scene.number ?? ''}" ondragend={() => (app.dragSound = null)}>
   <div class="hd">
     <span class="t">Bucket · Sc. {app.view?.scene.number ?? ''}</span>
     <button class="btn" onclick={() => app.toggleFullBucket()}>Full bucket <span class="kb">⇧B</span></button>
@@ -202,6 +202,11 @@
     opacity: 0;
     pointer-events: none;
     transition-delay: 0s;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .panel.beside {
+      transition: none;
+    }
   }
   .panel {
     position: absolute;

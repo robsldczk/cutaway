@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEPTH_STEP, GAIN_STEP_DB, PAN_STEP, soundKey, TIME_FINE_S, TIME_STEP_S } from './keymap';
+import { DEPTH_STEP, GAIN_STEP_DB, PAN_STEP, partKey, soundKey, TIME_FINE_S, TIME_STEP_S } from './keymap';
 
 const k = (key: string, mods: Partial<{ altKey: boolean; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean; code: string }> = {}) => soundKey({ key, altKey: false, shiftKey: false, metaKey: false, ctrlKey: false, ...mods });
 
@@ -46,5 +46,28 @@ describe('keys on the selected sounds', () => {
     expect(k('z', { metaKey: true })).toBe(null);
     expect(k('Backspace', { metaKey: true })).toBe(null);
     expect(k('ArrowLeft', { shiftKey: true })).toBe(null);
+  });
+});
+
+describe('keys on a part of the opened sound', () => {
+  const key = (k: string, mods: { altKey?: boolean; shiftKey?: boolean; metaKey?: boolean } = {}) => ({ key: k, altKey: false, shiftKey: false, metaKey: false, ctrlKey: false, ...mods });
+
+  it('steps 100 ms, up being earlier', () => {
+    expect(partKey(key('ArrowUp'), 'in')).toEqual({ part: 'in', delta: -0.1 });
+    expect(partKey(key('ArrowDown'), 'fadeOut')).toEqual({ part: 'fadeOut', delta: 0.1 });
+  });
+
+  it('⌥ is the fine step on an edge or a fade', () => {
+    expect(partKey(key('ArrowDown', { altKey: true }), 'out')).toEqual({ part: 'out', delta: 0.01 });
+  });
+
+  it('⌥ on the body slips, as ⌥ drag does', () => {
+    expect(partKey(key('ArrowDown', { altKey: true }), 'move')).toEqual({ part: 'slip', delta: 0.1 });
+  });
+
+  it('leaves ⇧, ⌘ and other keys to the layer', () => {
+    expect(partKey(key('ArrowUp', { shiftKey: true }), 'in')).toBeNull();
+    expect(partKey(key('ArrowUp', { metaKey: true }), 'in')).toBeNull();
+    expect(partKey(key('ArrowLeft'), 'in')).toBeNull();
   });
 });

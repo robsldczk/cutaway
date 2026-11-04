@@ -16,7 +16,7 @@ function level(t: TakeView, src: number) {
   return t.peaks[Math.max(0, Math.min(t.peaks.length - 1, i))] ?? 0;
 }
 
-function piecePath(p: PieceView, take: TakeView | undefined, map: TimeMap, x: number, amp: number) {
+function piecePath(p: PieceView, take: TakeView | undefined, map: Pick<TimeMap, 'y'>, x: number, amp: number) {
   const y0 = map.y(p.start_s);
   const y1 = map.y(p.start_s + p.len_s);
   if (y1 - y0 < 1 || p.len_s <= 0) return '';
@@ -34,8 +34,25 @@ function piecePath(p: PieceView, take: TakeView | undefined, map: TimeMap, x: nu
   return `${right.join('')}${left.reverse().join('')}Z`;
 }
 
+/** The stretch of each line that falls between two times, for a view of that stretch alone. */
+export function clipLines<L extends SpineLine>(lines: L[], t0: number, t1: number): L[] {
+  const out: L[] = [];
+  for (const it of lines) {
+    const pieces: PieceView[] = [];
+    for (const p of it.pieces) {
+      const a = Math.max(p.start_s, t0);
+      const z = Math.min(p.start_s + p.len_s, t1);
+      if (z <= a || p.len_s <= 0) continue;
+      const rate = (p.src_out - p.src_in) / p.len_s;
+      pieces.push({ ...p, start_s: a, len_s: z - a, src_in: p.src_in + (a - p.start_s) * rate, src_out: p.src_in + (z - p.start_s) * rate });
+    }
+    if (pieces.length) out.push({ ...it, pieces });
+  }
+  return out;
+}
+
 /** One path per character. */
-export function spinePaths(lines: SpineLine[], map: TimeMap, x: number, amp = 12): Map<string, string> {
+export function spinePaths(lines: SpineLine[], map: Pick<TimeMap, 'y'>, x: number, amp = 12): Map<string, string> {
   const by = new Map<string, string>();
   for (const it of lines) {
     const key = it.character ?? '';
@@ -89,3 +106,22 @@ export function panLine(pan: number) {
   const bulge = 50 * Math.sin(pan * 1.25) + (Math.abs(pan) < 0.02 ? 9 : 0);
   return `M50 3Q${(50 + 2 * bulge).toFixed(1)} 50 50 97`;
 }
+
+/** A waveform running down a column between heights `y0` and `y1`. `level` gives each height
+ *  its 0…1 level. */
+export function columnWave(x: number, amp: number, y0: number, y1: number, level: (y: number) => number): string {
+  if (y1 - y0 < 1) return '';
+  const n = Math.max(2, Math.round((y1 - y0) / STEP_PX));
+  const right: string[] = [];
+  const left: string[] = [];
+  for (let k = 0; k <= n; k++) {
+    const y = y0 + (k / n) * (y1 - y0);
+    const a = Math.max(FLOOR, level(y) * amp);
+    right.push(`${k ? 'L' : 'M'}${(x + a).toFixed(1)} ${y.toFixed(1)}`);
+    left.push(`L${(x - a).toFixed(1)} ${y.toFixed(1)}`);
+  }
+  return `${right.join('')}${left.reverse().join('')}Z`;
+}
+
+/** A peak at a share of its stretch, 0…1. */
+export const peakAt = (peaks: number[], f: number) => (peaks.length && f >= 0 && f <= 1 ? (peaks[Math.min(peaks.length - 1, Math.floor(f * peaks.length))] ?? 0) : 0);

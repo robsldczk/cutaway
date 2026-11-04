@@ -2,6 +2,7 @@
   // Import › Sounds: each scene's room. All sounds of a scene play in it, so they sit in the
   // same space; a sound's depth says how far back. A slider previews here and sends one
   // command on release (one undo step), holding its value until the document has it.
+  import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { call } from '../lib/bridge';
   import type { RoomRow, SceneRoom } from '../lib/types';
@@ -14,6 +15,7 @@
 
   let rows = $state<RoomRow[]>([]);
   let draft = $state<{ id: string; room: SceneRoom } | null>(null);
+  let box = $state<HTMLDetailsElement>();
 
   async function load() {
     rows = (await app.run(() => call<RoomRow[]>('scene_rooms'))) ?? rows;
@@ -21,6 +23,18 @@
   $effect(() => {
     void app.status?.rev;
     void load();
+  });
+
+  // the shortcut in the transport lands on the current scene's sliders
+  $effect(() => {
+    if (!app.roomsAsked || !box || !rows.length) return;
+    app.roomsAsked = false;
+    box.open = true;
+    void tick().then(() => {
+      const here = box?.querySelector<HTMLElement>('.here');
+      here?.scrollIntoView({ block: 'center' });
+      here?.querySelector('input')?.focus();
+    });
   });
 
   const roomOf = (r: RoomRow) => (draft?.id === r.scene_id ? draft.room : r.room);
@@ -39,7 +53,7 @@
   }
 </script>
 
-<details class="rooms glass" data-testid="scene-rooms">
+<details class="rooms glass" bind:this={box} data-testid="scene-rooms">
   <summary>
     <span class="nm">Rooms</span>
     <span class="muted">One per scene. Its sounds share the room, and depth sets how far back each one sits.</span>

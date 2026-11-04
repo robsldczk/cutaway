@@ -32,6 +32,8 @@ pub struct Player {
     stopped_at: f64,
     scene_id: Option<String>,
     rev: i64,
+    /// What is playing: an edit that wouldn't change it isn't worth a restart.
+    loaded: Option<PlaySchedule>,
     until: Option<f64>,
     /// Measured loudness of auditioned sound files.
     file_lufs: HashMap<PathBuf, Option<f64>>,
@@ -252,6 +254,7 @@ fn start(
         svc.player.engine = Engine::start().ok();
     }
     let until = until_s.unwrap_or(duration).min(duration);
+    svc.player.loaded = Some(sched.clone());
     if let Some(e) = &svc.player.engine {
         let mut set = source_set(svc.doc(), &svc.paths, e.sample_rate());
         for (id, p) in extra {
@@ -298,6 +301,20 @@ fn position(svc: &Service) -> (f64, bool) {
     }
 }
 
+/// The scene's schedule, if the document changed during playback in a way that can be heard.
+/// A change here (the room, a sound) is in the document already; another process's arrives
+/// through `refresh`. A favorite or a note changes nothing heard, so it doesn't restart anything.
+fn changed_schedule(svc: &mut Service) -> Option<PlaySchedule> {
+    svc.bus.refresh().ok();
+    if svc.player.take_id.is_some() || svc.player.sound.is_some() || svc.player.rev == svc.bus.rev()
+    {
+        return None;
+    }
+    svc.player.rev = svc.bus.rev();
+    let sid = svc.player.scene_id.clone()?;
+    schedule(svc, &sid).filter(|s| svc.player.loaded.as_ref() != Some(s))
+}
+
 /// Playhead; reloads the schedule when the document changed during playback.
 pub fn playhead(svc: &mut Service) -> Result<Value> {
     let (pos, playing) = position(svc);
@@ -305,24 +322,110 @@ pub fn playhead(svc: &mut Service) -> Result<Value> {
         svc.player.clock = None;
         svc.player.stopped_at = pos;
     }
-    if playing
-        && svc.player.take_id.is_none()
-        && svc.bus.refresh().unwrap_or(false)
-        && svc.player.rev != svc.bus.rev()
-    {
-        if let (Some(sid), Some(e)) = (svc.player.scene_id.clone(), &svc.player.engine) {
-            if let Some(s) = schedule(svc, &sid) {
+    if playing {
+        if let Some(s) = changed_schedule(svc) {
+            if let Some(e) = &svc.player.engine {
                 e.set_limiter(svc.config().playback.level);
                 e.load(
-                    s,
+                    s.clone(),
                     Arc::new(source_set(svc.doc(), &svc.paths, e.sample_rate())),
                 );
                 e.play(pos, svc.player.until);
             }
+            svc.player.loaded = Some(s);
         }
-        svc.player.rev = svc.bus.rev();
     }
     Ok(
         json!({ "position_s": pos, "playing": playing, "scene_id": svc.player.scene_id, "take_id": svc.player.take_id, "sound": svc.player.sound, "level": svc.player.engine.as_ref().map(|e| e.take_level()).unwrap_or(0.0) }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A demo scene with one sound, playing on the virtual clock.
+    fn playing(dir: &Path) -> (Service, String, String) {
+        std::env::set_var("CUTAWAY_SECRETS", "memory");
+        std::env::set_var("CUTAWAY_AI_PROVIDER", "mock");
+        std::env::set_var("CUTAWAY_NO_AUDIO", "1");
+        let mut svc = crate::demo::create(dir, "test", true).unwrap();
+        let file = dir.join("Door.wav");
+        apc_media::wav::write_wav(&file, 48000, 1, &vec![0.1; 48000]).unwrap();
+        let r = svc
+            .call(
+                "import_sounds",
+                &json!({ "paths": [file.to_string_lossy()] }),
+            )
+            .unwrap();
+        let asset = r["assets"][0]["id"].as_str().unwrap().to_string();
+        let placed = svc
+            .call(
+                "place_sound",
+                &json!({ "asset_id": asset, "scene": "1", "at_s": 0.5 }),
+            )
+            .unwrap();
+        let id = placed["id"].as_str().unwrap().to_string();
+        let scene = svc.doc().find_scene("1").unwrap().id.clone();
+        play(&mut svc, &scene, 0.0, None).unwrap();
+        (svc, scene, id)
+    }
+
+    fn room(svc: &mut Service, scene: &str, size: f64) {
+        svc.call(
+            "command",
+            &json!({ "cmd": "set_scene_room", "scene_id": scene, "room": { "size": size, "damping": 0.5, "wet": 0.5 } }),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_change_of_room_during_playback_reaches_the_schedule() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut svc, scene, _) = playing(dir.path());
+        assert!(changed_schedule(&mut svc).is_none(), "nothing changed yet");
+        room(&mut svc, &scene, 0.9);
+        let s = changed_schedule(&mut svc).expect("heard while it plays");
+        assert_ne!(Some(&s), svc.player.loaded.as_ref());
+        // and undo is heard the same way
+        svc.player.loaded = Some(s);
+        svc.call("undo", &json!({})).unwrap();
+        assert!(changed_schedule(&mut svc).is_some());
+    }
+
+    #[test]
+    fn a_change_to_a_sound_during_playback_reaches_the_schedule() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut svc, _, id) = playing(dir.path());
+        svc.call(
+            "command",
+            &json!({ "cmd": "set_sound_gain", "placement_id": id, "gain_db": -6.0 }),
+        )
+        .unwrap();
+        assert!(changed_schedule(&mut svc).is_some());
+    }
+
+    #[test]
+    fn an_edit_nobody_hears_restarts_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut svc, _, _) = playing(dir.path());
+        let take = svc.doc().takes.keys().next().unwrap().clone();
+        let rev = svc.bus.rev();
+        svc.call(
+            "command",
+            &json!({ "cmd": "toggle_favorite", "take_id": take }),
+        )
+        .unwrap();
+        assert_ne!(svc.bus.rev(), rev, "the document did change");
+        assert!(changed_schedule(&mut svc).is_none());
+    }
+
+    #[test]
+    fn an_audition_stays_what_it_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut svc, scene, _) = playing(dir.path());
+        svc.player.sound = Some("Door".into());
+        room(&mut svc, &scene, 0.9);
+        assert!(changed_schedule(&mut svc).is_none());
+    }
 }

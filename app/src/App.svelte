@@ -30,7 +30,8 @@
   function onWheel(e: WheelEvent) {
     if (app.overlay || app.page === 'edit' || app.page === 'import' || app.page === 'dev') return;
     const t = e.target as HTMLElement;
-    if (t.closest('[role="slider"]') || t.closest('aside') || t.tagName === 'INPUT') return;
+    // the opened sound's handles are sliders for the keyboard; the wheel still scrubs there
+    if (t.closest('[role="slider"]:not([data-part])') || t.closest('aside') || t.tagName === 'INPUT') return;
     e.preventDefault();
     if (app.page === 'arrange' && app.soundsUi?.wheel(e)) return;
     const now = performance.now();

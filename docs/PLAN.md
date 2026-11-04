@@ -578,6 +578,21 @@ Decisions: D78, D79. Card C (opened sound) builds on this.
 - [ ] (Rob) Confirm which sounds show on Arrange (`sfx` and `ambience`; music stays on Edit, D78).
 - [ ] (Rob) By hand: the feel of a real drag, and playback on real sounds.
 
+### M17: Sounds beside the dialogue, card C: opened sound, room shortcut, keyboard pass (Rob, 2026-11-04)
+
+Decisions: D80–D82.
+
+- [x] Opened sound: wedge, dialogue column, source and used waveform with height by loudness, edges, corner dots, middle, ⌥ slip, quick buttons, header, playhead. One command per gesture.
+- [x] Opens by double click on a ball or line and Enter. Closes by Esc, a click outside, a hidden bucket, the sound going.
+- [x] Room read-out and quick size in the transport, link to Import › Sounds. Same command, no second copy.
+- [x] Changes are heard during playback: the app's own edits never reached a running schedule (D81).
+- [x] Keyboard pass: every part of the opened sound, Tab through the balls in time, ⇧ Enter and ⌘A, focus in and back, Enter and Space on buttons in the panel.
+- [x] Announcements in one live region; reduced motion on the column, the panel and the view.
+- [x] Handover 10: pan and depth in the Edit inspector.
+- [x] Tests: vitest for snapping, trim, slip, fades, auto fade and quick buttons; Playwright for every gesture.
+- [ ] (Rob) By ear: depth and room size on real material. See RUN_REPORT.
+- [ ] (Rob) By hand: the feel of the opened view with a real sound, and VoiceOver in the app.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -634,3 +649,4 @@ Decisions: D78, D79. Card C (opened sound) builds on this.
 - 2026-11-04 M15 card A done on `feature/1-sound-fx-a-data-layer-room-bus-and-depth` (D75–D77): sound clips gain pan, depth and auto fade; undoable commands for all of it from the UI, CLI and MCP; one room per scene (schema 2) with controls on Import › Sounds; a 16-line FDN room on a shared bus through one `Renderer` in the engine and the bounce, bit-identical from the start and below −80 dB after any seek. Depth 0 → 1 on noise: room against sound −30.8 → −4.8 dB, 12.7 dB quieter, 5× darker. `float_roundtrip` fixes last-bit drift on undo (12 % of full-precision values). A copy of Episode 2 migrated (16 scenes), and undo and redo through its old log came back hash-identical. Fixture tests run and green. check.sh green, Playwright green. Not listened to: the curves wait for Rob's ears.
 - 2026-11-04 M16 card B done on `feature/2-sound-fx-b-arrange-sounds-layer-spine-le` (D78, D79): the sounds layer on Arrange. Spine, sticky length lines, balls and the bucket with eyes, every gesture one command on release with a local preview until it lands, multi-select as one undo step, settle/merge/split per handover 5, motion per 6 with reduced motion. Logic in `lib/sounds` with vitest (new, in check.sh), every gesture in Playwright; three deliberate breakages were caught by the right tests. On a copy of Episode 2 (scene 2: 27 lines, 17 overlapping) no errors and drag moves at about 17 ms; that run also found the header wrapping on real scene names, and cards running under the header. Fixed.
 - 2026-11-04 `dev` brought together: `sfx-matching`, Sound FX A (merged by the board) and the Bokeh reference. The Playwright failures noted above were test timing, not app bugs: `openEdit` measured clips before the timeline's first measurement, and the lengthen test grabbed its handle while the column was still gliding. The trim test failed before its undo, which failed the tests after it. check.sh green, Playwright 21/21 on 8 runs in a row.
+- 2026-11-04 M17 card C done on `soundeffects-ui` (D80–D82): the opened sound on Arrange, the room in the transport, and the keyboard and screen reader pass over the feature. The branch was new: cards A and B had merged into `dev`, so it starts from there. Pan and depth were missing from the Edit inspector, which handover 10 asks for: added. A browser test found the wheel dead over the view's handles (the app ignores wheels over sliders): fixed. The app's own edits never reached a running schedule, so a room change was only heard from the next Play: `playhead` now reloads when the schedule differs (D81). check.sh green, Playwright 85/85. Not listened to, and not tried on real material or with VoiceOver: that waits for Rob.

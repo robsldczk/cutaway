@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PieceView, TakeView } from '../types';
-import { arc, focusBody, linePath, panLine, restOfSource, ringPoint, spinePaths } from './paths';
+import { arc, clipLines, columnWave, focusBody, linePath, panLine, peakAt, restOfSource, ringPoint, spinePaths } from './paths';
 import { rowSpans, TimeMap } from './timemap';
 
 const map = new TimeMap(rowSpans([{ start_s: 0, end_s: 4, top: 0, height: 80 }]));
@@ -69,5 +69,33 @@ describe('shapes', () => {
     const q = (d: string) => +(/Q(-?[\d.]+)/.exec(d)?.[1] ?? 0);
     expect(q(panLine(1))).toBeGreaterThan(q(panLine(0.2)));
     expect(q(panLine(-1))).toBeLessThan(50);
+  });
+});
+
+describe('the opened view’s columns', () => {
+  it('keeps the part of a piece inside the window, on the same audio', () => {
+    const [l] = clipLines([line('a', [piece()])], 1, 3);
+    expect(l.pieces[0]).toMatchObject({ start_s: 1, len_s: 2, src_in: 11, src_out: 13 });
+  });
+
+  it('drops lines outside the window', () => {
+    expect(clipLines([line('a', [piece()])], 5, 8)).toEqual([]);
+  });
+
+  it('draws a column between two heights, at least a hairline wide', () => {
+    const d = columnWave(100, 10, 0, 20, () => 0);
+    expect(Math.min(...xs(d))).toBeCloseTo(99.6);
+    expect(Math.max(...xs(columnWave(100, 10, 0, 20, () => 1)))).toBe(110);
+  });
+
+  it('draws nothing for a stretch too short to see', () => {
+    expect(columnWave(0, 10, 5, 5.5, () => 1)).toBe('');
+  });
+
+  it('reads a peak by its share of the stretch', () => {
+    expect(peakAt([0.1, 0.2], 0)).toBe(0.1);
+    expect(peakAt([0.1, 0.2], 1)).toBe(0.2);
+    expect(peakAt([0.1, 0.2], 1.5)).toBe(0);
+    expect(peakAt([], 0.5)).toBe(0);
   });
 });

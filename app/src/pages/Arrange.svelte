@@ -547,6 +547,11 @@
     box-shadow: 0 0 14px var(--playhead-glow);
     z-index: 40;
   }
+  @media (prefers-reduced-motion: reduce) {
+    .arr {
+      transition: none !important;
+    }
+  }
   .tchip {
     position: absolute;
     top: 50%;

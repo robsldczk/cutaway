@@ -7,6 +7,8 @@ export function onKey(e: KeyboardEvent) {
   const sliderUndo = t instanceof HTMLInputElement && t.type === 'range' && (e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z');
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && e.key !== 'Escape' && !sliderUndo) return;
   if (app.overlay === 'editor') return;
+  // a button reached with Tab does what it says; after a click Space still plays
+  if ((e.key === 'Enter' || e.key === ' ') && t?.tagName === 'BUTTON' && t.closest('[data-own-keys]') && t.matches(':focus-visible')) return;
   // Arrange's sounds layer sees keys first: it passes on whatever isn't about its sounds
   if (!app.overlay && app.page === 'arrange' && app.soundsUi?.key(e)) {
     e.preventDefault();

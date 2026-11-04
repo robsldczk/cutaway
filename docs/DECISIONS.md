@@ -546,7 +546,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   | S | Show or hide the layer, on Arrange | |
   | B | Show or hide the panel, with the layer on | The bucket drawer |
 
-  Arrows keep their everyday meaning until a sound is selected, so reading and picking takes is undisturbed. Enter on a ball selects it for now; card C makes it open the sound.
+  Arrows keep their everyday meaning until a sound is selected, so reading and picking takes is undisturbed. Enter on a ball selects it for now; card C makes it open the sound (D80).
 - **Bursts:** key repeats and ⇧ scroll don't end in a release, and reading the value back between presses would lose steps to commands still in flight. They preview locally and commit once, 350 ms after the last step, as one undo step. ⌘Z sends what is pending first.
 - **A move that doesn't snap frees the sound** (M7: "free time when nothing snaps"), for the grabbed ball. The others of a multi-move keep their anchor and take a new offset, so they stay on their lines. Keyboard moves keep every anchor. A group stops as a whole at the start of the scene, and a snap it can't reach is dropped.
 - **Pause targets** are the end of the word before the pause, not the middle of the pause as in the prototype: that is the anchor M7 can resolve, and the tooltip reads the same. A pause is a silence of 120 ms or more between kept words.
@@ -564,4 +564,35 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Context:** the card asks for tests of snapping, lanes, the merge rule, settling and multi-select maths without a browser. The app had Playwright only.
 - **Options:** Node's own test runner (needs `.ts` extensions in imports, which the app's other code doesn't use) or vitest.
 - **Choice:** vitest 5 as a dev dependency (MIT), run by `npm test` and `scripts/check.sh`. The logic lives in `app/src/lib/sounds/` with no Svelte or browser in it. It shares the app's Vite toolchain.
+
+### D80 The opened sound on Arrange (2026-11-04)
+- **Spec:** handover "The opened sound", 5.6, 6 and 8, card C. Behaviour ported from the prototype; where it conflicts with the app, the app won. Logic in `lib/sounds/opened.ts`, tested without a browser.
+- **The window.** A source up to 8 s shows whole, as in the prototype. A longer one shows the sound and a second each side. The prototype capped that at 12 s, which puts the bottom edge of a long bed out of reach. The window holds still through a gesture and fits itself after one if the sound came within 0.1 s of its edge.
+- **Snapping** uses the spine's targets and the spine's 8 px, as the same distance on the view's own scale (the prototype used 10 px there).
+- **A start trimmed onto a target hangs on it** (trim and move in one batch, so one undo step). A start trimmed anywhere else keeps its anchor with a new offset, so the audio stays where it was against the line. This differs on purpose from a move, which goes free when nothing snaps (D78): a trim doesn't say the sound has left its line.
+- **Fades.** The fade in stops at the fade out; the fade out leaves a tenth of the sound and pushes the fade in back, as the core does. A press on a dot that goes nowhere sends nothing, so it can't turn auto off by accident. Auto fade off keeps the current value.
+- **Quick buttons:** a line counts if it reaches more than 50 ms past the sound's start (prototype). Lines with no audio are skipped. With no such line, the rest of the source.
+- **Close:** Esc, the close button, a click outside, hiding its bucket, the sound going, `S`, or leaving the page. The transport and the header don't count as outside, so play, Follow and the room can be used with the view open. Esc closes first, and a second Esc clears the selection.
+- **Opening** scrubs to the sound (prototype) unless it's playing, which also moves the locator, as any scrub on this page does.
+- **Waveforms:** the sound's whole source from `peaks_batch`, fetched once on opening. Until it arrives, the placement's own envelope. The dialogue column uses the takes' peaks, the same ones as the spine, in the same character colours.
+- **Keyboard** (fits D78's map): ↑/↓ on a part step 100 ms, ⌥ 10 ms, and on the body ⌥↑/↓ slips. ⇧↑/↓, ←/→ and ⌥←/→ keep loudness, depth and pan. Key presses keep anchors, as all key moves do, and a burst is one command. Tab stays inside the view. Over the view, ⇧ scroll is the open sound's loudness, since it covers the balls behind it.
+- **Changed from D78:** Enter on a ball opens it; ⇧ Enter selects. Enter with a mouse selection opens the last one selected, so it no longer plays the line in context while sounds are selected.
+
+### D81 The room in the transport (Rob, 2026-11-04)
+- **Rob:** a room's home is the project setup, Sounds tab, per scene (D76). The floating bar gets a small read-out and shortcut only.
+- **"The context bar":** the app has no bar by that name. The transport is the floating bar with scene context, and it is the bar the prototype's hints sit near, so the read-out sits there. It shows only on Arrange with the sounds on: nothing else on the page needs it, and the Edit page has its own control bar.
+- **One source of truth:** the chip reads `scene_rooms` and keeps nothing but a slider's value until it lands. The size slider sends the same `set_scene_room`, with damping and wet as the document has them, one undo step per release.
+- **Room settings…** opens Import › Sounds, unfolds Rooms and focuses this scene's Size. The header's Back button returns to Arrange in that case.
+- **Audible during playback:** it wasn't. `player::playhead` meant to reload the schedule when the document changed, but it asked `bus.refresh()` first, which is only true for another process's write, so the app's own edits were heard from the next Play. A size slider beside the transport is no use that way. It now compares the schedule and reloads when it differs, so a room, gain, fade or move is heard at the next poll, with the same short restart a seek has. A favorite, a note or anything else not heard restarts nothing, and an audition keeps playing what it plays. This is in the service, not the engine (out of scope for this card); the engine is untouched.
+- **After a mouse drag** the slider gives up the focus, so Space plays straight away. Keyboard use keeps it.
+
+### D82 Keyboard and screen readers across the sounds (2026-11-04)
+- **Tab:** the layer is one Tab stop (roving `tabindex`). From there Tab and ⇧ Tab go through the balls in time, skipping hidden buckets, and past either end leave the layer. DOM order would follow the order sounds were placed in, and re-sorting the DOM would drop the focus mid nudge.
+- **Multi-select:** ⇧ Enter adds or removes the ball in focus; ⌘A takes all visible sounds; then every key acts on the selection, as D78.
+- **Announcements:** one polite live region. It says selection, opening and closing, what a burst or a gesture ended on, removals and buckets fading. Not during a drag, and not on undo, which the bridge doesn't describe yet.
+- **Buttons and the page's keys:** Space and Enter on a focused button used to run the page's action instead. `data-own-keys` marks the opened view, the room chip and the panel: there a button reached with Tab does what it says. `:focus-visible` keeps Space playing after a mouse click. Elsewhere in the app it stays as it was, to not change everyday keys.
+- **The wheel** ignores sliders so as not to scrub while dragging a value. The opened view's handles are sliders only for the keyboard, so they are exempt (`data-part`).
+- **Reduced motion:** drops the column's and the sounds' glide, the panel's slide and the view's fade too. Card B had missed the first two because they are inline styles.
+- **Edit page:** handover 10 asks for pan and depth to show there, and they didn't. The inspector gains Pan and Depth (Depth only for sounds in the room) and marks an automatic fade out.
+- **Not done:** adding a sound from the bucket still needs a mouse drag. The card lists the controls to reach and this isn't one of them; a key on a bucket row that places at the playhead would be the natural way.
 
