@@ -35,7 +35,7 @@ function wav(path: string, seconds: number) {
   writeFileSync(path, b);
 }
 
-type Sound = { id: string; start_s: number; len_s: number; depth: number; pan: number; gain_db: number; anchor: { line_id: string; word: number | null; edge: string } | null; fade_out_s: number; auto_fade: boolean };
+type Sound = { id: string; lane: string; start_s: number; len_s: number; depth: number; pan: number; gain_db: number; anchor: { line_id: string; word: number | null; edge: string } | null; fade_out_s: number; auto_fade: boolean };
 const list = () => rpc<Sound[]>('list_sounds', { scene: '1' });
 
 let asset = '';
@@ -141,6 +141,40 @@ test('add: a bucket row dropped beside a line snaps, and the drop sets the depth
   expect(s.auto_fade).toBe(true);
   await expect(page.getByTestId('sound-ball')).toHaveCount(1);
   await expect(page.getByTestId('loudness')).toBeVisible();
+});
+
+test('adlib: a character search hit and a vocal bucket row land as balls, on the adlib track', async ({ page }) => {
+  await open(page);
+  const field = (await page.getByTestId('sounds-field').boundingBox())!;
+  const y = (await page.getByTestId('arrange-row').nth(1).boundingBox())!.y + 1;
+
+  await page.getByTestId('search-characters').click();
+  await page.getByTestId('character-search').fill('paul lunch');
+  const hit = page.getByTestId('performance-hit').first();
+  await expect(hit).toContainText('Lunch');
+  const top = (await hit.locator('.top').boundingBox())!;
+  await drag(page, { x: top.x + 120, y: top.y + 8 }, field.x + 330 - top.x - 120, y - top.y - 8);
+  await expect.poll(async () => (await list()).length).toBe(1);
+  await expect(page.getByTestId('sound-ball')).toHaveCount(1);
+  expect((await list())[0]).toMatchObject({ lane: 'adlib' });
+
+  // now it's in the bucket like any sound, and a row of it drags in the same way
+  await page.getByTestId('search-sounds').click();
+  const sec = page.getByRole('region', { name: 'Paul · vocals' });
+  await expect(sec).toBeVisible();
+  const vocal = sec.getByTestId('vocal-sound');
+  if (!(await vocal.count())) await sec.locator('button[aria-expanded]').click();
+  await vocal.first().scrollIntoViewIfNeeded();
+  await vocal.first().dragTo(page.getByTestId('sounds-field'), { targetPosition: { x: 360, y: y - field.y + 40 } });
+  await expect.poll(async () => (await list()).length).toBe(2);
+  await expect(page.getByTestId('sound-ball')).toHaveCount(2);
+  for (const s of await list()) expect(s).toMatchObject({ lane: 'adlib' });
+  if (process.env.CUTAWAY_SHOTS) await page.screenshot({ path: `${process.env.CUTAWAY_SHOTS}/adlib-arrange.png` });
+
+  // and the Edit page has them on its Adlibs lane
+  await page.keyboard.press('3');
+  await expect(page.locator('[data-testid=edit-lane][data-lane^=adlib]').getByTestId('vocal-clip')).toHaveCount(2);
+  if (process.env.CUTAWAY_SHOTS) await page.screenshot({ path: `${process.env.CUTAWAY_SHOTS}/adlib-edit.png` });
 });
 
 /** The desktop webview: Tauri's file drop takes every drag, so the page never sees one. */

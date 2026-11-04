@@ -226,6 +226,7 @@ impl PlaySchedule {
                         Lane::Ambience => "ambience".into(),
                         Lane::Music => "music".into(),
                         Lane::Dialogue => p.character.clone().unwrap_or_else(|| "dialogue".into()),
+                        Lane::Adlib => format!("adlib{}", p.layer + 1),
                     },
                     loop_len_s: file_end.map(|_| p.len_s),
                     pan: p.pan,

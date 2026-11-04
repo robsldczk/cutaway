@@ -486,7 +486,7 @@ pub fn delete_asset(svc: &mut Service, asset_id: &str) -> Result<Value> {
 /// and vocals aren't sound design. Past the short mark a sound is cropped, or, with Loop on,
 /// becomes a bed: the ambience lane, repeating to the scene's end.
 fn shape_drop(svc: &Service, scene: &Scene, looping: bool, p: &mut Placement) {
-    if matches!(p.lane, Lane::Dialogue | Lane::Music) || p.len_s <= DROP_SHORT_S {
+    if matches!(p.lane, Lane::Dialogue | Lane::Adlib | Lane::Music) || p.len_s <= DROP_SHORT_S {
         return;
     }
     if !looping {
@@ -523,7 +523,7 @@ pub fn placement_of(svc: &Service, a: &Asset, p: &PlaceSoundP) -> Result<Placeme
         (None, Some(_)) => None,
     };
     let lane = p.lane.unwrap_or(match cue.as_ref().map(|c| c.cue_type) {
-        _ if p.character.is_some() && a.category.starts_with("Vocals") => Lane::Dialogue,
+        _ if p.character.is_some() && a.category.starts_with("Vocals") => Lane::Adlib,
         Some(CueType::Ambience) => Lane::Ambience,
         Some(CueType::Music) => Lane::Music,
         _ if a.category.starts_with("Ambience") => Lane::Ambience,
@@ -531,13 +531,13 @@ pub fn placement_of(svc: &Service, a: &Asset, p: &PlaceSoundP) -> Result<Placeme
         _ => Lane::Sfx,
     });
     let character = match lane {
-        Lane::Dialogue => Some(p.character.clone().ok_or_else(|| {
-            AppError::Params("a sound on a dialogue lane needs its character".into())
+        Lane::Dialogue | Lane::Adlib => Some(p.character.clone().ok_or_else(|| {
+            AppError::Params("only a character's sound goes on this lane".into())
         })?),
         _ => None,
     };
     // a breath or "mh-hm" is cut to the actor's sound: it keeps its short edges
-    let vocal = lane == Lane::Dialogue;
+    let vocal = matches!(lane, Lane::Dialogue | Lane::Adlib);
     let placement = Placement {
         id: new_id("pl"),
         scene_id: scene.id.clone(),

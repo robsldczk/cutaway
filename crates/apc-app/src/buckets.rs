@@ -1122,7 +1122,7 @@ pub fn play(
 
 /// Places a bucket sound on the timeline. A preview downloads first (a background job with
 /// progress, "downloads on drop"); a kept sound is placed at once. A character's vocal
-/// goes on that character's dialogue lane unless a lane is given.
+/// goes on the adlib track, wherever it was dropped (D102).
 pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<Value> {
     let crate::methods::PlaceFromBucketP {
         scene,
@@ -1152,9 +1152,9 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
             })
         })
         .and_then(|b| b.character.clone());
-    let (lane, character) = match (lane, character.or(vocal_of)) {
-        (None, Some(ch)) => (Some(Lane::Dialogue), Some(ch)),
-        (l, ch) => (l, ch),
+    let (lane, character) = match vocal_of {
+        Some(ch) => (Some(Lane::Adlib), Some(ch)),
+        None => (lane, character),
     };
     let p = crate::methods::PlaceSoundP {
         asset_id: String::new(),

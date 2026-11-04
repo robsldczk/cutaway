@@ -1,10 +1,10 @@
 // Edit page lanes: the mixer keys used by the core's schedule (character id for dialogue,
-// `sfx1…`, `ambience`, `music`, `roomtone`), their labels, colours and mix state.
+// `adlib1…`, `sfx1…`, `ambience`, `music`, `roomtone`), their labels, colours and mix state.
 import { LANE_COLORS, colorOf, type Rgb } from '../theme';
 import { app } from './app.svelte';
 import type { LaneMix, PlacementView } from './types';
 
-export type LaneGroup = 'dialogue' | 'sfx' | 'ambience' | 'music';
+export type LaneGroup = 'dialogue' | 'adlib' | 'sfx' | 'ambience' | 'music';
 
 export interface LaneRow {
   kind: 'script' | 'group' | 'lane';
@@ -17,18 +17,19 @@ export interface LaneRow {
   char?: string;
   layer?: number;
   /** Which sounds the lane takes (drops). */
-  lane?: 'sfx' | 'ambience' | 'music' | 'roomtone' | 'dialogue';
+  lane?: 'sfx' | 'ambience' | 'music' | 'roomtone' | 'dialogue' | 'adlib';
 }
 
-export const GROUP_LABEL: Record<LaneGroup, string> = { dialogue: 'Dialogue', sfx: 'Sound effects', ambience: 'Ambience', music: 'Music' };
+export const GROUP_LABEL: Record<LaneGroup, string> = { dialogue: 'Dialogue', adlib: 'Adlibs', sfx: 'Sound effects', ambience: 'Ambience', music: 'Music' };
 
 export function placementLane(p: PlacementView): string {
   if (p.lane === 'dialogue') return p.character ?? 'dialogue';
-  return p.lane === 'sfx' ? `sfx${p.layer + 1}` : p.lane;
+  return p.lane === 'sfx' || p.lane === 'adlib' ? `${p.lane}${p.layer + 1}` : p.lane;
 }
 
 export function laneLabel(key: string): string {
   if (key.startsWith('sfx')) return `SFX ${key.slice(3)}`;
+  if (key.startsWith('adlib')) return `Adlibs ${key.slice(5)}`;
   if (key === 'ambience') return 'Ambience';
   if (key === 'music') return 'Music';
   if (key === 'roomtone') return 'Room tone';
@@ -36,7 +37,7 @@ export function laneLabel(key: string): string {
 }
 
 export function laneRgb(key: string): Rgb {
-  if (key.startsWith('sfx')) return LANE_COLORS.sfx;
+  if (key.startsWith('sfx') || key.startsWith('adlib')) return LANE_COLORS.sfx;
   if (key === 'ambience' || key === 'roomtone') return LANE_COLORS.room;
   if (key === 'music') return LANE_COLORS.music;
   return colorOf(app.view?.characters.find((c) => c.id === key)?.color_index ?? 0).rgb;

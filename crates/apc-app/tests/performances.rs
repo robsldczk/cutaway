@@ -155,7 +155,8 @@ fn a_trimmed_clip_is_cut_placed_and_undone_in_one_step() {
         .find(|p| p["id"] == placed["id"])
         .unwrap_or_else(|| panic!("{sounds}"));
     assert!((p["len_s"].as_f64().unwrap() - 0.3).abs() < 0.01, "{p}");
-    assert_eq!(p["lane"], "dialogue", "{p}");
+    assert_eq!(p["lane"], "adlib", "{p}");
+    assert_eq!(p["in_room"], true, "{p}");
 
     let kept = paul_kept(&mut s);
     assert_eq!(kept, kept_before + 1);
@@ -206,4 +207,37 @@ fn a_clip_must_end_after_it_starts() {
         &json!({ "scene": scene, "clip": bad, "at_s": 0.0 }),
     );
     assert!(e.is_err());
+}
+
+#[test]
+fn an_adlib_exports_and_bounces_on_its_own_track() {
+    env();
+    let dir = tempfile::tempdir().unwrap();
+    let mut s = demo(dir.path());
+    let r = call(
+        &mut s,
+        "search_performances",
+        json!({ "query": "paul lunch" }),
+    );
+    let h = &r["hits"][0];
+    let clip =
+        json!({ "source_id": h["source_id"], "t0": h["t0"], "t1": h["t1"], "text": "Lunch." });
+    let scene = call(&mut s, "list_scenes", json!({}))[0]["id"].clone();
+    call(
+        &mut s,
+        "place_from_bucket",
+        json!({ "scene": scene, "clip": clip, "at_s": 1.0, "depth": 0.5 }),
+    );
+
+    let out = dir.path().join("adlib.fcpxml");
+    call(
+        &mut s,
+        "export_fcpxml",
+        json!({ "path": out.to_string_lossy() }),
+    );
+    let xml = std::fs::read_to_string(&out).unwrap();
+    assert!(xml.contains("audioRole=\"dialogue.Adlibs\""), "{xml}");
+
+    let mix = call(&mut s, "export_mix", json!({ "scene": scene }));
+    assert!(mix["duration_s"].as_f64().unwrap() > 1.0, "{mix}");
 }

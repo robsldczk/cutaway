@@ -925,9 +925,12 @@ pub enum Lane {
     Sfx,
     Ambience,
     Music,
-    /// A character's dialogue lane (`Placement::character`): vocal sounds from the actor's
-    /// own recordings (breaths, "mh-hm", efforts) sit with that character's lines.
+    /// A character's dialogue lane (`Placement::character`). Vocal sounds placed before there
+    /// was an adlib lane stay here.
     Dialogue,
+    /// The adlib track: the actors' vocal sounds (breaths, "mh-hm", efforts, words picked out
+    /// of a performance). `Placement::character` says whose; on Arrange they're sounds (D102).
+    Adlib,
 }
 
 /// A sound placed on the timeline.
@@ -939,7 +942,7 @@ pub struct Placement {
     #[serde(default)]
     pub cue_id: Option<String>,
     pub lane: Lane,
-    /// The character whose dialogue lane holds this sound (`Lane::Dialogue`).
+    /// Whose voice it is (`Lane::Dialogue`, `Lane::Adlib`).
     #[serde(default)]
     pub character: Option<String>,
     #[serde(default)]
@@ -998,9 +1001,10 @@ impl Placement {
     }
 
     /// Whether the sound plays in the scene's room. Music is outside the story's space and
-    /// vocal sounds belong with the dialogue, so depth means nothing for them (D76).
+    /// vocal sounds on a dialogue lane belong with the dialogue, so depth means nothing for
+    /// them (D76). An adlib is placed in the room like an effect (D102).
     pub fn in_room(&self) -> bool {
-        matches!(self.lane, Lane::Sfx | Lane::Ambience)
+        matches!(self.lane, Lane::Sfx | Lane::Ambience | Lane::Adlib)
     }
 }
 

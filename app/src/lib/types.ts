@@ -326,8 +326,8 @@ export interface PlacementView {
   id: string;
   asset_id: string;
   name: string;
-  lane: 'sfx' | 'ambience' | 'music' | 'dialogue';
-  /** Whose dialogue lane (lane 'dialogue': a character's vocal sound). */
+  lane: 'sfx' | 'ambience' | 'music' | 'dialogue' | 'adlib';
+  /** Whose voice (lanes 'dialogue' and 'adlib'). */
   character: string | null;
   layer: number;
   start_s: number;

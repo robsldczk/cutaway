@@ -63,6 +63,7 @@
   const actions = $derived((v?.items ?? []).filter((i) => i.kind === 'spacer'));
   const roles = $derived((v?.characters ?? []).filter((c) => app.lines.some((l) => l.character === c.id)));
   const sfxLayers = $derived(Math.max(1, ...(ev?.placements.filter((p) => p.lane === 'sfx').map((p) => p.layer + 1) ?? [1])));
+  const adlibLayers = $derived(Math.max(1, ...(ev?.placements.filter((p) => p.lane === 'adlib').map((p) => p.layer + 1) ?? [1])));
   const curLine = $derived(app.lineAt(app.pos));
 
   // rows: ruler, sentences, actions and words on top, then the lane groups
@@ -82,6 +83,7 @@
       }
     };
     group('dialogue', roles.map((c) => ({ key: c.id, label: c.label, h: 52, rgb: colorOf(c.color_index).rgb, char: c.id, lane: 'dialogue' as const })));
+    group('adlib', Array.from({ length: adlibLayers }, (_, i) => ({ key: `adlib${i + 1}`, label: adlibLayers > 1 ? `Adlibs ${i + 1}` : 'Adlibs', h: 42, rgb: LANE_COLORS.sfx, layer: i, lane: 'adlib' as const })));
     group('sfx', Array.from({ length: sfxLayers }, (_, i) => ({ key: `sfx${i + 1}`, label: `SFX ${i + 1}`, h: 42, rgb: LANE_COLORS.sfx, layer: i, lane: 'sfx' as const })));
     group('ambience', [
       { key: 'roomtone', label: 'Room tone', h: 38, rgb: LANE_COLORS.room, lane: 'roomtone' as const },
@@ -756,8 +758,9 @@
       ? null
       : {
           takes: 'bucket',
-          over: () => {
-            dropLane = r.key;
+          // an adlib goes on its track, wherever it's dropped
+          over: (_, s) => {
+            dropLane = s.character ? 'adlib1' : r.key;
           },
           leave: () => {
             dropLane = null;
@@ -772,7 +775,7 @@
     const where = snap ? { anchor_line_id: snap.line_id, anchor_word: snap.word ?? undefined } : { at_s: +t.toFixed(3) };
     // a dialogue lane takes the sound as that character's (a vocal sits with their lines)
     const lane = r.lane;
-    const character = r.lane === 'dialogue' ? r.char : s.character;
+    const character = s.character ?? (r.lane === 'dialogue' ? r.char : undefined);
     if (s.asset_id || s.clip) {
       await app.method('place_from_bucket', { scene: v.scene.id, bucket_id: s.bucket_id, asset_id: s.asset_id, clip: s.clip, cue_id: s.cue_id, lane, character, ...where });
       await app.loadEdit();
@@ -875,7 +878,7 @@
   const firstKept = (l: ItemView) => kept(l)[0]?.index ?? -1;
   const lastKept = (l: ItemView) => kept(l).at(-1)?.index ?? -1;
   /** Which group a sound belongs to (for the collapsed preview). */
-  const groupOf = (p: PlacementView): LaneGroup => (p.lane === 'dialogue' ? 'dialogue' : p.lane === 'sfx' ? 'sfx' : p.lane === 'music' ? 'music' : 'ambience');
+  const groupOf = (p: PlacementView): LaneGroup => (p.lane === 'dialogue' ? 'dialogue' : p.lane === 'adlib' ? 'adlib' : p.lane === 'sfx' ? 'sfx' : p.lane === 'music' ? 'music' : 'ambience');
   /** Words that fit their own width get their text; the rest only a tick. */
   const fits = (w: ShownWord) => (w.end - w.start) * px >= w.text.length * 5.6 + 6;
 </script>
@@ -1033,6 +1036,8 @@
                   </div>
                   {#each ev.room_tone.seams.filter((s) => s < (v?.duration_s ?? 0)) as s (s)}<span class="seam" style="left: {x(s)}px"></span>{/each}
                 {/if}
+              {:else if r.lane === 'adlib'}
+                {#each (ev?.placements ?? []).filter((p) => placementLane(p) === r.key) as p (p.id)}{@render soundClip(p, charColor(v, p.character ?? '').rgb, true)}{/each}
               {:else}
                 {#each (ev?.placements ?? []).filter((p) => placementLane(p) === r.key) as p (p.id)}{@render soundClip(p, r.rgb, false)}{/each}
               {/if}

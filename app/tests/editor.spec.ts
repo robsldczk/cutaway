@@ -205,10 +205,10 @@ test('the bucket finds what a character said, trims it and places it', async ({ 
   await expect(page.getByTestId('preview-player')).toContainText('Paul: Lunch.');
   await page.getByRole('button', { name: /^Stop preview/ }).click();
 
-  // a drop cuts it onto the character's lane; one undo takes it all back
+  // dropped on any lane it's an adlib, cut onto the adlib track; one undo takes it all back
   const lane = page.locator('[data-testid=edit-lane][data-lane*="PAUL" i]').first();
   await lane.scrollIntoViewIfNeeded();
-  const vocals = page.getByTestId('vocal-clip');
+  const vocals = page.locator('[data-testid=edit-lane][data-lane=adlib1]').getByTestId('vocal-clip');
   const had = await vocals.count();
   const from = (await hit.locator('.top').boundingBox())!;
   const to = (await lane.boundingBox())!;

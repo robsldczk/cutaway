@@ -579,7 +579,7 @@ pub struct PlaceFromBucketP {
     pub cue_id: Option<String>,
     #[serde(default)]
     pub lane: Option<Lane>,
-    /// For `lane: dialogue` (vocals default to their character's lane).
+    /// For `lane: dialogue`. A vocal goes on the adlib track with its own character.
     #[serde(default)]
     pub character: Option<String>,
     #[serde(default)]
@@ -881,7 +881,7 @@ registry! {
     "bucket_remove", BucketAssetP, Write, true, "Take a kept sound out of a bucket (it stays in the library). A removed vocal stays out on the next analysis.";
     "bucket_dismiss", BucketRemoteP, Write, true, "Dismiss a preview so searches skip it.";
     "bucket_generate", BucketGenerateP, Write, true, "Generate sounds for a bucket (ElevenLabs) and keep them.";
-    "place_from_bucket", PlaceFromBucketP, Write, true, "Place a bucket sound on the timeline. A preview downloads first (returns a job_id). A clip from search_performances is cut into the character's vocals and goes on their lane.";
+    "place_from_bucket", PlaceFromBucketP, Write, true, "Place a bucket sound on the timeline. A preview downloads first (returns a job_id). A character's vocal, or a clip from search_performances (cut into their vocals), always goes on the adlib track.";
     "search_performances", PerformanceSearchP, Read, true, "Search what the actors said and did on their own mics: \"paul huh\". Gives stretches already cut to the sound, to trim and place with place_from_bucket's clip.";
     "play_sound", PlaySoundP, Read, false, "Audition a bucket sound (kept or preview) on the preview player. The timeline stops; its playhead stays.";
     "stop_sound", NoParams, Read, false, "Stop the preview player.";

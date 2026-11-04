@@ -63,13 +63,17 @@
     if (on) void loadBuckets();
   });
 
-  /** Vocal buckets are the actor's own and go on a dialogue lane: not here. */
-  const placeable = $derived(buckets?.buckets.filter((b) => !b.character) ?? []);
+  /** The scene's effects first, then the adlibs (D102), then what's there for the whole show.
+   *  Colours go to the effects first, so the vocal buckets don't shift them. */
+  const effects = $derived(buckets?.buckets.filter((b) => !b.character) ?? []);
+  const adlibs = $derived(buckets?.buckets.filter((b) => b.character) ?? []);
+  const listed = $derived(buckets && { ...buckets, buckets: [...effects.filter((b) => !b.show_wide), ...adlibs, ...effects.filter((b) => b.show_wide)] });
+  const placeable = $derived([...effects, ...adlibs]);
   const toneOf = $derived(new Map(placeable.map((b, i) => [b.id, `--bucket-${(i % TONES) + 1}-rgb`])));
   /** A sound kept in several buckets counts for the first. */
   const bucketOfAsset = $derived(new Map(placeable.flatMap((b) => b.kept.map((k): [string, Bucket] => [k.id, b])).reverse()));
 
-  const placed = $derived(app.edit?.scene_id === app.sceneId ? app.edit.placements.filter((p) => p.lane === 'sfx' || p.lane === 'ambience') : []);
+  const placed = $derived(app.edit?.scene_id === app.sceneId ? app.edit.placements.filter((p) => p.lane === 'sfx' || p.lane === 'ambience' || p.lane === 'adlib') : []);
   const sounds = $derived(
     placed.map((p): Sound => {
       const b = bucketOfAsset.get(p.asset_id);
@@ -939,12 +943,8 @@
       id = (j?.result as { placement?: { id: string } } | undefined)?.placement?.id;
     }
     if (!id) return;
-    if (sound.clip) {
-      app.say(`${sound.name} is on the character's lane: find it on the Edit page`);
-      return;
-    }
     const placedHere = app.edit?.placements.find((p) => p.id === id);
-    if (placedHere && placedHere.lane !== 'sfx' && placedHere.lane !== 'ambience') {
+    if (placedHere && placedHere.lane !== 'sfx' && placedHere.lane !== 'ambience' && placedHere.lane !== 'adlib') {
       app.say('That one plays outside the room: find it on the Edit page');
       return;
     }
@@ -1075,7 +1075,7 @@
   {/key}
 {/if}
 
-{#if app.editBucket}<SceneBucket given={buckets} reload={loadBuckets} {eyes} off={!on} />{/if}
+{#if app.editBucket}<SceneBucket given={listed} reload={loadBuckets} {eyes} off={!on} />{/if}
 
 <style>
   .snd {

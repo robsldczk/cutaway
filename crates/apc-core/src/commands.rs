@@ -1375,7 +1375,8 @@ pub(crate) fn free_layer(doc: &Document, p: &Placement, pacing: &crate::timeline
             o.id != p.id
                 && o.scene_id == p.scene_id
                 && o.lane == p.lane
-                && o.character == p.character
+                // one adlib track for the whole cast
+                && (o.character == p.character || p.lane == Lane::Adlib)
                 && o.layer == layer
                 && {
                     let os = placement_start(&layout, o);

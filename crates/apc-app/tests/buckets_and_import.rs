@@ -591,17 +591,44 @@ fn the_analysis_fills_character_vocal_buckets_from_the_recordings() {
         .call("bucket_generate", &json!({ "bucket_id": bid }))
         .is_err());
 
-    // placed on Paul's dialogue lane
+    // placed on the adlib track as Paul's, wherever it was dropped
     let aid = mhm["id"].as_str().unwrap().to_string();
     s.call(
         "place_from_bucket",
         &json!({ "scene": "1", "asset_id": aid, "at_s": 2.0 }),
     )
     .unwrap();
+    s.call(
+        "place_from_bucket",
+        &json!({ "scene": "1", "asset_id": aid, "at_s": 2.0, "lane": "dialogue", "character": "SARA" }),
+    )
+    .unwrap();
+    s.call(
+        "place_from_bucket",
+        &json!({ "scene": "1", "bucket_id": bid, "asset_id": aid, "at_s": 2.0, "lane": "sfx" }),
+    )
+    .unwrap();
     let ev = s.call("edit_view", &json!({ "scene": "1" })).unwrap();
-    let pl = &ev["placements"][0];
-    assert_eq!(pl["lane"], "dialogue");
-    assert_eq!(pl["character"], "PAUL");
+    let placed = ev["placements"].as_array().unwrap();
+    assert_eq!(placed.len(), 3);
+    for pl in placed {
+        assert_eq!(pl["lane"], "adlib", "{pl}");
+        assert_eq!(pl["character"], "PAUL", "{pl}");
+    }
+    // together on one track they stack, as effects do
+    let mut layers: Vec<u64> = placed
+        .iter()
+        .map(|p| p["layer"].as_u64().unwrap())
+        .collect();
+    layers.sort();
+    assert_eq!(layers, [0, 1, 2]);
+    // nothing else goes on that track
+    assert!(s
+        .call(
+            "place_sound",
+            &json!({ "scene": "1", "asset_id": aid, "lane": "adlib", "at_s": 1.0 })
+        )
+        .is_err());
 
     // removed, it stays out when the analysis runs again
     let n = b["kept"].as_array().unwrap().len();

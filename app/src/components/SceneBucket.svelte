@@ -21,7 +21,7 @@
   interface Eyes {
     hidden: string[];
     toggle: (id: string, solo: boolean) => void;
-    /** The colour of a bucket, or null for one that places nothing here (a vocal bucket). */
+    /** The colour of a bucket. */
     color: (id: string) => string | null;
     /** Sounds already in the scene. */
     used: Set<string>;
@@ -184,7 +184,7 @@
         {#if open}
           {#each keptOf(b) as s (s.id)}
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions (dragging is the mouse's; D82) -->
-            <div class="srow kept" class:used={eyes?.used.has(s.id)} style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} role="listitem" onmousedown={(e) => grab(e, { kind: 'bucket', bucket_id: b.id, asset_id: s.id, name: s.name, duration_s: s.duration_s })} data-testid={b.character ? 'vocal-sound' : 'bucket-sound'}>
+            <div class="srow kept" class:used={eyes?.used.has(s.id)} style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} role="listitem" onmousedown={(e) => grab(e, { kind: 'bucket', bucket_id: b.id, asset_id: s.id, character: b.character ?? undefined, name: s.name, duration_s: s.duration_s })} data-testid={b.character ? 'vocal-sound' : 'bucket-sound'}>
               <span class="grip"><Icon name="grip" /></span>
               <button class="play gold" style={col ? `background: ${col}; color: #16110d` : ''} aria-label="Play {s.name}" onmousedown={(e) => e.preventDefault()} onclick={() => app.toggleSound({ asset_id: s.id }, s)}><Icon name={app.previewing(s.id) ? 'stop' : 'play'} size={10} /></button>
               <div class="mid"><span class="ellip nm4">{s.name}</span><span class="wv"><Waveform peaks={s.peaks} fill={col ?? 'var(--sfx)'} /></span></div>

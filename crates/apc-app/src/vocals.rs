@@ -183,7 +183,7 @@ pub fn place_clip(svc: &mut Service, clip: &ClipP, mut p: PlaceSoundP) -> Result
         .or_else(|| src.character.clone())
         .ok_or_else(|| AppError::Params("this recording has no character".into()))?;
     p.character = Some(character.clone());
-    p.lane = p.lane.or(Some(Lane::Dialogue));
+    p.lane = Some(Lane::Adlib);
 
     let label = label_of(svc, &character);
     let key = format!(

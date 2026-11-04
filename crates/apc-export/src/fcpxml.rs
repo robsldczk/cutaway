@@ -120,7 +120,9 @@ fn role_of(lane: &str, doc: &Document) -> String {
     if let Some(c) = doc.characters.get(lane) {
         return format!("dialogue.{}", c.label.replace(['.', ' '], "_"));
     }
-    if lane.starts_with("SFX") {
+    if lane.starts_with("ADLIB") {
+        "dialogue.Adlibs".into()
+    } else if lane.starts_with("SFX") {
         "effects".into()
     } else if lane == "MUSIC" {
         "music".into()
