@@ -118,3 +118,25 @@ export function spread(g: Group, radiusOf: (id: string) => number, minX: number)
   });
   return out;
 }
+
+/** Where a ball shows; `tucked` balls are inside their closed group. */
+export type Shown = Spread & { tucked?: boolean };
+
+/** Every ball's place on the page: at its own spot, opened out in its group, or tucked into
+ *  it. The dragged ones (`live`) are where the pointer puts them, whatever their group does. */
+export function layoutBalls(sounds: { id: string; start_s: number; len_s: number; depth: number }[], gs: Group[], f: Field, isOpen: (g: Group) => boolean, live: Set<string>): Map<string, Shown> {
+  const own = (s: (typeof sounds)[number]): Shown => ({ ...ball({ t0: s.start_s, len: s.len_s, depth: s.depth }, f), delay: 0 });
+  const m = new Map<string, Shown>(sounds.map((s) => [s.id, own(s)]));
+  for (const g of gs) {
+    if (isOpen(g)) {
+      for (const [id, p] of spread(g, (id) => m.get(id)?.r ?? 16, f.x0 - 10)) m.set(id, p);
+      continue;
+    }
+    for (const x of g.members) {
+      const b = m.get(x.id);
+      if (b) m.set(x.id, { x: g.x, y: g.y, r: b.r, delay: 0, tucked: true });
+    }
+  }
+  for (const s of sounds) if (live.has(s.id)) m.set(s.id, own(s));
+  return m;
+}

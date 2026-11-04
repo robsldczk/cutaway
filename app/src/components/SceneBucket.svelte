@@ -9,18 +9,34 @@
   import type { BucketsView, DragSound } from '../lib/types';
   import { colorOf, solid } from '../theme';
 
-  let data = $state<BucketsView | null>(null);
+  /** On Arrange the layer owns the buckets: it hands them in, with an eye per bucket. */
+  interface Eyes {
+    hidden: string[];
+    toggle: (id: string, solo: boolean) => void;
+    /** The colour of a bucket, or null for one that places nothing here (a vocal bucket). */
+    color: (id: string) => string | null;
+    /** Sounds already in the scene. */
+    used: Set<string>;
+    /** Placed sounds that come from no bucket, with their eye. */
+    others: { id: string; color: string } | null;
+  }
+
+  let { given = null, reload = null, eyes = null, off = false }: { given?: BucketsView | null; reload?: (() => Promise<void>) | null; eyes?: Eyes | null; off?: boolean } = $props();
+
+  let own = $state<BucketsView | null>(null);
   let closed = $state<Record<string, boolean>>({});
   let busy = $state<string | null>(null);
+  const data = $derived(given ?? own);
 
   async function load() {
+    if (reload) return reload();
     if (!app.sceneId) return;
-    data = (await app.run(() => call<BucketsView>('buckets', { scene: app.sceneId }))) ?? data;
+    own = (await app.run(() => call<BucketsView>('buckets', { scene: app.sceneId }))) ?? own;
   }
   $effect(() => {
     void app.sceneId;
     void app.status?.rev;
-    void load();
+    if (!reload) void load();
   });
 
   function isOpen(id: string, i: number) {
@@ -30,6 +46,7 @@
   function drag(e: DragEvent, s: DragSound) {
     e.dataTransfer?.setData('application/x-cutaway-bucket', JSON.stringify(s));
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
+    app.dragSound = s;
   }
 
   function toggle(key: { asset_id?: string; remote_id?: string }) {
@@ -60,7 +77,16 @@
   }
 </script>
 
-<aside class="glass panel" aria-label="Bucket for scene {app.view?.scene.number ?? ''}">
+{#snippet eye(id: string, name: string, faded: boolean)}
+  <button class="eye" aria-pressed={!faded} aria-label="{faded ? 'Show' : 'Fade'} {name}" title="{faded ? 'Show' : 'Fade'} {name} · ⌥ click to show only this bucket" onclick={(e) => eyes?.toggle(id, e.altKey)} data-testid="bucket-eye">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
+      {#if faded}<path d="M4 4l16 16" />{:else}<circle cx="12" cy="12" r="3" />{/if}
+    </svg>
+  </button>
+{/snippet}
+
+<aside class="glass panel" class:beside={!!eyes} class:off aria-hidden={off} inert={off} aria-label="Bucket for scene {app.view?.scene.number ?? ''}" ondragend={() => (app.dragSound = null)}>
   <div class="hd">
     <span class="t">Bucket · Sc. {app.view?.scene.number ?? ''}</span>
     <button class="btn" onclick={() => app.toggleFullBucket()}>Full bucket <span class="kb">⇧B</span></button>
@@ -71,20 +97,34 @@
     <span><span class="dot ring"></span>Preview, downloads on drop</span>
   </div>
   <div class="list">
+    {#if eyes?.others}
+      {@const faded = eyes.hidden.includes(eyes.others.id)}
+      <section class="bkt" class:faded aria-label="Other sounds">
+        <div class="bhrow">
+          <span class="bh"><span class="dot" style="background: {faded ? 'transparent' : eyes.others.color}"></span><span class="bn">Other sounds</span></span>
+          {@render eye(eyes.others.id, 'Other sounds', faded)}
+        </div>
+      </section>
+    {/if}
     {#each data?.buckets ?? [] as b, i (b.id)}
       {@const open = isOpen(b.id, i)}
-      {@const col = b.character ? solid(colorOf(b.color_index ?? 0).rgb) : null}
+      {@const col = eyes ? eyes.color(b.id) : b.character ? solid(colorOf(b.color_index ?? 0).rgb) : null}
+      {@const faded = !!eyes?.hidden.includes(b.id)}
+      {#if !eyes || col}
       {#if b.show_wide && !data?.buckets[i - 1]?.show_wide}<div class="label wide">Whole show</div>{/if}
-      <section class="bkt" aria-label={b.name}>
+      <section class="bkt" class:faded aria-label={b.name}>
+        <div class="bhrow">
         <button class="bh" aria-expanded={open} onclick={() => (closed = { ...closed, [b.id]: open })}>
           <span class="chev" style="transform: rotate({open ? 0 : -90}deg)"><Icon name="chevron" size={11} stroke={2.4} /></span>
-          {#if col}<span class="dot" style="background: {col}"></span>{/if}
+          {#if col}<span class="dot" style="background: {faded ? 'transparent' : col}; box-shadow: {faded ? `inset 0 0 0 1.5px ${col}` : 'none'}"></span>{/if}
           <span class="bn">{b.name}</span>
-          <span class="muted tn cnt">{col ? b.kept.length : `${b.kept.length} + ${b.previews.length}`}</span>
+          <span class="muted tn cnt">{col && !eyes ? b.kept.length : `${b.kept.length} + ${b.previews.length}`}</span>
         </button>
+        {#if eyes}{@render eye(b.id, b.name, faded)}{/if}
+        </div>
         {#if open}
           {#each b.kept as s (s.id)}
-            <div class="srow kept" style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} draggable="true" role="listitem" ondragstart={(e) => drag(e, { bucket_id: b.id, asset_id: s.id, name: s.name, duration_s: s.duration_s })} data-testid={col ? 'vocal-sound' : 'bucket-sound'}>
+            <div class="srow kept" class:used={eyes?.used.has(s.id)} style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} draggable="true" role="listitem" ondragstart={(e) => drag(e, { bucket_id: b.id, asset_id: s.id, name: s.name, duration_s: s.duration_s })} data-testid={b.character ? 'vocal-sound' : 'bucket-sound'}>
               <span class="grip"><Icon name="grip" /></span>
               <button class="play gold" style={col ? `background: ${col}; color: #16110d` : ''} aria-label="Play {s.name}" onclick={() => toggle({ asset_id: s.id })}><Icon name={app.playing && app.sound === s.id ? 'stop' : 'play'} size={10} /></button>
               <div class="mid"><span class="ellip nm4">{s.name}</span><span class="wv"><Waveform peaks={s.peaks} fill={col ?? 'var(--sfx)'} /></span></div>
@@ -99,9 +139,10 @@
               <span class="muted tn d">{len(p.duration_s)}</span>
             </div>
           {/each}
-          {#if !col && data?.connected.epidemic && b.keywords.length}<button class="btn sm" onclick={() => more(b.id)} disabled={busy === b.id}>{busy === b.id ? 'Searching…' : 'More like these'}</button>{/if}
+          {#if (eyes || !col) && data?.connected.epidemic && b.keywords.length}<button class="btn sm" onclick={() => more(b.id)} disabled={busy === b.id}>{busy === b.id ? 'Searching…' : 'More like these'}</button>{/if}
         {/if}
       </section>
+      {/if}
     {:else}
       <p class="muted note">No buckets for this scene. Open the full bucket (⇧B) to spot the script or start one.</p>
     {/each}
@@ -111,6 +152,56 @@
 <style>
   .wide {
     margin-top: 6px;
+  }
+  .bhrow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .bhrow .bh {
+    flex: 1;
+    min-width: 0;
+  }
+  .eye {
+    flex: none;
+    width: 28px;
+    height: 24px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgb(var(--ink-rgb) / 0.75);
+    transition:
+      background var(--dur-fast),
+      color var(--dur-fast);
+  }
+  .eye:hover {
+    background: rgb(var(--veil-rgb) / 0.08);
+  }
+  .faded .eye {
+    color: rgb(var(--ink-rgb) / 0.35);
+  }
+  .faded .bn {
+    color: var(--text-4);
+  }
+  .faded .srow {
+    opacity: 0.35;
+  }
+  .srow.used {
+    opacity: 0.45;
+  }
+  .panel.beside {
+    top: 76px;
+    bottom: 96px;
+    transition:
+      transform 0.7s var(--ease-out) 0.1s,
+      opacity 0.5s ease 0.1s;
+  }
+  .panel.beside.off {
+    transform: translateX(420px);
+    opacity: 0;
+    pointer-events: none;
+    transition-delay: 0s;
   }
   .panel {
     position: absolute;

@@ -22,6 +22,12 @@ export function settledOf(s: Live, snap: Map<string, Settled>): { z: Settled; fr
   return z ? { z, fresh: false } : { z: { id: s.id, t0: s.start_s, len: s.len_s, depth: s.depth, added: s.added }, fresh: true };
 }
 
+/** The snapshot with sounds new since it was taken, as they stand now: their lanes are
+ *  theirs, so a settle doesn't send them looking again. */
+export function withFresh(snap: Map<string, Settled>, list: { z: Settled; fresh: boolean }[]) {
+  return new Map([...snap, ...list.filter((x) => x.fresh).map((x): [string, Settled] => [x.z.id, x.z])]);
+}
+
 /** Runs `fire` once things have been quiet for the delay; never while a gesture is on. */
 export class Settler {
   private timer: ReturnType<typeof setTimeout> | null = null;

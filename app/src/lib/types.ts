@@ -322,6 +322,8 @@ export interface PlacementView {
   depth: number;
   /** The fade out follows the length; setting it by hand turns this off. */
   auto_fade: boolean;
+  /** Order the sounds were added in (0 for sounds from before it was kept). */
+  added: number;
   /** Asset in point and the asset's length (trim limits). */
   in_s: number;
   asset_len_s: number;

@@ -60,6 +60,12 @@
     {#if app.page === 'import'}
       <button class="pillbtn" onclick={() => app.toggleFullBucket()} disabled={!ready}>{#if app.importTab === 'sounds'}<Icon name="back" size={13} />Back to Edit{:else}Edit{/if} <span class="kb">⇧B</span></button>
     {/if}
+    {#if app.page === 'arrange'}
+      <button class="pillbtn sounds" class:on={app.soundsOn} aria-pressed={app.soundsOn} onclick={() => app.toggleSounds()} title="Sounds beside the dialogue" data-testid="sounds-toggle">
+        <svg width="22" height="14" viewBox="0 0 22 14" aria-hidden="true"><circle cx="4" cy="9" r="3.5" fill="rgb(var(--bucket-1-rgb))" /><circle cx="11" cy="5" r="4" fill="rgb(var(--bucket-2-rgb))" /><circle cx="18" cy="9" r="3" fill="rgb(var(--bucket-3-rgb))" /></svg>
+        Sounds <span class="kb">S</span>
+      </button>
+    {/if}
     {#if app.page === 'options' || app.page === 'arrange' || app.page === 'edit'}
       <button class="pillbtn follow" class:on={app.follow} aria-pressed={app.follow} onclick={() => app.setFollow(!app.follow)} title={app.follow ? 'The current box moves with the playhead. Click to keep it where you put it.' : 'The current box stays where you put it. Click to move it with the playhead.'} data-testid="follow">Follow</button>
     {/if}
@@ -217,6 +223,11 @@
     margin-left: 4px;
     background: rgba(127, 127, 127, 0.18);
     color: inherit;
+  }
+  .sounds {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
   }
   .right {
     display: flex;

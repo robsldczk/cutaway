@@ -96,11 +96,11 @@ export function moveCommands(sounds: SoundState[], delta: number, grabId: string
   });
 }
 
-export const depthCommands = (sounds: SoundState[], delta: number): Cmd[] => sounds.map((s) => ({ cmd: 'set_sound_depth', placement_id: s.id, depth: clamp(s.depth + delta, 0, 1) }));
+export const depthCommands = (sounds: SoundState[], delta: number): Cmd[] => sounds.map((s) => ({ cmd: 'set_sound_depth', placement_id: s.id, depth: ms(clamp(s.depth + delta, 0, 1)) }));
 
-export const panCommands = (sounds: SoundState[], delta: number): Cmd[] => sounds.map((s) => ({ cmd: 'set_sound_pan', placement_id: s.id, pan: clamp(s.pan + delta, -1, 1) }));
+export const panCommands = (sounds: SoundState[], delta: number): Cmd[] => sounds.map((s) => ({ cmd: 'set_sound_pan', placement_id: s.id, pan: ms(clamp(s.pan + delta, -1, 1)) }));
 
-export const gainCommands = (sounds: SoundState[], delta: number): Cmd[] => sounds.map((s) => ({ cmd: 'set_sound_gain', placement_id: s.id, gain_db: clamp(s.gain_db + delta, GAIN_MIN_DB, GAIN_MAX_DB) }));
+export const gainCommands = (sounds: SoundState[], delta: number): Cmd[] => sounds.map((s) => ({ cmd: 'set_sound_gain', placement_id: s.id, gain_db: Math.round(clamp(s.gain_db + delta, GAIN_MIN_DB, GAIN_MAX_DB) * 10) / 10 }));
 
 export const removeCommands = (ids: string[]): Cmd[] => ids.map((placement_id) => ({ cmd: 'delete_placement', placement_id }));
 
@@ -109,6 +109,16 @@ export function oneStep(cmds: Cmd[]): Cmd | null {
   if (!cmds.length) return null;
   return cmds.length === 1 ? cmds[0] : { cmd: 'batch', commands: cmds };
 }
+
+/** The eye of a bucket: click fades it; ⌥ click shows only it, and again shows all. */
+export function toggleHidden(hidden: string[], all: string[], id: string, solo: boolean): string[] {
+  if (!solo) return hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id];
+  const alone = all.every((b) => (b === id ? !hidden.includes(b) : hidden.includes(b)));
+  return alone ? [] : all.filter((b) => b !== id);
+}
+
+/** The core's automatic fade out (`Placement::auto_fade_out_s`), for previewing a trim. */
+export const autoFadeOut = (len: number) => (len > 8 ? 2 : clamp(len * 0.3, 0, 0.3));
 
 // ---- the loudness ring ----
 

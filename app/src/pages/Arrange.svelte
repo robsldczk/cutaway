@@ -6,12 +6,20 @@
   import { clamp, fmt } from '../lib/format';
   import { charColor, charLabel, itemShade, rgba } from '../lib/colors';
   import { openEditor } from '../lib/keys';
+  import SoundsLayer from '../components/SoundsLayer.svelte';
   import Waveform from '../components/Waveform.svelte';
+  import { rowSpans, TimeMap, type RowBox } from '../lib/sounds/timemap';
   import type { ItemView } from '../lib/types';
   import { lineWords } from '../lib/words';
 
   const sc = $derived(app.scale);
   const S = $derived(Math.round(92 * sc));
+
+  /** With the sounds layer on, the dialogue column moves over to make room for it. */
+  const COLUMN_LEFT = 92;
+  const on = $derived(app.soundsOn);
+  const columnW = $derived(Math.round(400 * sc));
+  const spineX = $derived(COLUMN_LEFT + columnW + 32);
 
   interface Row {
     it: ItemView;
@@ -47,15 +55,45 @@
   let rowEls: Record<string, HTMLDivElement> = $state({});
   let off = $state(0);
 
+  // Time on this page comes from where the cards sit: one map for the spine, the lines,
+  // the balls and the snapping.
+  let boxes = $state.raw<RowBox[]>([]);
+  const map = $derived(new TimeMap(rowSpans(boxes), 14 * sc));
+
+  $effect(() => {
+    void app.view;
+    void sc;
+    void gapPreview;
+    void tick().then(() => {
+      const next: RowBox[] = [];
+      for (const r of rows) {
+        const el = rowEls[r.it.line_id];
+        if (el) next.push({ start_s: r.it.start_s, end_s: r.it.end_s, top: el.offsetTop, height: el.offsetHeight });
+      }
+      boxes = next;
+    });
+  });
+
   $effect(() => {
     void app.curId;
     void app.view;
     void sc;
+    void on;
     void tick().then(() => {
+      if (on) return;
       const el = app.curId ? rowEls[app.curId] : undefined;
       if (el) off = el.offsetTop + el.offsetHeight / 2;
     });
   });
+
+  // the sounds layer scrolls in time, so the playhead stays on the centre line
+  $effect(() => {
+    if (!on || app.audition || app.sound || (app.playing && !app.follow)) return;
+    off = map.y(app.pos);
+  });
+
+  /** While the playhead runs the column follows it closely; a jump glides. */
+  const slide = $derived(drag ? 'none' : on && app.playing ? 'transform .1s linear' : 'transform .3s var(--ease-out)');
 
   function takeOf(it: ItemView) {
     return it.takes[it.take_index ?? 0];
@@ -278,7 +316,7 @@
   }
 </script>
 
-<div class="arr" style="width: min({Math.round(600 * sc)}px, 86%); transform: translate(-50%, -{off.toFixed(1)}px); transition: {drag ? 'none' : 'transform .3s var(--ease-out)'}">
+<div class="arr" style="left: {on ? `${COLUMN_LEFT}px` : '50%'}; width: {on ? `${columnW}px` : `min(${Math.round(600 * sc)}px, 86%)`}; transform: translate({on ? '0' : '-50%'}, -{off.toFixed(1)}px); transition: {slide}, left .85s cubic-bezier(.65,0,.35,1), width .85s cubic-bezier(.65,0,.35,1)">
   {#each rows as r, i (r.it.line_id)}
     {@const t = takeOf(r.it)}
     {@const tr = trims(r.it)}
@@ -332,7 +370,8 @@
   {/each}
   {#if dropY != null}<div class="drop" style="top: {dropY}px"></div>{/if}
 </div>
-<div class="side tchip" style="left: calc(50% - {Math.round(300 * sc)}px - 24px)">{fmt(app.pos)}</div>
+{#if !on}<div class="side tchip" style="left: calc(50% - {Math.round(300 * sc)}px - 24px)">{fmt(app.pos)}</div>{/if}
+<SoundsLayer {map} {spineX} {off} {slide} {on} lines={app.lines} />
 
 <style>
   .arr {

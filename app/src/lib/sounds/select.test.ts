@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SnapTarget } from './snap';
-import { announce, ballsInBand, bandSelect, clickSelect, dbOfRing, dbText, depthCommands, gainCommands, groupDelta, moveCommands, normRect, oneStep, panCommands, panText, pressSelect, removeCommands, ringAt, ringOf, timeDrag, zone, type SoundState } from './select';
+import { announce, autoFadeOut, ballsInBand, bandSelect, clickSelect, dbOfRing, dbText, depthCommands, gainCommands, groupDelta, moveCommands, normRect, oneStep, panCommands, panText, pressSelect, removeCommands, ringAt, ringOf, timeDrag, toggleHidden, zone, type SoundState } from './select';
 
 const s = (id: string, over: Partial<SoundState> = {}): SoundState => ({ id, start_s: 5, len_s: 1, offset_s: 0, anchor: null, depth: 0.5, pan: 0, gain_db: 0, ...over });
 const target: SnapTarget = { t: 6, anchor: { line_id: 'l', word: 2, edge: 'end' }, start: 'x', end: 'y' };
@@ -113,6 +113,32 @@ describe('what a gesture commits', () => {
     expect(oneStep(cmds)).toEqual({ cmd: 'batch', commands: cmds });
     expect(oneStep(cmds.slice(0, 1))).toEqual(cmds[0]);
     expect(oneStep([])).toBe(null);
+  });
+});
+
+describe('bucket eyes', () => {
+  const all = ['a', 'b', 'c'];
+
+  it('a click fades one bucket and shows it again', () => {
+    expect(toggleHidden([], all, 'a', false)).toEqual(['a']);
+    expect(toggleHidden(['a', 'b'], all, 'a', false)).toEqual(['b']);
+  });
+
+  it('⌥ click shows only that bucket', () => {
+    expect(toggleHidden([], all, 'b', true)).toEqual(['a', 'c']);
+    expect(toggleHidden(['b'], all, 'b', true)).toEqual(['a', 'c']);
+  });
+
+  it('⌥ click again restores all', () => {
+    expect(toggleHidden(['a', 'c'], all, 'b', true)).toEqual([]);
+  });
+});
+
+describe('the automatic fade', () => {
+  it('matches the rule in the core', () => {
+    expect(autoFadeOut(0.5)).toBeCloseTo(0.15);
+    expect(autoFadeOut(8)).toBe(0.3);
+    expect(autoFadeOut(8.01)).toBe(2);
   });
 });
 

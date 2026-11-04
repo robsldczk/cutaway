@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { settledOf, Settler, snapshot, SETTLE_MS } from './settle';
+import { settledOf, Settler, snapshot, SETTLE_MS, withFresh } from './settle';
 
 const live = (id: string, start_s = 1) => ({ id, start_s, len_s: 2, depth: 0.5, added: 3 });
 
@@ -19,6 +19,16 @@ describe('snapshot', () => {
     const { z, fresh } = settledOf(live('new', 7), new Map());
     expect(z.t0).toBe(7);
     expect(fresh).toBe(true);
+  });
+});
+
+describe('fresh sounds at a settle', () => {
+  it('counts as known, so they keep the lane they found', () => {
+    const snap = snapshot([live('a')]);
+    const list = [live('a', 9), live('new', 7)].map((s) => settledOf(s, snap));
+    const known = withFresh(snap, list);
+    expect(known.get('new')?.t0).toBe(7);
+    expect(known.get('a')?.t0).toBe(1);
   });
 });
 
