@@ -99,6 +99,30 @@ One live clean-up plan on the copy proposed 23 moves and left 13 loose. No files
 - Phones holds cues that aren't phones ("ring" in *spring*), so it shows their sounds too. See D74.
 - Playwright was 15/18 at first, with the same failures on `dev` at bc2d9e4. They were test timing, not app bugs, and are fixed: 21/21 on 8 runs in a row after Sound FX A merged.
 
+## Sound FX C: the opened sound, the room shortcut, keyboard pass (M17, 2026-11-04)
+
+On branch `soundeffects-ui`, from `dev` after cards A and B. D80–D82.
+
+**Built:**
+- **Opened sound.** Double click a ball or line, or Enter. Trim, fade, move, slip, quick buttons, all one undo step each.
+- **Room in the transport.** Size and wet read-out with the sounds on; a quick size; **Room settings…** goes to Import › Sounds at this scene.
+- **Keyboard and screen readers.** Every part of the opened sound by key, Tab through the balls in time, ⇧ Enter and ⌘A to select, spoken changes, reduced motion.
+- **Edit inspector.** Pan and Depth, which handover 10 needed and weren't there.
+
+**What Rob should check by hand:**
+1. **Listen to depth on real material.** Push a door or a foil sound from close to far during a line. Does it sit back without just getting quieter? Curve: `depth.rs`.
+2. **Listen to room size.** Play a scene with sounds, drag the size in the transport. It should change within a moment and ⌘Z should bring it back. Try the smallest and largest room on Episode 2, and the default (D76). The restart at each change should be no worse than a seek: listen for a click. It now applies to any audible edit during playback (D81), so try a gain or a fade while playing too.
+3. **Feel of the opened view** with a real sound: is the 8 px snap right, does the window fit long beds (a 45 s walla), and is the wedge readable?
+4. **A trimmed start keeps its anchor** unless it snaps (D80). Check this matches how you think about it.
+5. **Enter** now opens a selected sound rather than playing the line in context (D80).
+6. **VoiceOver** in the real app: Playwright checks the announcements exist, not how they sound. `:focus-visible` (D82) is checked in Chromium only; please try Tab, Enter and Space on the eyes in the Tauri window.
+
+**Not done:**
+- Adding a sound from the bucket by keyboard (D82).
+- Undo isn't announced (D82).
+- Checked on the demo session only, not on a copy of Episode 2.
+- Not listened to: no audio device in the tests.
+
 ## What was built
 
 | Milestone | State | Notes |

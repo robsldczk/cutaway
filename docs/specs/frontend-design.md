@@ -171,6 +171,8 @@ A floating glass bar at the bottom centre (`min(820px, 94%)`, 30 px radius):
 
 **Other controls:** gap/pacing and the room-tone toggle sit in the settings sheet (⚙), not in the main bar.
 
+*(Changed in implementation, D81: on Arrange with the sounds on, the transport shows the scene's room, with a quick size and a link to its settings on Import › Sounds.)*
+
 ## Box editor (overlay)
 
 **Opening:** E, double-click a box, or the pencil button in the transport. The page dims and blurs; a large glass dialog (`min(1220px, 96%)`, 32 px radius, tinted by the take's shade) holds the box.
@@ -318,14 +320,17 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 | ⌘ scroll / ⇧ scroll | Zoom / move the scene map |
 | S | Show or hide the sounds (Arrange) |
 | Scroll | Scrub, with the sounds on (Arrange) |
-| Tab, Enter | Reach a ball, select it; ⇧ Enter adds it (Arrange) |
+| Tab, ⇧ Tab | Reach the balls, one after the other in time (Arrange) |
+| Enter, double click | Open the sound (Arrange) |
+| ⇧ Enter, ⌘A | Add the ball in focus to the selection; select all (Arrange) |
+| Up / Down | On a part of the opened sound: trim, fade or move 100 ms; ⌥ 10 ms, on the body ⌥ slips (Arrange) |
 | ⇧ click, drag on empty space | Select more sounds (Arrange) |
 | Left / Right | Depth, with sounds selected (Arrange) |
 | Option+Left/Right | Pan, with sounds selected (Arrange) |
 | Shift+Up / Shift+Down | Loudness, with sounds selected (Arrange) |
 | , / . | Move 100 ms, with sounds selected; ⇧ 10 ms (Arrange) |
 | ⇧ scroll over a ball | Loudness (Arrange) |
-| ⌫ / Esc | Remove / clear the selected sounds (Arrange) |
+| ⌫ / Esc | Remove / clear the selected sounds; Esc closes an opened sound first (Arrange) |
 
 **In the box editor:** Space play/stop, ⇧ Space from locator, ← → nudge segment (or move the playhead when no segment is selected; Shift coarse), Tab next segment, W words overlay, 1…5 use whole take, R reset comp, Delete delete selected words (Edit mode), Esc close.
 
