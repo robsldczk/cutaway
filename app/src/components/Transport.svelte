@@ -3,6 +3,7 @@
   import { fmt, clamp } from '../lib/format';
   import { charColor, charLabel, itemShade, rgba } from '../lib/colors';
   import { openEditor } from '../lib/keys';
+  import RoomChip from './RoomChip.svelte';
 
   let mapEl: HTMLDivElement | undefined = $state();
   let zoom = $state(1);
@@ -96,7 +97,7 @@
   const nameColor = $derived(cur ? charColor(app.view, cur.character).name : 'var(--text-3)');
 </script>
 
-<section class="glass transport" aria-label="Transport">
+<section class="glass transport" aria-label="Transport" data-keeps-sound>
   <button class="play" onclick={() => app.togglePlay()} aria-label="Play or stop (Space)" data-playing={app.playing} style="box-shadow: 0 0 0 6px {app.playing ? rgba(curShade, 0.3) : 'var(--glass-fill-3)'}">
     {#if app.playing}
       <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3" fill="var(--text-on-light)" /></svg>
@@ -115,6 +116,7 @@
       </div>
     </div>
   </div>
+  {#if app.page === 'arrange' && app.soundsOn}<RoomChip />{/if}
   <div class="btns">
     <button class="icb" onclick={() => app.toggleFav()} aria-label="Favorite take (F)" title="Favorite (F)" style="color: {fav ? nameColor : 'var(--text-3)'}; background: {fav ? rgba(curShade, 0.16) : 'transparent'}">
       <svg width="20" height="20" viewBox="0 0 24 24" fill={fav ? nameColor : 'none'} stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><polygon points="12 3 14.8 8.7 21 9.6 16.5 14 17.6 20.2 12 17.3 6.4 20.2 7.5 14 3 9.6 9.2 8.7" /></svg>
@@ -129,6 +131,8 @@
 </section>
 <div class="hint">
   {#if app.page === 'options'}Space play · ⇧Space from locator · ← → takes · ↑ ↓ or scroll for lines · I O in/out · F favorite · E edit · ? all keys
+  {:else if app.page === 'arrange' && app.soundOpen}Space play · scroll scrub · drag an edge to trim · ⌥ drag slips · ↑ ↓ on a handle · Esc close
+  {:else if app.page === 'arrange' && app.soundsOn}Space play · scroll scrub · S sounds · ⌥ drag pan · ring or ⇧ scroll loudness · 2× or Enter open · ⌫ remove · ? all keys
   {:else if app.page === 'arrange'}Space play · ⇧Space from locator · click waveform for locator · I O in/out · ⌥↑ ⌥↓ move · ? all keys
   {:else}Space play · drag clips (⌥ moves one clip alone) · ⌥← ⌥→ nudge · B bucket · ? all keys{/if}
 </div>

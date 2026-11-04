@@ -20,7 +20,7 @@
   const show = $derived(app.status?.show ?? null);
 </script>
 
-<header class="hdr" class:wide class:fit={app.page === 'arrange'}>
+<header class="hdr" class:wide class:fit={app.page === 'arrange'} data-keeps-sound>
   <div class="title">
     <div class="epm">
       <button class="ep" aria-haspopup="menu" aria-expanded={menu} title={app.status?.path ?? brand.displayName} onclick={() => (menu = !menu)}>{#if show}<span class="showname">{show.name}</span>{/if}{app.view?.episode ?? app.status?.name ?? brand.displayName}<Icon name="chevron" size={10} stroke={2.4} /></button>
@@ -58,7 +58,7 @@
   </nav>
   <div class="right">
     {#if app.page === 'import'}
-      <button class="pillbtn" onclick={() => app.toggleFullBucket()} disabled={!ready}>{#if app.importTab === 'sounds'}<Icon name="back" size={13} />Back to Edit{:else}Edit{/if} <span class="kb">⇧B</span></button>
+      <button class="pillbtn" onclick={() => app.toggleFullBucket()} disabled={!ready}>{#if app.importTab === 'sounds'}<Icon name="back" size={13} />Back to {app.importBack === 'arrange' ? 'Arrange' : 'Edit'}{:else}Edit{/if} <span class="kb">⇧B</span></button>
     {/if}
     {#if app.page === 'arrange'}
       <button class="pillbtn sounds" class:on={app.soundsOn} aria-pressed={app.soundsOn} onclick={() => app.toggleSounds()} title="Sounds beside the dialogue" data-testid="sounds-toggle">
