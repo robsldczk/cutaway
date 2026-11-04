@@ -97,7 +97,7 @@ One live clean-up plan on the copy proposed 23 moves and left 13 loose. No files
 - Matching only reads names, so roughly four cues in ten found nothing when the scoring was prototyped (burrito, turkey, phones: the library has no such sounds).
 - There's no undo button for a clean up; `Sound/Cutaway/moves/<stamp>.json` lists what moved.
 - Phones holds cues that aren't phones ("ring" in *spring*), so it shows their sounds too. See D74.
-- Playwright 15/18. The 3 failures (two in `editor.spec.ts`, one in `smoke.spec.ts`) fail the same way on `dev` at bc2d9e4, without this work.
+- Playwright was 15/18 at first, with the same failures on `dev` at bc2d9e4. They were test timing, not app bugs, and are fixed: 21/21 on 8 runs in a row after Sound FX A merged.
 
 ## What was built
 
