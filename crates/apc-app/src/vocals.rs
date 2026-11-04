@@ -61,6 +61,7 @@ pub fn prepare(
             character: Some(ch.to_string()),
             search_offset: 0,
             folder: None,
+            loops: Default::default(),
         });
         for c in list {
             let Some(src) = svc.doc().sources.get(&c.source_id).cloned() else {

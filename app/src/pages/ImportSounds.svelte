@@ -220,7 +220,7 @@
 </div>
 
 <main class="grid" class:wide={!side} aria-label="Buckets">
-  <SceneRooms />
+  <SceneRooms buckets={data?.buckets ?? []} />
   {#if found}
     <article class="bk drop" class:over={over === 'new'} class:hint={dragging} aria-label="Drop here for a new bucket" use:dropzone={target('new', null)} data-testid="new-bucket-drop">
       <Icon name="plus" size={18} />

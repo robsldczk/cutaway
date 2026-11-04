@@ -202,6 +202,16 @@ pub struct Scene {
     /// The room the scene's sounds share (each scene has its own, D76).
     #[serde(default)]
     pub room: SceneRoom,
+    /// The room tone looping under this scene. Without one it plays its location's (D86).
+    #[serde(default)]
+    pub tone: Option<SceneTone>,
+}
+
+/// A library sound looping under a whole scene.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, schemars::JsonSchema)]
+pub struct SceneTone {
+    pub asset_id: String,
+    pub gain_db: f64,
 }
 
 /// The one room all sound effects of a scene play in: they meet on a shared reverb bus, so
@@ -947,6 +957,9 @@ pub struct Placement {
     /// together. 0 for sounds from before it existed.
     #[serde(default)]
     pub added: u64,
+    /// Repeats its file: the one kind of sound that may outlast its source.
+    #[serde(default)]
+    pub looped: bool,
 }
 entity!(Placement, Placement, parent = scene_id);
 
@@ -1015,6 +1028,13 @@ pub struct Asset {
 }
 entity!(Asset, Asset);
 
+impl Asset {
+    /// Beds and room tones are made to repeat.
+    pub fn loops_by_default(&self) -> bool {
+        self.category.starts_with("Ambience")
+    }
+}
+
 /// A search result that hasn't been downloaded yet.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, schemars::JsonSchema)]
 pub struct Preview {
@@ -1069,6 +1089,9 @@ pub struct SoundBucket {
     /// bucket's sounds; new sounds of the bucket are saved there (D65).
     #[serde(default)]
     pub folder: Option<String>,
+    /// Loop set by hand, by asset or provider id. Others follow `Asset::loops_by_default`.
+    #[serde(default)]
+    pub loops: BTreeMap<String, bool>,
 }
 
 impl Entity for SoundBucket {
@@ -1183,6 +1206,25 @@ dispatch!(
 );
 
 impl Document {
+    /// The room tone a scene plays: its own, else its location's.
+    pub fn room_tone_for(&self, scene: &Scene) -> Option<RoomTone> {
+        let own = scene.tone.as_ref().and_then(|t| {
+            let a = self.assets.get(&t.asset_id)?;
+            Some(RoomTone {
+                enabled: true,
+                source_id: None,
+                t0: 0.0,
+                t1: a.duration_s,
+                asset_id: Some(a.id.clone()),
+                gain_db: t.gain_db,
+            })
+        });
+        own.or_else(|| {
+            self.room_tone_of(&crate::script::location_id(&scene.location))
+                .cloned()
+        })
+    }
+
     /// The room tone a location plays: its own when enabled, else the nearest parent's
     /// that is (Canteen → TARMAC), else its own (disabled) one.
     pub fn room_tone_of(&self, location_id: &str) -> Option<&RoomTone> {

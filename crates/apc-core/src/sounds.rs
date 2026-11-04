@@ -18,6 +18,13 @@ pub const SOUND_GAIN_MIN_DB: f64 = -24.0;
 pub const SOUND_GAIN_MAX_DB: f64 = 6.0;
 /// Shortest sound the length rules leave.
 pub const MIN_SOUND_S: f64 = 0.01;
+/// A sound dropped from a bucket keeps its length up to here …
+pub const DROP_SHORT_S: f64 = 6.0;
+/// … and past it is cropped to this, or loops as ambience if it's set to (D85).
+pub const DROP_CROP_S: f64 = 10.0;
+/// Room tone level range.
+const TONE_GAIN_MIN_DB: f64 = -60.0;
+const TONE_GAIN_MAX_DB: f64 = 12.0;
 
 /// A value from outside; `NaN` and infinity would poison the document and the mix.
 pub(crate) fn finite(name: &str, x: f64) -> Result<f64> {
@@ -44,7 +51,9 @@ pub fn settle(doc: &Document, p: &mut Placement) {
     p.in_s = p.in_s.max(0.0);
     if let Some(src) = source_len(doc, p) {
         p.in_s = p.in_s.min((src - MIN_SOUND_S).max(0.0));
-        p.len_s = p.len_s.min(src - p.in_s);
+        if !p.looped {
+            p.len_s = p.len_s.min(src - p.in_s);
+        }
     }
     p.len_s = p.len_s.max(MIN_SOUND_S);
     if p.auto_fade {
@@ -205,7 +214,7 @@ pub(crate) fn set_depth(tx: &mut Tx, placement_id: &str, depth: f64) -> Result<V
 pub(crate) fn slip(tx: &mut Tx, placement_id: &str, in_s: f64) -> Result<Value> {
     let mut p = placement(tx, placement_id)?;
     let last = source_len(tx.doc(), &p)
-        .map(|src| (src - p.len_s).max(0.0))
+        .map(|src| (src - if p.looped { MIN_SOUND_S } else { p.len_s }).max(0.0))
         .unwrap_or(f64::MAX);
     p.in_s = ms(finite("in_s", in_s)?.clamp(0.0, last));
     tx.put(&p)?;
@@ -226,6 +235,29 @@ pub(crate) fn set_room(tx: &mut Tx, scene_id: &str, room: &SceneRoom) -> Result<
     };
     tx.put(&scene)?;
     Ok(serde_json::to_value(scene.room)?)
+}
+
+pub(crate) fn set_tone(tx: &mut Tx, scene_id: &str, tone: &Option<SceneTone>) -> Result<Value> {
+    let mut scene = tx
+        .doc()
+        .scenes
+        .get(scene_id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("scene", scene_id))?;
+    scene.tone = match tone {
+        Some(t) => {
+            if !tx.doc().assets.contains_key(&t.asset_id) {
+                return Err(CoreError::not_found("asset", &t.asset_id));
+            }
+            Some(SceneTone {
+                asset_id: t.asset_id.clone(),
+                gain_db: finite("gain_db", t.gain_db)?.clamp(TONE_GAIN_MIN_DB, TONE_GAIN_MAX_DB),
+            })
+        }
+        None => None,
+    };
+    tx.put(&scene)?;
+    Ok(serde_json::to_value(&scene.tone)?)
 }
 
 #[cfg(test)]
@@ -300,6 +332,7 @@ mod tests {
             depth: 0.0,
             auto_fade: true,
             added: 0,
+            looped: false,
         }
     }
 

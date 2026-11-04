@@ -11,6 +11,7 @@ use apc_core::timeline::{layout_scene, placement_start};
 use apc_core::*;
 
 use crate::error::{AppError, Result};
+use crate::methods::SceneToneP;
 use crate::service::Service;
 
 #[derive(Deserialize, JsonSchema)]
@@ -259,8 +260,47 @@ pub struct RoomView {
     /// What the settings come to, from the same curves the audio uses.
     pub decay_s: f64,
     pub predelay_ms: f64,
+    /// The scene's own room tone.
+    pub tone: Option<ToneView>,
+    /// Without one it plays its location's, if that has any.
+    pub place_tone: bool,
     /// Sounds of the scene that play in this room.
     pub sounds: usize,
+}
+
+#[derive(Serialize)]
+pub struct ToneView {
+    pub asset_id: String,
+    pub name: String,
+    pub gain_db: f64,
+}
+
+/// Where a scene's room tone starts, the level a location's starts at too.
+const DEFAULT_TONE_DB: f64 = -6.0;
+
+/// Sets a scene's room tone from a library sound, which joins the episode for it.
+pub fn set_tone(svc: &mut Service, p: SceneToneP) -> Result<Value> {
+    let scene = svc
+        .doc()
+        .find_scene(&p.scene)
+        .cloned()
+        .ok_or_else(|| AppError::Params(format!("no scene '{}'", p.scene)))?;
+    let tone = match p.asset_id {
+        Some(id) => {
+            let a = crate::sound::ensure_asset_in_doc(svc, &id)?;
+            let was = scene.tone.as_ref().map(|t| t.gain_db);
+            Some(SceneTone {
+                asset_id: a.id,
+                gain_db: p.gain_db.or(was).unwrap_or(DEFAULT_TONE_DB),
+            })
+        }
+        None => None,
+    };
+    let r = svc.exec(&Command::SetSceneTone {
+        scene_id: scene.id,
+        tone,
+    })?;
+    Ok(r.result)
 }
 
 pub fn rooms(svc: &mut Service) -> Result<Vec<RoomView>> {
@@ -279,6 +319,18 @@ pub fn rooms(svc: &mut Service) -> Result<Vec<RoomView>> {
                 room: s.room,
                 decay_s: shape.decay_s,
                 predelay_ms: shape.predelay_s * 1000.0,
+                tone: s.tone.as_ref().map(|t| ToneView {
+                    asset_id: t.asset_id.clone(),
+                    name: doc
+                        .assets
+                        .get(&t.asset_id)
+                        .map(|a| crate::views::sound_name(&a.file))
+                        .unwrap_or_default(),
+                    gain_db: t.gain_db,
+                }),
+                place_tone: doc
+                    .room_tone_of(&apc_core::script::location_id(&s.location))
+                    .is_some_and(|t| t.enabled),
                 sounds: doc
                     .placements
                     .values()
@@ -312,6 +364,7 @@ pub struct SoundView {
     pub fade_in_s: f64,
     pub fade_out_s: f64,
     pub auto_fade: bool,
+    pub looped: bool,
     pub muted: bool,
 }
 
@@ -347,6 +400,7 @@ pub fn list(svc: &mut Service, scene_key: &str) -> Result<Vec<SoundView>> {
                 fade_in_s: p.fade_in_s,
                 fade_out_s: p.fade_out_s,
                 auto_fade: p.auto_fade,
+                looped: p.looped,
                 muted: p.muted,
             }
         })

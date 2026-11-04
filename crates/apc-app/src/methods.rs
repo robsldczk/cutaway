@@ -339,6 +339,9 @@ pub struct PlaceSoundP {
     /// Where it starts in the room: 0 close … 1 far.
     #[serde(default)]
     pub depth: f64,
+    /// Set for a drop from a bucket: the drop's length rules apply, with this Loop setting.
+    #[serde(skip)]
+    pub dropped: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -591,6 +594,29 @@ pub struct PlaceFromBucketP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct BucketLoopP {
+    pub bucket_id: String,
+    /// A kept sound …
+    #[serde(default)]
+    pub asset_id: Option<String>,
+    /// … or a preview.
+    #[serde(default)]
+    pub remote_id: Option<String>,
+    pub on: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct SceneToneP {
+    pub scene: String,
+    /// A sound of the episode or the show's library; left out, the scene plays its location's.
+    #[serde(default)]
+    pub asset_id: Option<String>,
+    /// Level in dB; left out it stays, or starts at −6.
+    #[serde(default)]
+    pub gain_db: Option<f64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct PlaySoundP {
     #[serde(default)]
     pub asset_id: Option<String>,
@@ -808,6 +834,8 @@ registry! {
     "remove_sound", PlacementP, Write, true, "Take a placed sound off the timeline. Undoable.";
     "batch_sounds", BatchSoundsP, Write, true, "Several sound edits as one undo step (a multi-select move, gain or depth change); if one fails, none applies. Each edit is {op: move|trim|fades|gain|pan|depth|slip|remove, ...the fields of that method}.";
     "scene_rooms", NoParams, Read, true, "Each scene's room: size, damping, wet, what they come to (decay, pre-delay) and how many sounds play in it.";
+    "set_scene_tone", SceneToneP, Write, true, "Set the room tone looping under a scene, from a library sound, and its level. Without asset_id the scene plays its location's.";
+    "bucket_set_loop", BucketLoopP, Write, true, "Set whether a bucket sound loops. Dropped, a sound over 6 s with Loop on goes on the ambience lane and repeats to the end of the scene.";
     "set_scene_room", SceneRoomP, Write, true, "Set a scene's room: size, damping, wet (0 to 1 each; left out stays). Each scene has its own room, shared by all its sounds.";
 }
 
@@ -1514,6 +1542,11 @@ impl Service {
             "batch_sounds" => crate::sound_edit::batch(self, parse(params)?),
             "scene_rooms" => Ok(serde_json::to_value(crate::sound_edit::rooms(self)?)?),
             "set_scene_room" => crate::sound_edit::set_room(self, parse(params)?),
+            "set_scene_tone" => crate::sound_edit::set_tone(self, parse(params)?),
+            "bucket_set_loop" => {
+                let p: BucketLoopP = parse(params)?;
+                crate::buckets::set_loop(self, p)
+            }
             "rescan_library" => crate::studio::rescan(self),
             "create_show" | "create_episode" | "open_project" | "create_demo" | "open_show"
             | "show_view" | "show_backdrop" | "set_show_backdrop" | "open_episode" | "close_show"

@@ -216,6 +216,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             tightness: 1.0,
             story: Default::default(),
             room: Default::default(),
+            tone: None,
         },
     );
     d.assets.insert(
@@ -263,6 +264,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             depth: 0.0,
             auto_fade: false,
             added: 0,
+            looped: false,
         },
     );
     (paths, d)
@@ -392,6 +394,30 @@ fn fcpxml_is_structurally_valid() {
     } else {
         eprintln!("DTD check skipped: Final Cut Pro's FCPXMLv1_9.dtd is not installed; structural checks ran instead");
     }
+}
+
+#[test]
+fn a_loop_goes_out_as_its_file_repeated() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_, mut doc) = setup(dir.path());
+    let file_s = doc.assets["door"].duration_s;
+    let p = doc.placements.get_mut("pl").unwrap();
+    p.looped = true;
+    p.anchor = None;
+    p.len_s = file_s * 2.5;
+    p.fade_in_s = 0.2;
+    p.fade_out_s = 0.3;
+    let tl = EpisodeTimeline::build(&doc, &ExportScope::All);
+    let parts: Vec<_> = tl.clips.iter().filter(|c| c.owner == "pl").collect();
+    assert_eq!(parts.len(), 3);
+    for c in &parts {
+        assert!(c.src_out <= file_s + 1e-9, "never past the end of the file");
+    }
+    assert!((parts[1].rec_in - parts[0].rec_in - file_s).abs() < 1e-9);
+    assert!((parts[2].src_out - file_s / 2.0).abs() < 1e-9);
+    assert_eq!((parts[0].fade_in_s, parts[0].fade_out_s), (0.2, 0.0));
+    assert_eq!((parts[1].fade_in_s, parts[1].fade_out_s), (0.0, 0.0));
+    assert_eq!((parts[2].fade_in_s, parts[2].fade_out_s), (0.0, 0.3));
 }
 
 #[test]

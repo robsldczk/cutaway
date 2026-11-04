@@ -1,4 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // The rooms on Import › Sounds: one per scene, one undo step per slider move.
 
@@ -70,3 +73,49 @@ test('import › sounds: arrow keys on a room slider stay on the slider', async 
   await page.keyboard.press('ControlOrMeta+z');
   await expect(wet).toHaveValue(String(start));
 });
+
+test('room tone: a scene picks a sound marked Loop, sets its level, and can drop it', async ({ page }) => {
+  const rpc = async <T,>(method: string, params: object = {}): Promise<T> => {
+    const r = await fetch('http://127.0.0.1:7358/rpc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method, params }) });
+    return ((await r.json()) as { result: T }).result;
+  };
+  const dir = mkdtempSync(join(tmpdir(), 'tones-'));
+  const file = join(dir, 'Canteen_tone.wav');
+  const rate = 8000;
+  const b = Buffer.alloc(44 + rate * 2 * 8);
+  b.write('RIFF', 0);
+  b.writeUInt32LE(36 + rate * 16, 4);
+  b.write('WAVEfmt ', 8);
+  b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20);
+  b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(rate, 24);
+  b.writeUInt32LE(rate * 2, 28);
+  b.writeUInt16LE(2, 32);
+  b.writeUInt16LE(16, 34);
+  b.write('data', 36);
+  b.writeUInt32LE(rate * 16, 40);
+  writeFileSync(file, b);
+  const { bucket_id } = await rpc<{ bucket_id: string }>('create_bucket', { name: 'Room tone test', keywords: ['tone'] });
+  const { assets } = await rpc<{ assets: { id: string }[] }>('import_sounds', { paths: [file], bucket_id });
+  await rpc('bucket_set_loop', { bucket_id, asset_id: assets[0].id, on: true });
+
+  await openRooms(page);
+  const row = page.getByTestId('scene-room').first();
+  const pick = row.getByTestId('room-tone');
+  await expect(pick.locator('option', { hasText: 'Canteen_tone' })).toHaveCount(1);
+  await pick.selectOption(assets[0].id);
+  const rows = () => rpc<{ tone: { asset_id: string; gain_db: number } | null }[]>('scene_rooms');
+  await expect.poll(async () => (await rows())[0].tone?.asset_id).toBe(assets[0].id);
+  expect((await rows())[1].tone).toBeNull();
+
+  const level = row.getByRole('slider', { name: /Room tone level/ });
+  await level.fill('-20');
+  await expect.poll(async () => (await rows())[0].tone?.gain_db).toBe(-20);
+
+  await pick.selectOption('');
+  await expect.poll(async () => (await rows())[0].tone).toBeNull();
+  await expect(level).toHaveCount(0);
+  await rpc('delete_bucket', { bucket_id, confirm: true });
+});
+

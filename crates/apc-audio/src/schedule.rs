@@ -192,10 +192,16 @@ impl PlaySchedule {
                         lowpass_hz: m.lowpass_hz,
                     }
                 });
+                // a loop repeats the file from its in point, for as long as it's set to
+                let file_end = doc
+                    .assets
+                    .get(&p.asset_id)
+                    .map(|a| a.duration_s)
+                    .filter(|d| p.looped && *d > p.in_s);
                 clips.push(ScheduledClip {
                     source_id: format!("asset:{}", p.asset_id),
                     src_in: p.in_s,
-                    src_out: p.in_s + p.len_s,
+                    src_out: file_end.unwrap_or(p.in_s + p.len_s),
                     start_s: start,
                     gain_db: p.gain_db,
                     fade_in_s: p.fade_in_s.max(0.003),
@@ -206,7 +212,7 @@ impl PlaySchedule {
                         Lane::Music => "music".into(),
                         Lane::Dialogue => p.character.clone().unwrap_or_else(|| "dialogue".into()),
                     },
-                    loop_len_s: None,
+                    loop_len_s: file_end.map(|_| p.len_s),
                     pan: p.pan,
                     linear_fade: false,
                     owner: p.id.clone(),
@@ -220,7 +226,7 @@ impl PlaySchedule {
         }
         if settings.room_tone {
             let loc = apc_core::script::location_id(&scene.location);
-            if let Some(tone) = doc.room_tone_of(&loc) {
+            if let Some(tone) = doc.room_tone_for(scene) {
                 if tone.enabled && tone.t1 > tone.t0 + 0.2 {
                     let source_id = match (&tone.source_id, &tone.asset_id) {
                         (Some(s), _) => Some(s.clone()),
@@ -372,6 +378,7 @@ mod tests {
             tightness: 1.0,
             story: Default::default(),
             room: Default::default(),
+            tone: None,
         };
         (d, s)
     }
@@ -529,6 +536,7 @@ mod tests {
                 depth: 0.0,
                 auto_fade: false,
                 added: 0,
+                looped: false,
             },
         );
         doc.locations.insert(

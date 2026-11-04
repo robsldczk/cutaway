@@ -11,6 +11,9 @@
   import type { BucketsView } from '../lib/types';
   import { colorOf, solid } from '../theme';
 
+  /** Up to here a dropped sound keeps its length, looped or not. */
+  const LOOP_MIN_S = 6;
+
   /** On Arrange the layer owns the buckets: it hands them in, with an eye per bucket. */
   interface Eyes {
     hidden: string[];
@@ -43,6 +46,11 @@
 
   function isOpen(id: string, i: number) {
     return closed[id] === undefined ? i < 2 && !data?.buckets[i].show_wide : !closed[id];
+  }
+
+  async function setLoop(bucket_id: string, key: { asset_id?: string; remote_id?: string }, on: boolean) {
+    await app.method('bucket_set_loop', { bucket_id, ...key, on });
+    await load();
   }
 
   async function more(id: string) {
@@ -119,6 +127,7 @@
               <span class="grip"><Icon name="grip" /></span>
               <button class="play gold" style={col ? `background: ${col}; color: #16110d` : ''} aria-label="Play {s.name}" onmousedown={(e) => e.preventDefault()} onclick={() => app.toggleSound({ asset_id: s.id }, s)}><Icon name={app.previewing(s.id) ? 'stop' : 'play'} size={10} /></button>
               <div class="mid"><span class="ellip nm4">{s.name}</span><span class="wv"><Waveform peaks={s.peaks} fill={col ?? 'var(--sfx)'} /></span></div>
+              {#if !b.character && s.duration_s > LOOP_MIN_S}<button class="lp" class:on={s.loop} aria-pressed={s.loop} aria-label="Loop {s.name}" title="Loop: goes on the ambience lane and repeats to the end of the scene" onmousedown={(e) => e.preventDefault()} onclick={() => setLoop(b.id, { asset_id: s.id }, !s.loop)} data-testid="bucket-loop">Loop</button>{:else}<span></span>{/if}
               <span class="muted tn d">{len(s.duration_s)}</span>
             </div>
           {/each}
@@ -128,6 +137,7 @@
               <span class="grip"><Icon name="grip" /></span>
               <button class="play ring" aria-label="Play {p.title}" onmousedown={(e) => e.preventDefault()} onclick={() => app.toggleSound({ remote_id: p.remote_id }, { name: p.title, duration_s: p.duration_s, peaks: pseudo(p.remote_id) })}><Icon name={app.previewing(p.remote_id) ? 'stop' : 'play'} size={10} /></button>
               <div class="mid"><span class="ellip nm4 muted">{p.title}</span><span class="wv"><Waveform peaks={pseudo(p.remote_id)} fill="rgb(var(--ink-rgb) / 0.32)" /></span></div>
+              {#if p.duration_s > LOOP_MIN_S}<button class="lp" class:on={p.loop} aria-pressed={!!p.loop} aria-label="Loop {p.title}" title="Loop: goes on the ambience lane and repeats to the end of the scene" onmousedown={(e) => e.preventDefault()} onclick={() => setLoop(b.id, { remote_id: p.remote_id }, !p.loop)}>Loop</button>{:else}<span></span>{/if}
               <span class="muted tn d">{len(p.duration_s)}</span>
             </div>
           {/each}
@@ -294,7 +304,7 @@
   }
   .srow {
     display: grid;
-    grid-template-columns: 12px 28px minmax(0, 1fr) 34px;
+    grid-template-columns: 12px 28px minmax(0, 1fr) auto 34px;
     gap: 8px;
     align-items: center;
     height: 40px;
@@ -304,6 +314,19 @@
   }
   .srow.kept {
     background: rgb(var(--sfx-rgb) / 0.1);
+  }
+  .lp {
+    height: 20px;
+    padding: 0 7px;
+    border-radius: var(--radius-pill);
+    font-size: 10.5px;
+    color: var(--text-3);
+    box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.2);
+  }
+  .lp.on {
+    color: var(--on-sfx);
+    background: var(--sfx);
+    box-shadow: none;
   }
   .grip {
     color: rgb(var(--ink-rgb) / 0.45);

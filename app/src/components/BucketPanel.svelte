@@ -78,6 +78,9 @@
     void app.playSound(key, Math.max(0, ((e.clientX - r.left) / r.width) * face.duration_s), face);
   }
 
+  /** Up to here a dropped sound keeps its length, looped or not. */
+  const LOOP_MIN_S = 6;
+
   const previewFace = (p: Preview): SoundFace => ({ name: p.title, duration_s: p.duration_s, peaks: pseudo(p.remote_id) });
 
   // Space plays, ← → step through results (SND-51)
@@ -163,7 +166,7 @@
           </span>
         </div>
         <span class="muted tn d">{len(r.duration_s)}</span>
-        {#if vocal}<span></span>{:else}<span class="ib ok" role="img" aria-label="Downloaded"><Icon name="check" stroke={2.4} /></span>{/if}
+        {#if vocal}<span></span>{:else if r.duration_s > LOOP_MIN_S}<button class="lp" class:on={r.loop} aria-pressed={r.loop} aria-label="Loop {r.name}" title="Loop: goes on the ambience lane and repeats to the end of the scene, and can be a scene's room tone" onclick={() => act('bucket_set_loop', { asset_id: r.id, on: !r.loop })} data-testid="panel-loop">Loop</button>{:else}<span class="ib ok" role="img" aria-label="Downloaded"><Icon name="check" stroke={2.4} /></span>{/if}
         <button class="ib" aria-label="Remove {r.name}" onclick={() => act('bucket_remove', { asset_id: r.id })}><Icon name="x" size={13} /></button>
       </div>
     {:else}
@@ -281,6 +284,19 @@
     align-items: center;
     padding: 8px;
     border-radius: 14px;
+  }
+  .lp {
+    height: 22px;
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    font-size: 10.5px;
+    color: var(--text-3);
+    box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.2);
+  }
+  .lp.on {
+    color: var(--on-sfx);
+    background: var(--sfx);
+    box-shadow: none;
   }
   .srow.kept {
     background: rgb(var(--sfx-rgb) / 0.1);

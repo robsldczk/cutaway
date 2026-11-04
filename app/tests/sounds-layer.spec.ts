@@ -281,6 +281,54 @@ test('preview: the transport takes over, the player seeks, and hiding the bucket
   await expect.poll(async () => (await heard()).playing).toBe(false);
 });
 
+test('loop: a long sound with Loop on drops as ambience, and is cropped with it off', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'loops-'));
+  const file = join(dir, 'Rain_on_glass.wav');
+  wav(file, 8);
+  const r = await rpc<{ assets: { id: string }[] }>('import_sounds', { paths: [file], bucket_id: bucket });
+  const long = r.assets[0].id;
+  await rpc('bucket_set_loop', { bucket_id: bucket, asset_id: long, on: false });
+  await open(page);
+  await bucketRow(page);
+  const row = foil(page).getByTestId('bucket-sound').filter({ hasText: 'Rain_on_glass' });
+  const field = (await page.getByTestId('sounds-field').boundingBox())!;
+  const y = (await page.getByTestId('arrange-row').nth(1).boundingBox())!.y;
+  const toField = { targetPosition: { x: 330, y: y - field.y + 1 } };
+
+  const loop = row.getByTestId('bucket-loop');
+  await expect(loop).toHaveAttribute('aria-pressed', 'false');
+  await row.dragTo(page.getByTestId('sounds-field'), toField);
+  await expect.poll(async () => (await list()).length).toBe(1);
+  expect((await rpc<{ looped: boolean }[]>('list_sounds', { scene: '1' }))[0].looped).toBe(false);
+
+  await loop.click();
+  await expect(loop).toHaveAttribute('aria-pressed', 'true');
+  await row.dragTo(page.getByTestId('sounds-field'), toField);
+  await expect.poll(async () => (await list()).length).toBe(2);
+  const bed = (await rpc<{ looped: boolean; lane: string; len_s: number }[]>('list_sounds', { scene: '1' })).find((x) => x.looped)!;
+  expect(bed.lane).toBe('ambience');
+  await rpc('bucket_remove', { bucket_id: bucket, asset_id: long });
+});
+
+test('the Sounds toggle eases: nothing in the layer overshoots', async ({ page }) => {
+  await place(1, 0.5);
+  await open(page);
+  await expect(page.getByTestId('sound-ball')).toHaveCount(1);
+  await page.keyboard.press('s');
+  await page.waitForTimeout(60);
+  const off = await page.getByTestId('sound-ball').evaluate((e) => getComputedStyle(e).transitionTimingFunction);
+  await page.waitForTimeout(700);
+  await page.keyboard.press('s');
+  await page.waitForTimeout(60);
+  const on = await page.getByTestId('sound-ball').evaluate((e) => getComputedStyle(e).transitionTimingFunction);
+  for (const t of [off, on]) {
+    for (const m of t.matchAll(/cubic-bezier\(([^)]+)\)/g)) {
+      const [, y1, , y2] = m[1].split(',').map(Number);
+      expect(Math.max(y1, y2), t).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
 test('depth: sideways is depth, and small vertical motion leaves the timing alone', async ({ page }) => {
   const a = await place(1, 0.1);
   await open(page);

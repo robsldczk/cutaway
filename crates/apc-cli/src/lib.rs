@@ -300,6 +300,21 @@ pub enum SfxCmd {
     Batch { edits: String },
     /// Each scene's room.
     Rooms,
+    /// Loop a scene's room tone from a library sound. Without --sound it plays its location's.
+    RoomTone {
+        scene: String,
+        #[arg(long)]
+        sound: Option<String>,
+        #[arg(long, allow_negative_numbers = true)]
+        gain: Option<f64>,
+    },
+    /// Set Loop on a bucket sound: dropped, one over 6 s repeats on the ambience lane.
+    Loop {
+        bucket: String,
+        sound: String,
+        #[arg(long)]
+        off: bool,
+    },
     /// Set a scene's room (each 0 … 1; left out stays).
     Room {
         scene: String,
@@ -401,6 +416,16 @@ fn sound_call(sess: &mut Session, cmd: &SfxCmd) -> Option<anyhow::Result<Value>>
             .context("the edits are not valid JSON")
             .and_then(|edits| call(sess, "batch_sounds", json!({ "edits": edits }))),
         SfxCmd::Rooms => call(sess, "scene_rooms", json!({})),
+        SfxCmd::RoomTone { scene, sound, gain } => call(
+            sess,
+            "set_scene_tone",
+            json!({ "scene": scene, "asset_id": sound, "gain_db": gain }),
+        ),
+        SfxCmd::Loop { bucket, sound, off } => call(
+            sess,
+            "bucket_set_loop",
+            json!({ "bucket_id": bucket, "asset_id": sound, "on": !off }),
+        ),
         SfxCmd::Room {
             scene,
             size,

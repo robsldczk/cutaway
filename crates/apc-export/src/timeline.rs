@@ -193,27 +193,39 @@ impl EpisodeTimeline {
                 .and_then(|c| doc.cues.get(c))
                 .map(|c| c.description.clone())
                 .unwrap_or_default();
-            self.clips.push(TimelineClip {
-                scene_id: scene.id.clone(),
-                scene_number: scene.number,
-                owner: p.id.clone(),
-                line_ref: format!("S{}", scene.number),
-                lane,
-                character: p.character.clone().filter(|_| p.lane == Lane::Dialogue),
-                take_no: None,
-                part: (1, 1),
-                source_id: format!("asset:{}", p.asset_id),
-                src_in: p.in_s,
-                src_out: p.in_s + p.len_s,
-                rec_in: offset + start,
-                fade_in_s: p.fade_in_s,
-                fade_out_s: p.fade_out_s,
-                gain_db: p.gain_db,
-                direction: String::new(),
-                feedback: String::new(),
-                text: desc,
-                muted: p.muted,
-            });
+            // a clip can't outlast its file in an edit: a loop goes out as the file repeated
+            let round = doc
+                .assets
+                .get(&p.asset_id)
+                .map(|a| a.duration_s - p.in_s)
+                .filter(|d| p.looped && *d > 0.0)
+                .unwrap_or(p.len_s);
+            let parts = (p.len_s / round).ceil().max(1.0) as usize;
+            for k in 0..parts {
+                let at = k as f64 * round;
+                let last = k + 1 == parts;
+                self.clips.push(TimelineClip {
+                    scene_id: scene.id.clone(),
+                    scene_number: scene.number,
+                    owner: p.id.clone(),
+                    line_ref: format!("S{}", scene.number),
+                    lane: lane.clone(),
+                    character: p.character.clone().filter(|_| p.lane == Lane::Dialogue),
+                    take_no: None,
+                    part: (k + 1, parts),
+                    source_id: format!("asset:{}", p.asset_id),
+                    src_in: p.in_s,
+                    src_out: p.in_s + round.min(p.len_s - at),
+                    rec_in: offset + start + at,
+                    fade_in_s: if k == 0 { p.fade_in_s } else { 0.0 },
+                    fade_out_s: if last { p.fade_out_s } else { 0.0 },
+                    gain_db: p.gain_db,
+                    direction: String::new(),
+                    feedback: String::new(),
+                    text: desc.clone(),
+                    muted: p.muted,
+                });
+            }
         }
         self.scenes.push(SceneMark {
             scene_id: scene.id.clone(),

@@ -224,7 +224,7 @@
     const y1 = lineEnd(s);
     const yf = clamp(map.y(s.start_s + s.len_s - s.fade_out_s), y0 + 2, y1);
     const b = shown(s.id);
-    const restEnd = s.asset_len_s > 0 ? map.y(s.start_s - s.in_s + s.asset_len_s) : y1;
+    const restEnd = s.asset_len_s > 0 && !s.looped ? map.y(s.start_s - s.in_s + s.asset_len_s) : y1;
     return { s, x, y0, y1, body: focusBody(x, y0, yf), fade: focusFade(x, yf, y1), rest: restOfSource(x, y1, restEnd), tether: `M${x + 4} ${y0.toFixed(1)}L${(b.x - b.r * (b.tucked ? 0.5 : 1)).toFixed(1)} ${b.y.toFixed(1)}` };
   });
 
@@ -251,7 +251,7 @@
     if (wasOn !== null && wasOn !== now) {
       staggering = true;
       clearTimeout(staggerTimer);
-      staggerTimer = setTimeout(() => (staggering = false), 1700);
+      staggerTimer = setTimeout(() => (staggering = false), 1100);
       untrack(() => {
         hover = null;
         tip = null;
@@ -259,7 +259,11 @@
     }
     wasOn = now;
   });
-  const staggerOf = (i: number, n: number) => (on ? 0.12 + i * 0.05 : (n - 1 - i) * 0.025);
+  // a ripple, not a parade: however many sounds there are, it's over in a moment
+  const staggerOf = (i: number, n: number) => {
+    const step = Math.min(0.02, 0.24 / Math.max(1, n));
+    return on ? 0.08 + i * step : (n - 1 - i) * step * 0.5;
+  };
   const inTimeOrder = $derived([...sounds].sort((a, b) => a.start_s - b.start_s).map((s) => s.id));
 
   // ---- gestures ----
@@ -293,7 +297,7 @@
   function stateOf(id: string): OpenState {
     const s = byId.get(id);
     if (!s) throw new Error(`no sound ${id}`);
-    return { id, start_s: s.start_s, len_s: s.len_s, offset_s: s.offset_s, anchor: s.anchor, depth: s.depth, pan: s.pan, gain_db: s.gain_db, in_s: s.in_s, asset_len_s: s.asset_len_s, fade_in_s: s.fade_in_s, fade_out_s: s.fade_out_s, auto_fade: s.auto_fade };
+    return { id, start_s: s.start_s, len_s: s.len_s, offset_s: s.offset_s, anchor: s.anchor, depth: s.depth, pan: s.pan, gain_db: s.gain_db, in_s: s.in_s, asset_len_s: s.asset_len_s, looped: s.looped, fade_in_s: s.fade_in_s, fade_out_s: s.fade_out_s, auto_fade: s.auto_fade };
   }
 
   function point(e: Pick<MouseEvent, 'clientX' | 'clientY'>) {
@@ -405,7 +409,7 @@
     } else if (g.kind === 'trim') {
       const s = byId.get(g.id);
       if (!s) return;
-      const max = s.asset_len_s > 0 ? s.asset_len_s - s.in_s : Infinity;
+      const max = s.asset_len_s > 0 && !s.looped ? s.asset_len_s - s.in_s : Infinity;
       const t = map.t(p.y);
       const target = nearestTarget(targets, t, map);
       g.len = clamp((target?.t ?? t) - grabbed.start_s, Math.min(MIN_TRIM_S, g.size), max);
@@ -1236,24 +1240,25 @@
     transform: scale(0.6);
     pointer-events: none;
   }
+  /* the Sounds toggle: they glide a little toward the spine and fade. No overshoot (D87). */
   .ball.out,
   .mer.out {
     opacity: 0;
-    transform: translateX(var(--tx)) scale(0.05);
+    transform: translateX(calc(var(--tx) * 0.18)) scale(0.82);
     pointer-events: none;
   }
   .ball.stagger,
   .mer.stagger {
     transition:
-      transform 0.75s cubic-bezier(0.34, 1.56, 0.64, 1) var(--dl),
-      opacity 0.5s ease var(--dl),
+      transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) var(--dl),
+      opacity 0.5s cubic-bezier(0.33, 0, 0.2, 1) var(--dl),
       filter 0.3s;
   }
   .ball.out.stagger,
   .mer.out.stagger {
     transition:
-      transform 0.55s cubic-bezier(0.55, 0, 0.8, 0.3) var(--dl),
-      opacity 0.45s ease var(--dl),
+      transform 0.4s cubic-bezier(0.4, 0, 0.2, 1) var(--dl),
+      opacity 0.3s cubic-bezier(0.4, 0, 1, 1) var(--dl),
       filter 0.3s;
   }
   .ball.pulse {

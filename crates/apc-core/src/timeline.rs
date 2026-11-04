@@ -975,6 +975,7 @@ pub(crate) mod tests {
             tightness: 1.0,
             story: Default::default(),
             room: Default::default(),
+            tone: None,
         };
         (d, sc)
     }
@@ -1282,6 +1283,7 @@ pub(crate) mod tests {
             depth: 0.0,
             auto_fade: false,
             added: 0,
+            looped: false,
         };
         let before = placement_start(&layout_scene(&d, &sc, &p), &pl);
         d.boxes.get_mut("b").unwrap().gap_s = Some(2.0);

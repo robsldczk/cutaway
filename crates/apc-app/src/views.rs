@@ -673,6 +673,7 @@ pub struct PlacementView {
     /// Asset in point and the asset's length (trim limits).
     pub in_s: f64,
     pub asset_len_s: f64,
+    pub looped: bool,
     pub peaks: Vec<f32>,
     /// Where the sound came from ("Epidemic Sound", "ElevenLabs", "Library").
     pub origin: String,
@@ -702,6 +703,8 @@ pub struct EditView {
 pub struct RoomToneBed {
     pub source: String,
     pub loop_s: f64,
+    /// The scene's own room tone (its sound); `None` when it's the location's.
+    pub own: Option<String>,
     pub gain_db: f64,
     pub seams: Vec<f64>,
 }
@@ -756,6 +759,7 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
             depth: p.depth,
             auto_fade: p.auto_fade,
             added: p.added,
+            looped: p.looped,
             in_s: p.in_s,
             asset_len_s: doc
                 .assets
@@ -778,10 +782,10 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
     }
     placements.sort_by(|a, b| a.start_s.total_cmp(&b.start_s));
     let room_tone = doc
-        .room_tone_of(&apc_core::script::location_id(&scene.location))
+        .room_tone_for(&scene)
         .filter(|t| t.enabled && t.t1 > t.t0 + 0.05)
         .map(|t| {
-            let period = t.t1 - t.t0;
+            let period = apc_audio::mixer::loop_period_s(t.t1 - t.t0);
             let n = (layout.duration_s / period).floor() as usize;
             RoomToneBed {
                 source: t
@@ -797,6 +801,7 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
                     })
                     .unwrap_or_default(),
                 loop_s: period,
+                own: scene.tone.as_ref().map(|s| s.asset_id.clone()),
                 gain_db: t.gain_db,
                 seams: (1..=n.min(500)).map(|k| k as f64 * period).collect(),
             }

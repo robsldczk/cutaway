@@ -18,7 +18,7 @@ use crate::room::Room;
 use crate::schedule::{PlaySchedule, ScheduledClip};
 
 /// Source, in and out point, and the roll-off (0 = none).
-type ClipKey = (String, u64, u64, u32);
+type ClipKey = (String, u64, u64, u32, bool);
 
 /// Decoded clip audio (mono, at the mix rate), cached per source range.
 pub struct SourceSet {
@@ -44,6 +44,34 @@ fn resample_linear(x: &[f32], from: u32, to: u32) -> Vec<f32> {
             a + (b - a) * f
         })
         .collect()
+}
+
+/// Longest crossfade at a loop's seam.
+const SEAM_S: f64 = 0.5;
+
+fn seam_s(len_s: f64) -> f64 {
+    SEAM_S.min(len_s / 4.0)
+}
+
+/// How often a loop of `len_s` repeats: its seam overlaps, so a little less than its length.
+pub fn loop_period_s(len_s: f64) -> f64 {
+    len_s - seam_s(len_s)
+}
+
+/// A clip ready to repeat: its tail crossfades into its head, so the seam of a file that was
+/// never cut to loop doesn't click. Equal power: room tone and beds don't correlate.
+fn seamless(x: &[f32], rate: u32) -> Vec<f32> {
+    let n = (seam_s(x.len() as f64 / f64::from(rate.max(1))) * f64::from(rate)) as usize;
+    if n == 0 || x.len() < 2 * n {
+        return x.to_vec();
+    }
+    let period = x.len() - n;
+    let mut y = x[..period].to_vec();
+    for i in 0..n {
+        let t = (i as f64 + 0.5) / n as f64 * std::f64::consts::FRAC_PI_2;
+        y[i] = x[i] * t.sin() as f32 + x[period + i] * t.cos() as f32;
+    }
+    y
 }
 
 /// The gentle roll-off of a far sound: one pole, run over the whole clip from its first sample,
@@ -89,6 +117,7 @@ impl SourceSet {
             (c.src_in * 1e4) as u64,
             (c.src_out * 1e4) as u64,
             hz.map(|h| h.round() as u32).unwrap_or(0),
+            c.loop_len_s.is_some(),
         );
         if let Some(v) = self
             .cache
@@ -99,9 +128,14 @@ impl SourceSet {
             return Ok(v.clone());
         }
         let raw = self.decode(c)?;
-        let v = Arc::new(match hz {
+        let raw = match hz {
             Some(hz) => lowpass(&raw, hz, self.rate),
             None => raw,
+        };
+        let v = Arc::new(if c.loop_len_s.is_some() {
+            seamless(&raw, self.rate)
+        } else {
+            raw
         });
         if let Ok(mut cache) = self.cache.lock() {
             if cache.len() > 512 {
@@ -327,6 +361,25 @@ fn warm_up(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_loop_seam_is_continuous() {
+        // a ramp jumps from 1 back to 0 at the end of the file
+        let rate = 1000;
+        let x: Vec<f32> = (0..4000).map(|i| i as f32 / 4000.0).collect();
+        let y = seamless(&x, rate);
+        assert_eq!(y.len(), 3500, "the seam overlaps by half a second");
+        let jump = (y[0] - y[y.len() - 1]).abs();
+        assert!(jump < 0.02, "wrapping around jumps by {jump}");
+        assert_eq!(y[2000], x[2000], "the middle stays the file");
+        assert!((loop_period_s(4.0) - 3.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_short_loop_has_a_short_seam() {
+        assert!((loop_period_s(1.0) - 0.75).abs() < 1e-9);
+        assert_eq!(seamless(&[], 48000), Vec::<f32>::new());
+    }
 
     #[test]
     fn pan_is_constant_power_with_unity_centre() {

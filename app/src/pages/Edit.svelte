@@ -624,7 +624,7 @@
       if (!p) return;
       at = edge === 'start' ? p.start_s : p.start_s + p.len_s;
       lo = edge === 'start' ? -p.in_s : -(p.len_s - 0.05);
-      hi = edge === 'start' ? p.len_s - 0.05 : Math.max(0, p.asset_len_s - p.in_s - p.len_s);
+      hi = edge === 'start' ? p.len_s - 0.05 : p.looped ? Infinity : Math.max(0, p.asset_len_s - p.in_s - p.len_s);
       cands = [...cands, ...wordStarts];
       const a = Math.max(0, p.in_s - (edge === 'start' ? HANDLE_S : 0));
       const z = edge === 'end' ? Math.min(p.asset_len_s, p.in_s + p.len_s + HANDLE_S) : p.in_s + p.len_s;
@@ -773,7 +773,7 @@
     const lane = r.lane;
     const character = r.lane === 'dialogue' ? r.char : undefined;
     if (s.asset_id) {
-      await app.method('place_from_bucket', { scene: v.scene.id, asset_id: s.asset_id, cue_id: s.cue_id, lane, character, ...where });
+      await app.method('place_from_bucket', { scene: v.scene.id, bucket_id: s.bucket_id, asset_id: s.asset_id, cue_id: s.cue_id, lane, character, ...where });
       await app.loadEdit();
       return;
     }

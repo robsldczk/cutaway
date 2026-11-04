@@ -78,7 +78,7 @@
   const tIn = $derived(s.start_s);
   const tOut = $derived(s.start_s + s.len_s);
   const src0 = $derived(s.start_s - s.in_s);
-  const src1 = $derived(s.asset_len_s > 0 ? src0 + s.asset_len_s : tOut);
+  const src1 = $derived(s.asset_len_s > 0 && !s.looped ? src0 + s.asset_len_s : tOut);
   const u0 = $derived(clamp(y(tIn), 0, H));
   const u1 = $derived(clamp(y(tOut), 0, H));
   const s0 = $derived(clamp(y(src0), 0, H));

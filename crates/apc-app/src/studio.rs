@@ -229,6 +229,7 @@ pub fn link_folders(svc: &mut Service) -> Result<usize> {
                 character: None,
                 search_offset: 0,
                 folder: Some(folder),
+                loops: Default::default(),
             });
             order += 1;
         };

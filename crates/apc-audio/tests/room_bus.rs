@@ -39,6 +39,7 @@ fn scene(id: &str, number: u32, room: SceneRoom) -> Scene {
         tightness: 1.0,
         story: Default::default(),
         room,
+        tone: None,
     }
 }
 
@@ -65,6 +66,7 @@ fn sound(id: &str, scene_id: &str, at_s: f64, depth: f64) -> Placement {
         depth,
         auto_fade: false,
         added: 0,
+        looped: false,
     }
 }
 

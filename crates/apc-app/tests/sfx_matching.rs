@@ -137,6 +137,20 @@ fn show_sounds_reach_the_buckets_and_the_clean_up_files_them() {
     let gone = s.call("play_sound", &json!({ "asset_id": "nothing" }));
     assert!(gone.is_err(), "an unknown sound still says so");
 
+    // and it can loop under a scene: it joins the episode for that
+    call(
+        &mut s,
+        "set_scene_tone",
+        json!({ "scene": "1", "asset_id": spoon }),
+    );
+    let rooms = call(&mut s, "scene_rooms", json!({}));
+    assert_eq!(rooms[0]["tone"]["asset_id"], spoon);
+    assert!(rooms[0]["tone"]["name"]
+        .as_str()
+        .unwrap()
+        .contains("Spoon Drop"));
+    call(&mut s, "set_scene_tone", json!({ "scene": "1" }));
+
     // a hand-made bucket's keyword picks a loose sound out, without touching the file
     let id = call(
         &mut s,

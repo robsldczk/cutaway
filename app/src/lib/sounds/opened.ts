@@ -23,6 +23,7 @@ const QUICK_NEAR_S = 0.02;
 export interface OpenState extends SoundState {
   in_s: number;
   asset_len_s: number;
+  looped?: boolean;
   fade_in_s: number;
   fade_out_s: number;
   auto_fade: boolean;
@@ -87,7 +88,7 @@ export function nearestIn(targets: SnapTarget[], t: number, tol: number): SnapTa
 // ---- reshaping ----
 
 /** The longest the sound can be from its in point. */
-export const maxLen = (s: Pick<OpenState, 'in_s' | 'asset_len_s'>) => (s.asset_len_s > 0 ? s.asset_len_s - s.in_s : Infinity);
+export const maxLen = (s: Pick<OpenState, 'in_s' | 'asset_len_s'> & { looped?: boolean }) => (s.asset_len_s > 0 && !s.looped ? s.asset_len_s - s.in_s : Infinity);
 
 const minLen = (s: Pick<OpenState, 'len_s'>) => Math.min(MIN_TRIM_S, s.len_s);
 

@@ -294,6 +294,10 @@ export interface RoomRow {
   /** What the settings come to, from the curves the audio uses. */
   decay_s: number;
   predelay_ms: number;
+  /** The scene's own room tone. */
+  tone: { asset_id: string; name: string; gain_db: number } | null;
+  /** Without one it plays its location's, if that has any. */
+  place_tone: boolean;
   sounds: number;
 }
 
@@ -327,6 +331,8 @@ export interface PlacementView {
   /** Asset in point and the asset's length (trim limits). */
   in_s: number;
   asset_len_s: number;
+  /** Repeats its file, so it may outlast it. */
+  looped: boolean;
   peaks: number[];
   origin: string;
 }
@@ -372,6 +378,8 @@ export interface LaneMix {
 export interface RoomToneBed {
   source: string;
   loop_s: number;
+  /** The scene's own room tone (its sound); null when it's the location's. */
+  own: string | null;
   gain_db: number;
   seams: number[];
 }
@@ -457,6 +465,8 @@ export interface BucketSound {
   tags: string[];
   /** What the recogniser heard ("Mm.") for a character's vocal. */
   heard: string | null;
+  /** Dropped, a sound over 6 s with this on repeats on the ambience lane. */
+  loop: boolean;
   /** In this bucket because its file name answers the bucket's cues or keywords. */
   matched?: boolean;
 }
@@ -468,6 +478,8 @@ export interface Preview {
   duration_s: number;
   /** Dropped in by hand from the free search; a fresh keyword search keeps it. */
   pinned?: boolean;
+  /** Set in a bucket; see `BucketSound.loop`. */
+  loop?: boolean;
 }
 
 /** A result of the free Epidemic Sound search, with the buckets it already sits in. */

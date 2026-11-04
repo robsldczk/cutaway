@@ -340,6 +340,11 @@ pub enum Command {
         scene_id: String,
         room: SceneRoom,
     },
+    /// The room tone looping under a scene; `None` falls back on its location's.
+    SetSceneTone {
+        scene_id: String,
+        tone: Option<SceneTone>,
+    },
     /// Creates or replaces a sound bucket.
     PutBucket {
         bucket: SoundBucket,
@@ -450,6 +455,7 @@ impl Command {
             Command::SetSoundDepth { .. } => "set_sound_depth",
             Command::SlipSound { .. } => "slip_sound",
             Command::SetSceneRoom { .. } => "set_scene_room",
+            Command::SetSceneTone { .. } => "set_scene_tone",
             Command::PutBucket { .. } => "put_bucket",
             Command::DeleteBucket { .. } => "delete_bucket",
             Command::BucketKeep { .. } => "bucket_keep",
@@ -1114,6 +1120,7 @@ impl Command {
             } => sounds::set_depth(tx, placement_id, *depth),
             Command::SlipSound { placement_id, in_s } => sounds::slip(tx, placement_id, *in_s),
             Command::SetSceneRoom { scene_id, room } => sounds::set_room(tx, scene_id, room),
+            Command::SetSceneTone { scene_id, tone } => sounds::set_tone(tx, scene_id, tone),
             Command::PutBucket { bucket } => {
                 let mut b = bucket.clone();
                 b.keywords.retain(|k| !k.trim().is_empty());
@@ -1703,7 +1710,12 @@ fn trim_placement(
             d
         }
         ClipEdge::End => {
-            let d = delta.clamp(-room, (asset_len - p.in_s - p.len_s).max(0.0));
+            let most = if p.looped {
+                f64::MAX
+            } else {
+                (asset_len - p.in_s - p.len_s).max(0.0)
+            };
+            let d = delta.clamp(-room, most);
             p.len_s = ms(p.len_s + d);
             d
         }

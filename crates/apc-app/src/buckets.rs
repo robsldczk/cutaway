@@ -333,6 +333,7 @@ pub fn spot(
                         character: None,
                         search_offset: 0,
                         folder,
+                        loops: Default::default(),
                     };
                     merge_spotted(svc.doc(), &mut b, &sc.id, cs, &stale);
                     svc.exec(&Command::PutBucket { bucket: b })?;
@@ -493,12 +494,22 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
             .map(|(i, a)| {
                 let mut v = asset_view(svc, a);
                 v["matched"] = json!(i >= own);
+                v["loop"] = json!(loops(&doc, Some(&b.id), a));
+                v
+            })
+            .collect();
+        let previews: Vec<Value> = b
+            .previews
+            .iter()
+            .map(|p| {
+                let mut v = json!(p);
+                v["loop"] = json!(b.loops.get(&p.remote_id).copied().unwrap_or(false));
                 v
             })
             .collect();
         out.push(json!({
             "id": b.id, "name": b.name, "keywords": b.keywords, "scenes": scene_labels(&doc, b), "scene_ids": b.scene_ids,
-            "kept": kept, "previews": b.previews, "length_min_s": b.length_min_s, "length_max_s": b.length_max_s,
+            "kept": kept, "previews": previews, "length_min_s": b.length_min_s, "length_max_s": b.length_max_s,
             "exclude": b.exclude, "ai_suggested": b.ai_suggested, "folder": b.folder,
             "character": b.character, "color_index": cast(b), "show_wide": show_wide,
             "anchors": b.cue_ids.iter().filter_map(|c| doc.cues.get(c)).filter_map(|c| c.anchor.clone()).collect::<Vec<_>>(),
@@ -592,6 +603,7 @@ pub fn create(
         character: None,
         search_offset: 0,
         folder,
+        loops: Default::default(),
     };
     let mut b = b;
     for p in previews {
@@ -971,6 +983,31 @@ pub fn generate(
     Ok(json!({ "kept": ids }))
 }
 
+/// Does this sound loop? What its bucket says, else what kind of sound it is.
+fn loops(doc: &Document, bucket_id: Option<&str>, a: &Asset) -> bool {
+    bucket_id
+        .and_then(|b| doc.buckets.get(b))
+        .and_then(|b| {
+            b.loops
+                .get(&a.id)
+                .or_else(|| a.remote_id.as_ref().and_then(|r| b.loops.get(r)))
+        })
+        .copied()
+        .unwrap_or_else(|| a.loops_by_default())
+}
+
+/// Sets Loop on a bucket's sound or preview.
+pub fn set_loop(svc: &mut Service, p: crate::methods::BucketLoopP) -> Result<Value> {
+    let id = p
+        .asset_id
+        .or(p.remote_id)
+        .ok_or_else(|| AppError::Params("give asset_id or remote_id".into()))?;
+    edit_bucket(svc, &p.bucket_id, |_, b| {
+        b.loops.insert(id.clone(), p.on);
+    })?;
+    Ok(json!({ "loop": p.on }))
+}
+
 /// Auditions a bucket sound: a kept asset, or a preview (fetched into the cache).
 pub fn play(
     svc: &mut Service,
@@ -1036,9 +1073,19 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         at_s,
         offset_s: 0.0,
         depth,
+        dropped: None,
     };
     if let Some(aid) = asset_id {
-        return crate::sound::place(svc, crate::methods::PlaceSoundP { asset_id: aid, ..p });
+        let a = crate::sound::find_asset(svc, &aid)?;
+        let dropped = Some(a.is_some_and(|a| loops(svc.doc(), bucket_id.as_deref(), &a)));
+        return crate::sound::place(
+            svc,
+            crate::methods::PlaceSoundP {
+                asset_id: aid,
+                dropped,
+                ..p
+            },
+        );
     }
     let rid = remote_id.ok_or_else(|| AppError::Params("give asset_id or remote_id".into()))?;
     let bid = bucket_id.ok_or_else(|| AppError::Params("a preview needs its bucket".into()))?;
@@ -1051,6 +1098,7 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
             svc,
             crate::methods::PlaceSoundP {
                 asset_id: a.id.clone(),
+                dropped: Some(loops(svc.doc(), Some(&bid), &a)),
                 ..p
             },
         )?;

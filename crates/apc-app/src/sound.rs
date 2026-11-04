@@ -9,6 +9,8 @@ use apc_ai::task::{
 };
 use apc_core::ids::new_id;
 use apc_core::project::SHOW_PREFIX;
+use apc_core::sounds::{DROP_CROP_S, DROP_SHORT_S};
+use apc_core::timeline::{layout_scene, placement_start};
 use apc_core::*;
 use apc_sound::epidemic::EpidemicProvider;
 use apc_sound::providers::{ElevenLabsProvider, LibrarySearchProvider};
@@ -447,6 +449,7 @@ pub fn import(
                 at_s: Some(t),
                 offset_s: 0.0,
                 depth: 0.0,
+                dropped: Some(first.loops_by_default()),
             },
         )?;
         placed = Some(r);
@@ -479,6 +482,24 @@ pub fn delete_asset(svc: &mut Service, asset_id: &str) -> Result<Value> {
 
 /// Places a sound. With a cue anchor (or an explicit line) it hangs on the dialogue;
 /// otherwise it sits at `at_s`.
+/// What a drop from a bucket makes of a sound (D85). Short sounds stay as they are, and music
+/// and vocals aren't sound design. Past the short mark a sound is cropped, or, with Loop on,
+/// becomes a bed: the ambience lane, repeating to the scene's end.
+fn shape_drop(svc: &Service, scene: &Scene, looping: bool, p: &mut Placement) {
+    if matches!(p.lane, Lane::Dialogue | Lane::Music) || p.len_s <= DROP_SHORT_S {
+        return;
+    }
+    if !looping {
+        p.len_s = p.len_s.min(DROP_CROP_S);
+        return;
+    }
+    let layout = layout_scene(svc.doc(), scene, &svc.config().pacing());
+    p.lane = Lane::Ambience;
+    p.looped = true;
+    p.len_s = (layout.duration_s - placement_start(&layout, p)).max(DROP_CROP_S);
+    p.fade_in_s = 1.0;
+}
+
 pub fn place(svc: &mut Service, p: PlaceSoundP) -> Result<Value> {
     let a = ensure_asset_in_doc(svc, &p.asset_id)?;
     let scene = scene_of(svc, &p.scene)?;
@@ -537,7 +558,12 @@ pub fn place(svc: &mut Service, p: PlaceSoundP) -> Result<Value> {
         depth: p.depth,
         auto_fade: !vocal,
         added: 0,
+        looped: false,
     };
+    let mut placement = placement;
+    if let Some(looping) = p.dropped {
+        shape_drop(svc, &scene, looping, &mut placement);
+    }
     Ok(svc.exec(&Command::PlaceSound { placement })?.result)
 }
 
