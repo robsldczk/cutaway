@@ -8,6 +8,8 @@
   let zoom = $state(1);
   let start = $state(0);
   const total = $derived(Math.max(0.01, app.view?.duration_s ?? 0.01));
+  /** The playhead on the map: it waits at the end of the scene while the room rings out. */
+  const head = $derived(Math.min(app.pos, total));
   const cur = $derived(app.cur);
   const curShade = $derived(cur ? itemShade(app.view, cur) : ([240, 238, 232] as [number, number, number]));
   const fav = $derived(cur?.take_index != null ? cur.takes[cur.take_index]?.favorite : false);
@@ -35,7 +37,7 @@
 
   const viewStart = $derived.by(() => {
     let vs = clamp(start, 0, 1 - 1 / zoom);
-    const ef = app.pos / total;
+    const ef = head / total;
     if (app.playing && (ef < vs || ef > vs + 1 / zoom)) vs = clamp(ef - 0.1 / zoom, 0, 1 - 1 / zoom);
     return vs;
   });
@@ -103,13 +105,13 @@
     {/if}
   </button>
   <div class="mid">
-    <div class="times"><span data-testid="time-now">{fmt(app.pos)}</span><span class="ellip">{mid}</span><span>{fmt(total)}</span></div>
-    <div class="map" bind:this={mapEl} role="slider" tabindex="-1" aria-label="Scene position. Command scroll zooms, Shift scroll moves" aria-valuenow={Math.round((app.pos / total) * 100)} onmousedown={down} title="Click or drag to move the playhead. ⌘ scroll zooms, ⇧ scroll moves">
+    <div class="times"><span data-testid="time-now">{fmt(head)}</span><span class="ellip">{mid}</span><span>{fmt(total)}</span></div>
+    <div class="map" bind:this={mapEl} role="slider" tabindex="-1" aria-label="Scene position. Command scroll zooms, Shift scroll moves" aria-valuenow={Math.round((head / total) * 100)} onmousedown={down} title="Click or drag to move the playhead. ⌘ scroll zooms, ⇧ scroll moves">
       <div class="inner" style="left: {-viewStart * zoom * 100}%; width: {zoom * 100}%">
         {#each segs as s, i (i)}<span class="mseg" style="flex: {s.w} 1 0; {s.style}">{s.lbl}</span>{/each}
         <span class="vline" style="background: var(--locator); top: -6px; bottom: -6px; left: {(app.locator / total) * 100}%"></span>
         <span class="flag" style="top: -6px; left: {(app.locator / total) * 100}%"></span>
-        <span class="vline head" style="left: {(app.pos / total) * 100}%"></span>
+        <span class="vline head" style="left: {(head / total) * 100}%"></span>
       </div>
     </div>
   </div>
