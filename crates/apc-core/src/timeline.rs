@@ -4,6 +4,8 @@
 //! take (or comp), word edits, head/tail trims and the pause before it (`gap_s`), or an
 //! absolute pin. Everything after a box ripples when it changes; pinned boxes stay put.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
@@ -19,6 +21,12 @@ pub struct Pacing {
     pub splice_fade_s: f64,
     /// Fade at the head and tail of every clip.
     pub edge_fade_s: f64,
+    /// How far a line's audio reaches before its first kept sound and after its last
+    /// (heard only: the layout and word times don't move).
+    #[serde(default)]
+    pub handle_in_s: f64,
+    #[serde(default)]
+    pub handle_out_s: f64,
 }
 
 impl Default for Pacing {
@@ -26,7 +34,9 @@ impl Default for Pacing {
         Pacing {
             breath_gap_s: 0.3,
             splice_fade_s: 0.010,
-            edge_fade_s: 0.005,
+            edge_fade_s: 0.020,
+            handle_in_s: 0.100,
+            handle_out_s: 0.150,
         }
     }
 }
@@ -113,6 +123,10 @@ pub struct LayoutItem {
     pub character: Option<String>,
     pub take_id: Option<String>,
     pub pieces: Vec<ClipPiece>,
+    /// `pieces` as they are heard and exported: the line's outer edges reach into the
+    /// handles. Editing works on `pieces`.
+    #[serde(default)]
+    pub audio: Vec<ClipPiece>,
     pub words: Vec<LayoutWord>,
     #[serde(default)]
     pub parts: Vec<LayoutPart>,
@@ -624,6 +638,7 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
                 character: None,
                 take_id: None,
                 pieces: Vec::new(),
+                audio: Vec::new(),
                 words: Vec::new(),
                 parts: Vec::new(),
                 muted: false,
@@ -663,6 +678,7 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
                 character: line.character.clone(),
                 take_id: if dropped { b.take_id.clone() } else { None },
                 pieces,
+                audio: Vec::new(),
                 words,
                 parts,
                 muted,
@@ -712,6 +728,7 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
             character: line.character.clone(),
             take_id: b.take_id.clone(),
             pieces,
+            audio: Vec::new(),
             words,
             parts,
             muted,
@@ -726,11 +743,69 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
             first_box = false;
         }
     }
+    add_handles(doc, &mut items, pacing);
     let duration_s = items.iter().map(|i| i.end_s).fold(0.0_f64, f64::max);
     SceneLayout {
         scene_id: scene.id.clone(),
         items,
         duration_s,
+    }
+}
+
+/// Fills each box's `audio`: its first piece starts up to `handle_in_s` earlier in the
+/// source and its last ends up to `handle_out_s` later, so a line doesn't start or stop
+/// hard on its first or last sound. A handle stops short of any other word on the same
+/// source (a trimmed word stays out, a neighbouring take's speech doesn't leak in), at the
+/// file's edges and at the scene start.
+fn add_handles(doc: &Document, items: &mut [LayoutItem], pacing: &Pacing) {
+    // words never come within this of a handle's end
+    const CLEAR: f64 = 0.04;
+    let (hin, hout) = (pacing.handle_in_s.max(0.0), pacing.handle_out_s.max(0.0));
+    let mut used: HashMap<String, Vec<(f64, f64)>> = HashMap::new();
+    if hin > 0.0 || hout > 0.0 {
+        for it in items.iter() {
+            for p in [it.pieces.first(), it.pieces.last()].into_iter().flatten() {
+                used.entry(p.source_id.clone()).or_default();
+            }
+        }
+        for t in doc.takes.values() {
+            if let Some(ws) = used.get_mut(&t.source_id) {
+                ws.extend(t.words.iter().map(|w| (w.t0, w.t1)));
+            }
+        }
+    }
+    for it in items.iter_mut() {
+        let mut audio = it.pieces.clone();
+        let n = audio.len();
+        if n > 0 && (hin > 0.0 || hout > 0.0) {
+            let first = &mut audio[0];
+            let words = used.get(&first.source_id).map(Vec::as_slice).unwrap_or(&[]);
+            // the last word end before the edge, or the edge itself when a word straddles it
+            let floor = words
+                .iter()
+                .filter(|&&(t0, _)| t0 < first.src_in - 1e-6)
+                .map(|&(_, t1)| (t1 + CLEAR).min(first.src_in))
+                .fold(0.0_f64, f64::max);
+            let lead = hin.min(first.src_in - floor).min(first.start_s).max(0.0);
+            first.src_in -= lead;
+            first.start_s -= lead;
+
+            let last = &mut audio[n - 1];
+            let words = used.get(&last.source_id).map(Vec::as_slice).unwrap_or(&[]);
+            let len = doc
+                .sources
+                .get(&last.source_id)
+                .map(|s| s.duration_s)
+                .filter(|&d| d > 0.0)
+                .unwrap_or(f64::INFINITY);
+            let ceil = words
+                .iter()
+                .filter(|&&(_, t1)| t1 > last.src_out + 1e-6)
+                .map(|&(t0, _)| (t0 - CLEAR).max(last.src_out))
+                .fold(len, f64::min);
+            last.src_out += hout.min(ceil - last.src_out).max(0.0);
+        }
+        it.audio = audio;
     }
 }
 
@@ -901,6 +976,58 @@ pub(crate) mod tests {
             story: Default::default(),
         };
         (d, sc)
+    }
+
+    #[test]
+    fn handles_reach_out_but_leave_the_layout() {
+        let (d, sc) = doc2();
+        let p = Pacing::default();
+        let l = layout_scene(&d, &sc, &p);
+        let b = l.item("b").unwrap();
+        // the layout and the editable pieces are untouched
+        assert!((b.pieces[0].src_in - 20.0).abs() < 1e-9);
+        assert!((b.pieces[0].start_s - b.start_s).abs() < 1e-9);
+        // what is heard starts 100 ms earlier, in the same place in the source
+        let (h, t) = (&b.audio[0], b.audio.last().unwrap());
+        assert!((h.src_in - 19.9).abs() < 1e-9);
+        assert!((h.start_s - (b.start_s - 0.1)).abs() < 1e-9);
+        assert!((t.src_out - 22.15).abs() < 1e-9);
+        // the first line can't lead in before the scene starts
+        let a = l.item("a").unwrap();
+        assert!((a.audio[0].src_in - a.pieces[0].src_in).abs() < 1e-9);
+        assert!(a.audio[0].start_s >= 0.0);
+        assert_eq!(l.items[0].audio.len(), l.items[0].pieces.len());
+    }
+
+    #[test]
+    fn handles_stop_short_of_other_words() {
+        let (mut d, sc) = doc2();
+        let p = Pacing::default();
+        let lead = |d: &Document| {
+            let l = layout_scene(d, &sc, &p);
+            let b = l.item("b").unwrap();
+            b.pieces[0].src_in - b.audio[0].src_in
+        };
+        // "three" (20.2–20.8) trimmed off: the handle stops 40 ms after it
+        d.boxes.get_mut("b").unwrap().head_s = 0.9;
+        assert!((lead(&d) - 0.06).abs() < 1e-9);
+        // a head cut through "three": no lead-in, the cut word stays cut
+        d.boxes.get_mut("b").unwrap().head_s = 0.5;
+        assert!(lead(&d).abs() < 1e-9);
+        // the tail stops at the end of the file
+        d.sources.insert(
+            "src".into(),
+            crate::model::SourceFile {
+                duration_s: 22.05,
+                ..serde_json::from_value(serde_json::json!({
+                    "id": "src", "path": "a.wav", "original_name": "a.wav",
+                    "stored": "referenced", "hash": "", "size": 0, "role": "character"
+                }))
+                .unwrap()
+            },
+        );
+        let l = layout_scene(&d, &sc, &p);
+        assert!((l.item("b").unwrap().audio[0].src_out - 22.05).abs() < 1e-9);
     }
 
     #[test]

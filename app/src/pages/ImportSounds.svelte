@@ -11,7 +11,8 @@
   import KeywordField from '../components/KeywordField.svelte';
   import ImportTabs from '../components/ImportTabs.svelte';
   import EpidemicSearch from '../components/EpidemicSearch.svelte';
-  import { EPIDEMIC_DRAG, type Bucket, type BucketsView, type Preview, type SearchPage, type SearchResult } from '../lib/types';
+  import CleanUpSheet from '../components/CleanUpSheet.svelte';
+  import { EPIDEMIC_DRAG, type Bucket, type BucketsView, type CleanupPlan, type Preview, type SearchPage, type SearchResult } from '../lib/types';
   import { colorOf, solid } from '../theme';
 
   let sort = $state<'scene' | 'tag' | 'show'>('scene');
@@ -20,6 +21,8 @@
   let spotting = $state(false);
   let spotMsg = $state('');
   let spotMenu = $state(false);
+  let cleaning = $state(false);
+  let plan = $state<CleanupPlan | null>(null);
   let q = $state('');
   let found = $state<{ query: string; results: SearchResult[]; next: number; more: boolean } | null>(null);
   let searching = $state(false);
@@ -88,6 +91,16 @@
     if (!spotted) return 'Spot script';
     if (spot.pending) return `Spot ${spot.pending} changed scene${spot.pending === 1 ? '' : 's'}`;
     return 'Re-spot script';
+  }
+
+  /** One AI call on the loose sounds' names. It only proposes: the sheet moves the files. */
+  async function runCleanUp() {
+    cleaning = true;
+    const r = await app.run(() => call<{ job_id: string }>('start_cleanup'));
+    const j = r ? await app.waitJob(r.job_id) : undefined;
+    cleaning = false;
+    if (j?.state === 'failed') app.say(j.message);
+    else if (j?.result) plan = j.result as unknown as CleanupPlan;
   }
 
   async function runSearch(more = false) {
@@ -200,6 +213,9 @@
       </div>
     {/if}
   </div>
+  {#if data?.loose}<button class="btn ic" onclick={runCleanUp} disabled={cleaning} title="Claude reads the names of the loose sounds in Sound/sfx and proposes a folder for each: one call. You review the moves first">
+    <Icon name="sparkle" size={14} />{cleaning ? 'Reading names…' : `Clean up ${data.loose} loose`}
+  </button>{/if}
   <button class="btn primary ic" onclick={startNew}><Icon name="plus" size={14} />New bucket</button>
 </div>
 
@@ -253,6 +269,10 @@
     <p class="muted empty-note">No buckets yet. <b>Spot script</b> has Claude read the script and propose buckets, the search bar finds sounds on Epidemic Sound to drag in, or start one with <b>New bucket</b>.</p>
   {/if}
 </main>
+
+{#if plan}
+  <CleanUpSheet {plan} onclose={() => (plan = null)} ondone={() => { plan = null; void load(); }} />
+{/if}
 
 {#if open && data}
   <BucketPanel bucket={open} connected={data.connected} onchange={load} />

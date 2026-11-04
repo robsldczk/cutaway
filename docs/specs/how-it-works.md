@@ -61,6 +61,7 @@ Session language: English. Takes are not slated and not cut. Take structure is d
    - Attach each note to the take before it (feedback) and the take after it (direction).
    - An LLM condenses each note to one sentence plus tags (faster, quieter, angrier, ad-lib, flub).
    - Detect explicit picks ("that's the one", "keep that").
+   - *Changed in implementation (D73):* the room talk between two takes is one gap, read whole by the LLM (chatter included) and summarised in one or two full sentences. The same gap is the feedback of the take before it and the direction of the take after it.
 
 9. **Default selection per line**
    - Director pick, else the last complete take, else the highest-confidence take.
@@ -105,6 +106,7 @@ Rules:
 
 - **Cut points:** snap to word boundaries, then to the nearest zero crossing.
 - **Crossfades:** applied automatically on every splice, short and equal power.
+- **Lead-in, tail and edge fade** *(added in implementation, D71)*: every line plays from up to `pacing.handle_in_ms` (100 ms) before its first kept sound to up to `pacing.handle_out_ms` (150 ms) after its last, fading in and out over `pacing.edge_fade_ms` (20 ms, was a fixed 5 ms). A handle stops 40 ms short of any other word on the same recording, at the file's edges and at the scene start. Only the heard audio grows: the layout, pauses and word times don't move. Playback, bounce and FCPXML all use it.
 - **Splice warnings:** flag a splice that lands mid-phrase with little pause or a large pitch jump.
 - **Audition loudness:** integrated LUFS is measured per utterance at ingest and used as a playback offset only, so takes are compared at equal loudness.
   - *Changed in implementation (D69):* scene playback levels per recording (the median take LUFS of each source), not per take, so performances keep their dynamics; take and sound auditions match per item. Leveling and an output safety limiter are on by default (`playback.level`) and never reach bounces or exports.
@@ -203,6 +205,7 @@ Inputs: Paul track, room track, Fountain script, plus sentence-level transcript 
 - **Short lines need context rules.** One-word lines ("Lunch.", "Whoa!") only match when they stand alone or start a segment. Otherwise every "and" becomes a line.
 - **Notes need an LLM for both directions.** Keyword summaries are not usable. Direction (before a take) and feedback (after it) both go through the LLM and come back as a few words.
 - **Note windows.** Feedback is the first ~8 s of room speech after a take; direction is up to 30 s before it. Longer conversations in between are context, not notes.
+  - *Changed in implementation (D73):* direction reaches back up to 60 s before a take, and a gap is read as a whole, so its note is one or two sentences rather than a few words.
 - **Matching runs in two passes.** Pass 1 matches long lines across the whole script to find the active scenes. Pass 2 matches all lines, but only within those scenes and their neighbours.
 
 ## Risks

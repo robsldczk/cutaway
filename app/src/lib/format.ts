@@ -31,3 +31,9 @@ export function ago(iso: string, now = Date.now()): string {
   if (d < 86400) return `${Math.round(d / 3600)} h ago`;
   return `${Math.round(d / 86400)} d ago`;
 }
+
+/** The first sentence of a note (the whole note when it has no sentence end). */
+export function firstSentence(s: string): string {
+  const m = /^.*?[.!?](?=\s|$)/.exec(s.trim());
+  return m ? m[0] : s.trim();
+}

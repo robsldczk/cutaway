@@ -8,6 +8,7 @@
   import { openEditor } from '../lib/keys';
   import Waveform from '../components/Waveform.svelte';
   import type { ItemView } from '../lib/types';
+  import { lineWords } from '../lib/words';
 
   const sc = $derived(app.scale);
   const S = $derived(Math.round(92 * sc));
@@ -144,6 +145,13 @@
     window.addEventListener('mouseup', u);
   }
 
+  /** Pauses commit in 50 ms steps. */
+  const snapGap = (g: number) => Math.round(g * 20) / 20;
+  function gapLabel(g: number) {
+    const gs = snapGap(g);
+    return gs < 0 ? `overlap ${(-gs).toFixed(2)} s` : `‖ ${gs.toFixed(2)} s`;
+  }
+
   function grabGap(e: MouseEvent, r: Row) {
     if (!r.next) return;
     const id = r.next.line_id;
@@ -151,11 +159,21 @@
     const y0 = e.clientY;
     track(
       e,
-      (ev) => (gapPreview = { id, g: clamp(Math.round((g0 + (ev.clientY - y0) / (26 * sc)) * 20) / 20, -1, 4) }),
+      // the rows follow the mouse freely; only the value snaps
+      (ev) => (gapPreview = { id, g: clamp(g0 + (ev.clientY - y0) / (26 * sc), -1, 4) }),
       async () => {
-        const g = gapPreview?.g;
-        gapPreview = null;
-        if (g != null && Math.abs(g - g0) > 0.001) await app.cmd({ cmd: 'set_gap', line_id: id, gap_s: g });
+        const g = gapPreview ? snapGap(gapPreview.g) : null;
+        if (g == null || Math.abs(g - g0) < 0.001) {
+          gapPreview = null;
+          return;
+        }
+        // hold the released position until the new view lands, so the row doesn't jump back first
+        gapPreview = { id, g };
+        try {
+          await app.cmd({ cmd: 'set_gap', line_id: id, gap_s: g });
+        } finally {
+          gapPreview = null;
+        }
       },
     );
   }
@@ -177,10 +195,12 @@
       },
       async () => {
         const p = trimPreview;
-        trimPreview = null;
         const t = takeOf(it);
-        if (!p || !t) return;
-        await app.cmd({ cmd: 'set_trim', line_id: it.line_id, head_s: +(p.a - t.src_in).toFixed(3), tail_s: +(t.src_out - p.z).toFixed(3) });
+        try {
+          if (p && t) await app.cmd({ cmd: 'set_trim', line_id: it.line_id, head_s: +(p.a - t.src_in).toFixed(3), tail_s: +(t.src_out - p.z).toFixed(3) });
+        } finally {
+          trimPreview = null;
+        }
       },
     );
   }
@@ -274,7 +294,7 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg>
         </span>
         <span class="nm who" style="color: {charColor(app.view, r.it.character).name}">{charLabel(app.view, r.it.character)}</span>
-        <span class="script ellip txt" style="font-size: {Math.round(15 * sc)}px">{#if r.it.words.length && !r.it.dropped}{#each r.it.words.filter((w) => !w.deleted) as w, wi (w.idx)}{wi ? ' ' : ''}<span class:wmuted={w.muted}>{w.text}</span>{/each}{:else}{r.it.text}{/if}</span>
+        <span class="script ellip txt" style="font-size: {Math.round(15 * sc)}px">{#if r.it.words.length && !r.it.dropped}{#each lineWords(r.it).filter((w) => !w.deleted) as w, wi (w.j)}{wi ? ' ' : ''}<span class:wmuted={w.muted}>{w.text}</span>{/each}{:else}{r.it.text}{/if}</span>
         <ClipState it={r.it} />
         {#if r.it.moved}<span class="badge moved">Moved</span>{/if}
         {#if hc || tc}<span class="badge cuts">Cuts a word</span>{/if}
@@ -290,7 +310,7 @@
             {@const lf = fx(r.it, tr.a + app.locator - r.it.start_s)}
             {@const pf = fx(r.it, tr.a + app.pos - r.it.start_s)}
             <span class="vline" style="background: var(--locator); left: {lf * 100}%"></span><span class="flag" style="left: {lf * 100}%"></span>
-            {#if app.playing || app.pos > r.it.start_s}<span class="vline phead" style="left: {pf * 100}%"></span>{/if}
+            {#if app.pos > r.it.start_s && app.pos <= r.it.end_s}<span class="vline phead" style="left: {pf * 100}%"></span>{/if}
           {/if}
           <span class="hdl" role="slider" tabindex="-1" aria-label="Clip start" aria-valuenow={h} onmousedown={(e) => grabTrim(e, r.it, 'h')} title="Drag to trim the head, or out to lengthen it" style="left: calc({h * 100}% - 5px); background: {hc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>
           <span class="hdl" role="slider" tabindex="-1" aria-label="Clip end" aria-valuenow={tl} onmousedown={(e) => grabTrim(e, r.it, 't')} title="Drag to trim the tail, or out to lengthen it" style="left: calc({tl * 100}% - 5px); background: {tc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>
@@ -304,7 +324,7 @@
       <div class="gaprow" onmousedown={(e) => grabGap(e, r)} title="Drag up or down to change the pause" style="height: {Math.round((18 + Math.max(g, 0) * 14) * sc)}px" role="slider" tabindex="-1" aria-valuenow={g} data-testid="gap-row">
         <div class="gapline"></div>
         <div class="gappill" style="color: {g < 0 ? 'var(--overlap)' : 'rgb(var(--ink-rgb) / 0.78)'}">
-          <span class="num">{g < 0 ? `overlap ${(-g).toFixed(2)} s` : `‖ ${g.toFixed(2)} s`}</span>
+          <span class="num">{gapLabel(g)}</span>
           {#if r.acts.length}<span class="script ellip actx">{r.acts.join(' ')}</span>{/if}
         </div>
       </div>

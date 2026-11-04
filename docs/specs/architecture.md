@@ -104,7 +104,7 @@ TARMAC/                              show
 - **A show is the production's own folder** (e.g. the Syncthing share `tm-2610/`). Cutaway adds one JSON show file at its root (`tm-2610.cutawayshow`, next to the pipeline's `*.jetplane.json`) and takes the layout from it.
 - **Defaults:**
   - episodes in `Episodes/<Episode>/Sound/<Episode>.cutaway` (with `Audio/`, `Script/`, `Backups/`, `Exports/`, `Cache/`, `Logs/`);
-  - the show's library in `Sound/sfx/` and `Sound/music/`, whose first-level folders are the buckets;
+  - the show's library in `Sound/sfx/` and `Sound/music/`, whose first-level folders are the buckets (*Changed in implementation, D74:* sounds also reach buckets by file name, loose SFX have a bucket of their own, and a confirmed clean up may move loose SFX into folders);
   - Cutaway's own files in `Sound/Cutaway/`: `backdrop.jpg`, and `library.json` with licences and provider ids.
 - **Library index:** the library is scanned, not registered, and the hash index is a local cache.
 - **Vocals** stay in the episode's own `Library/Vocals/`.
@@ -292,6 +292,7 @@ cutaway transcribe                             run the local ASR (downloads the 
 cutaway align                                  deterministic matching + AI for ambiguous parts
 cutaway notes                                  room classification, note condensing, picks
 cutaway sfx spot --scene S2                    AI sound spotting into the bucket
+cutaway sfx clean-up [--apply]                 AI proposes folders for loose SFX; --apply moves them
 cutaway sfx import ./sounds                    add files to the show library
 cutaway export fcpxml --scene S1               export a rough cut
 cutaway status                                 progress, match rate, flagged items

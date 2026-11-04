@@ -37,7 +37,13 @@ fn demo_session_analyzes_end_to_end() {
     assert_eq!(takes_of("I brought sandwiches for everyone.").len(), 1);
     let machine = takes_of("So the machine finally works.");
     assert_eq!(machine[1].pick, 2, "'that was the one I liked'");
-    assert_eq!(machine[1].feedback, "the pick");
+    assert_eq!(machine[1].feedback, "After the take: the pick.");
+    // the talk between the two takes is one gap: take 1's feedback, take 2's direction
+    assert_eq!(
+        machine[1].direction,
+        "After the take: liked it. For the next: quieter."
+    );
+    assert_eq!(machine[0].feedback, machine[1].direction);
     let room = doc
         .sources
         .values()
@@ -58,6 +64,26 @@ fn demo_session_analyzes_end_to_end() {
     assert!(items.iter().any(|i| i["kind"] == "spacer"));
     let first = items.iter().find(|i| i["kind"] == "line").unwrap();
     assert_eq!(first["takes"].as_array().unwrap().len(), 2);
+    // the room strip: both takes in recording order, the talk between them once
+    let strip: Vec<String> = first["room"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| format!("{}:{}", r["kind"], r["summary"].as_str().unwrap_or("")))
+        .collect();
+    let at = |k: &str| strip.iter().position(|x| x.starts_with(k));
+    assert_eq!(
+        strip
+            .iter()
+            .filter(|x| x.contains("For the next: quieter."))
+            .count(),
+        1,
+        "{strip:?}"
+    );
+    assert!(
+        at("\"take\"").unwrap() < at("\"talk\":After the take: liked it. For").unwrap(),
+        "{strip:?}"
+    );
     assert_eq!(first["takes"][0]["peaks"].as_array().unwrap().len(), 160);
 
     // edits through the generic command path, undo

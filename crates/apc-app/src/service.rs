@@ -115,6 +115,7 @@ impl Service {
                 svc.locked = true;
             }
             crate::studio::link_folders(&mut svc)?;
+            crate::studio::relink_sounds(&mut svc)?;
         }
         Ok(svc)
     }

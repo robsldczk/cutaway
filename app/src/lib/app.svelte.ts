@@ -53,6 +53,15 @@ function storedDev(): boolean {
   }
 }
 
+/** Follow playhead: on unless switched off, remembered per viewer. */
+function storedFollow(): boolean {
+  try {
+    return localStorage.getItem('cutaway.follow') !== '0';
+  } catch {
+    return true;
+  }
+}
+
 function storedTheme(): Theme {
   try {
     return localStorage.getItem('cutaway.theme') === 'light' ? 'light' : 'dark';
@@ -65,6 +74,8 @@ class AppState {
   /** Dark first; the choice is remembered per viewer. */
   theme = $state<Theme>(storedTheme());
   dev = $state(storedDev());
+  /** While playing, the current box moves with the playhead (and the view with it); off, it stays put. */
+  follow = $state(storedFollow());
   status = $state<Status | null>(null);
   view = $state<SceneView | null>(null);
   edit = $state<EditView | null>(null);
@@ -148,6 +159,15 @@ class AppState {
     document.documentElement.dataset.theme = t;
     try {
       localStorage.setItem('cutaway.theme', t);
+    } catch {
+      /* private mode: the choice lasts for this session */
+    }
+  }
+
+  setFollow(on: boolean) {
+    this.follow = on;
+    try {
+      localStorage.setItem('cutaway.follow', on ? '1' : '0');
     } catch {
       /* private mode: the choice lasts for this session */
     }
@@ -331,10 +351,17 @@ class AppState {
     await this.loadScene(this.sceneId);
   }
 
+  /** The last command still on its way (undo and redo wait for it). */
+  private inflight: Promise<unknown> = Promise.resolve();
+
   async cmd(c: Record<string, unknown>) {
-    const r = await this.run(() => call('command', c));
-    await this.refresh();
-    return r;
+    const done = (async () => {
+      const r = await this.run(() => call('command', c));
+      await this.refresh();
+      return r;
+    })();
+    this.inflight = done.catch(() => {});
+    return done;
   }
 
   async method<T = unknown>(name: string, params: object = {}, refresh = true): Promise<T | undefined> {
@@ -440,11 +467,14 @@ class AppState {
     await this.cmd({ cmd: 'nudge_gap', line_id: c.line_id, delta_s: d });
   }
 
+  // a drop holds its preview until its command lands, so ⌘Z right after it must wait
   async undo() {
+    await this.inflight;
     await this.method('undo');
   }
 
   async redo() {
+    await this.inflight;
     await this.method('redo');
   }
 
@@ -559,7 +589,7 @@ class AppState {
         const p = await call<{ position_s: number; playing: boolean; level?: number }>('playhead');
         this.pos = p.position_s;
         this.level = Math.max(p.level ?? 0, this.level * 0.85);
-        if (!this.audition && !this.sound) {
+        if (this.follow && !this.audition && !this.sound) {
           const it = this.lineAt(p.position_s);
           if (it && it.line_id !== this.curId) this.curId = it.line_id;
         }

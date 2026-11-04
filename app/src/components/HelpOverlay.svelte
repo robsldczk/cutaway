@@ -22,7 +22,8 @@
     ['In / out at the locator', ['I', 'O']],
     ['Undo / redo', ['⌘Z', '⌘⇧Z']],
     ['Save version', ['⌘S']],
-    ['Zoom / move scene bar', ['⌘ scroll', '⇧ scroll']],
+    ['Fly through the lines (Options, Arrange)', ['⇧ scroll']],
+    ['Zoom / move scene bar (over the bar)', ['⌘ scroll', '⇧ scroll']],
   ];
   const edit: [string, string[]][] = [
     ['Show / hide the scene bucket', ['B']],
@@ -38,7 +39,7 @@
     ['Mute clip (stays in place)', ['⌃M']],
     ['Ripple delete (Ripple on) / mute (off); sounds: remove', ['⌫']],
     ['Cycle to the selection', ['⌘U']],
-    ['Zoom in / out', ['⌘←', '⌘→', '⌘ scroll']],
+    ['Zoom in / out', ['⌘←', '⌘→', '⌥ scroll']],
     ['Zoom to selection and back', ['Z']],
     ['Lane height', ['⌘↑', '⌘↓']],
     ['Mute / solo the selected lane', ['M', 'S']],

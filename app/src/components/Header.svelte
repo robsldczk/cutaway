@@ -59,7 +59,11 @@
   <div class="right">
     {#if app.page === 'import'}
       <button class="pillbtn" onclick={() => app.toggleFullBucket()} disabled={!ready}>{#if app.importTab === 'sounds'}<Icon name="back" size={13} />Back to Edit{:else}Edit{/if} <span class="kb">⇧B</span></button>
-    {:else if app.page !== 'edit' && app.page !== 'dev'}
+    {/if}
+    {#if app.page === 'options' || app.page === 'arrange' || app.page === 'edit'}
+      <button class="pillbtn follow" class:on={app.follow} aria-pressed={app.follow} onclick={() => app.setFollow(!app.follow)} title={app.follow ? 'The current box moves with the playhead. Click to keep it where you put it.' : 'The current box stays where you put it. Click to move it with the playhead.'} data-testid="follow">Follow</button>
+    {/if}
+    {#if app.page !== 'import' && app.page !== 'edit' && app.page !== 'dev'}
       <label class="size">Size<input type="range" min="0.8" max="1.3" step="0.05" bind:value={app.scale} aria-label="Box size" /></label>
     {/if}
     <button class="icb round" onclick={() => (app.overlay = 'settings')} aria-label="Settings" title="Settings">
@@ -239,6 +243,20 @@
   }
   .pillbtn:disabled {
     opacity: 0.4;
+  }
+  .follow::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1.5px currentColor;
+  }
+  .follow.on::before {
+    background: var(--playhead);
+    box-shadow: 0 0 6px var(--playhead-glow);
+  }
+  .follow:not(.on) {
+    color: var(--text-3);
   }
   .pillbtn {
     display: inline-flex;

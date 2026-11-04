@@ -124,8 +124,8 @@ impl PlaySchedule {
         };
         let mut clips = Vec::new();
         for item in &layout.items {
-            // muted parts keep their time but are not heard
-            for p in item.pieces.iter().filter(|p| !p.muted) {
+            // muted parts keep their time but are not heard; handles are
+            for p in item.audio.iter().filter(|p| !p.muted) {
                 clips.push(ScheduledClip {
                     source_id: p.source_id.clone(),
                     src_in: p.src_in,
@@ -142,7 +142,11 @@ impl PlaySchedule {
                 });
             }
         }
-        let mut duration = layout.duration_s;
+        // a tail can ring past the last line
+        let mut duration = clips
+            .iter()
+            .map(|c| c.start_s + (c.src_out - c.src_in))
+            .fold(layout.duration_s, f64::max);
         if settings.include_sound {
             for p in doc
                 .placements
@@ -311,10 +315,30 @@ mod tests {
         (d, s)
     }
 
+    /// Pacing without lead-in and tail: clips play exactly where the layout puts them.
+    fn flat() -> Pacing {
+        Pacing {
+            handle_in_s: 0.0,
+            handle_out_s: 0.0,
+            ..Pacing::default()
+        }
+    }
+
+    #[test]
+    fn handles_widen_what_is_heard() {
+        let (doc, scene) = sample_doc();
+        let s = PlaySchedule::from_scene(&doc, &scene, &Pacing::default(), &MixSettings::default());
+        let f = PlaySchedule::from_scene(&doc, &scene, &flat(), &MixSettings::default());
+        // b starts 100 ms earlier, 100 ms earlier in its source, and rings 150 ms longer
+        assert!((f.clips[1].start_s - s.clips[1].start_s - 0.1).abs() < 1e-9);
+        assert!((f.clips[1].src_in - s.clips[1].src_in - 0.1).abs() < 1e-9);
+        assert!((s.duration_s - f.duration_s - 0.15).abs() < 1e-9);
+    }
+
     #[test]
     fn gaps_ripple_and_leveling_offsets() {
         let (mut doc, scene) = sample_doc();
-        let p = Pacing::default();
+        let p = flat();
         let leveled = MixSettings {
             level: true,
             ..MixSettings::default()
@@ -349,7 +373,7 @@ mod tests {
     #[test]
     fn muted_clips_keep_their_time_but_are_not_scheduled() {
         let (mut doc, scene) = sample_doc();
-        let p = Pacing::default();
+        let p = flat();
         doc.boxes.get_mut("a").unwrap().muted = true;
         let s = PlaySchedule::from_scene(&doc, &scene, &p, &MixSettings::default());
         assert_eq!(s.clips.len(), 1);

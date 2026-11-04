@@ -216,10 +216,16 @@ fn check_tarmac(fx: &std::path::Path, asr: &dyn AsrProvider) {
     assert_eq!(doc.takes[&sel].take_no, 4);
     assert!(doc.takes[&sel].favorite, "director pick seeds the favorite");
 
-    // notes are short and linked
+    // notes are sentences, and the talk after a take leads into the next one
     let t4 = &doc.takes[&sel];
     assert!(!t4.feedback.is_empty());
-    assert!(t4.feedback.split_whitespace().count() <= 6);
+    assert!(t4.feedback.ends_with('.'), "{}", t4.feedback);
+    assert!(
+        doc.takes
+            .values()
+            .any(|t| t.id != t4.id && t.direction == t4.feedback),
+        "the gap after take 4 is no take's direction"
+    );
     assert!(!doc.unmatched.is_empty());
     // AI calls were logged
     let log = std::fs::read_to_string(paths.logs.join("ai-calls.jsonl")).unwrap();

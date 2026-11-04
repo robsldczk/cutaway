@@ -347,7 +347,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - **Deleting** a folder bucket that holds files is refused, with a message pointing to the folder. An empty one goes, along with its empty folder.
   - **Renames:** renaming a bucket never moves its folder (other episodes point at its files). A file moved in the Finder is found again by hash.
   - **Vocals** stay in the episode's own `Library/Vocals/` (they are cut from the episode's recordings, so not markers as first thought). Export and playback resolve both kinds through `EpisodePaths::asset_path`.
-- **Options not taken:** a library database in the show (a sync hazard, D66); storing folder membership in the document (stale as soon as the pipeline changes); moving files between folders (the pipeline is shared, so Cutaway only adds copies).
+- **Options not taken:** a library database in the show (a sync hazard, D66); storing folder membership in the document (stale as soon as the pipeline changes); moving files between folders (the pipeline is shared, so Cutaway only adds copies). *Moving is now allowed as a confirmed clean up, and spotting matches folders by bucket name only: see D74.*
 
 ### D66 Sync safety in a Syncthing share (2026-11-02)
 - **Context:** the episode file is SQLite in WAL mode. Syncthing copies files independently and can carry a `.cutaway` without its `-wal`. Two machines editing the same episode produce a conflict copy that can't be merged.
@@ -389,3 +389,79 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - Nothing is stored or exported: only the gains handed to the engine change. `MixSettings::default()` keeps leveling off, which is what bounces use, and FCPXML never sees it.
 - **Trade-off:** with leveling on, dialogue sits at the target while placed sounds don't move, so the dialogue-to-sound balance heard in the app can differ from an export of the same mix (by the source offset, up to ±12 dB). Turn leveling off to hear the export as it will be.
 - **Options not taken:** per-take matching on the timeline (flattens the performance); measuring whole source files (session WAVs carry bleed, director talk and long silences); a master-bus AGC (keeps the roles unbalanced and pumps); storing the toggle in local UI state (the shared command path keeps UI, CLI and MCP alike, as with room tone).
+
+### D70 Follow playhead, on by default (Rob, 2026-11-03)
+- **Rob:** while playing, the box highlight should move with the playhead, or stay where it is so playback can start from there again; a global switch at the top, on by default, also in settings.
+- **Found:** Options and Arrange always moved the current box with the playhead (the playhead poll set `curId`), with no way to switch it off; the Edit page always paged along.
+- **Choice:**
+  - `app.follow`, a per-viewer preference in local storage (`cutaway.follow`, like the theme), default on. A **Follow** pill in the header on Options, Arrange and Edit, and the same switch in Settings.
+  - On: unchanged behaviour. Off: the poll no longer moves `curId`, the Edit page doesn't page along, and Space plays from the current box again (the playhead has left it).
+  - The Edit page's clip selection never follows the playhead (Rob): only its scene-strip highlight and paging do.
+- **Options not taken:** a project config value through the command bus (it's how this viewer watches, not part of the cut, and should carry across episodes).
+
+### D71 Lead-in, tail and edge fade, heard and exported (Rob, 2026-11-03)
+- **Rob:** lines start and stop too hard and sometimes click; wants adjustable handles (a run-up of some milliseconds before a line starts and after it ends) as a global setting, applied to exports too.
+- **Found:** a line's clip started and ended exactly on its edges (the detected take edges plus trims) with a fixed 5 ms fade, not configurable.
+- **Choice:**
+  - Three project config values under `[pacing]`: `handle_in_ms = 100`, `handle_out_ms = 150`, `edge_fade_ms = 20`. Sliders in Settings; `set_config` from the CLI and MCP.
+  - The layout doesn't change. `layout_scene` fills a new `LayoutItem::audio`: a copy of `pieces` whose first piece starts earlier in the source (and on the timeline) and whose last ends later. Pauses, word times, the box length and every editing command keep working on `pieces`; playback, bounce and FCPXML use `audio`. A handle overlaps the pause (and the neighbour's handle), so the rhythm of the cut stays as it was.
+  - A handle stops 40 ms short of any other word on the same recording (from any take), so a word trimmed off stays off, a word a trim cuts through isn't re-opened, and the next take's speech doesn't leak in. It also stops at the file's edges and at the scene start.
+  - The edge fade sits at the outer edge of the handle.
+- **Trade-off:** the Edit page draws clips at their edit edges, not with the handles; the handles are heard but not drawn.
+- **Trade-off:** the first line of a scene starts at scene time 0, so it gets no lead-in (only its edge fade). Moving every scene's start later would shift every time in the cut.
+- **Options not taken:** lengthening the clips themselves (would push every pause out by lead-in + tail); a longer fade alone (fades into the first consonant instead of running up to it); per-line handles (Rob asked for one global value; trims still adjust single lines).
+
+### D72 The editor reads the script, timed by what was heard (Rob, 2026-11-03)
+- **Rob:** transcription errors show in the boxes; the editor should see the script's real words, and the word highlight should carry on through a mismatch. Change nothing in the analysis.
+- **Choice:**
+  - Display only, in the UI (`app/src/lib/words.ts`). The take words, the matching and the stored data are untouched.
+  - Each script word takes the time of the heard words matched to it. A run of script words nothing was matched to is spread (by length) over the unmatched heard words between its neighbours; if nothing was heard there, it is squeezed in between them (at least 60 ms a word, taken from the neighbours' halves). If the editor deleted what was heard there, the script words show as deleted.
+  - Which script words a recording covers: the matched span, widened by the unmatched words heard before and after it (a misheard first or last word). A partial take doesn't show the words it never reached.
+  - Heard words nothing in the script stands for (a repeat, an ad-lib) ride on the word before them: the highlight covers them and a delete reaches them.
+  - Every shown word keeps the heard word indexes it stands for, so the box editor's word delete and restore still act on the heard words.
+  - Used on Options (text and karaoke), Arrange, the Edit page (strip, clip labels, snap labels) and the box editor (comp words and take lanes). The Inspector and the Dev page keep showing what was heard; exports (SRT) are unchanged.
+- **Trade-off:** an ad-lib that isn't in the script doesn't show as text.
+
+### D73 Room talk between takes, read whole (Rob, 2026-11-03)
+- **Rob:** the director notes were cluttered keywords. Everything said in the room before a take, chatter included, should go to Claude as one text and come back as one or two full sentences saying what the people meant. Direction and feedback are fluid: the talk between two takes belongs to both.
+- **Found:**
+  - Each take got the room speech in a 30 s window before it (direction) and an 8 s window after it (feedback).
+  - `note_condense` v1 asked Claude for "a few words" per side.
+  - The fallback, and the mock, turned the text into keywords.
+  - Talk that was classed as chatter, or fell outside the windows, was lost.
+- **Choice:**
+  - **Gaps.** After the takes are final (dropped takes removed), each session's room talk is cut at its takes, in session time across every mic. A gap holds the non-cue-reading speech in the first 8 s after the previous take plus the last **60 s** before the next one (Rob: a minute limit), chatter included. There is also a gap before a session's first take and one after its last.
+  - **`note_condense` v2** gets whole gaps (text plus the character and line of the take on each side), batched 40 per call, and returns one `summary` of one or two full sentences plus tags. Validation refuses a summary over 80 words, so a copied transcript is caught.
+  - **Shared storage.** A gap's summary is written to `direction` of the take after it and to `feedback` of the take before it, with the gap text in `direction_raw` / `feedback_raw`. The data model and file format stay unchanged, and the cut list and FCPXML keep their columns.
+  - **Fallback** (no AI answer): keyword hits only, as "After the take: …. For the next: …." or a short quote, with the take flagged "notes condensed by rules".
+  - **UI.** The Options page's Direction and Feedback boxes became one room strip per line. It holds the line's takes and one take either side, in recording order, with the talk between them. The current take sits on the centre line, the talk on both sides is bright, further steps fade, and changing takes slides the strip (Rob). Other lines' takes show as "CHARACTER · first words". The raw transcript appears only with the developer switch on (Rob), in the strip and in the Inspector. The take list subtitle shows the first sentence of the take's direction.
+  - Pick detection still reads the 8 s after each take, and room classification is unchanged.
+- **Options not taken:**
+  - Keeping a separate direction and feedback summary per take. This splits a single conversation, and Rob asked for it read whole.
+  - Sending the whole gap with no limit. A lunch break between takes would swamp the note.
+  - A new gap entity in the document. The take fields already hold both sides, and a new collection would need format and command changes for no visible gain.
+
+### D74 Show sounds reach the buckets by file name; a manual clean up files them (Rob, 2026-11-04)
+- **Rob:** the SFX in the show were meant to be read into the buckets, and mostly weren't. Match by file name for now. An AI pass, triggered by hand, "cleans up" and also moves SFX into their folders.
+- **Found on Episode 2 (104 SFX, 167 cues):**
+  - All files were scanned, but only first-level folders became buckets, so the 36 files straight in `sfx/` were in none.
+  - Since `9b18780`, a spotted bucket matches a folder by its name only, so 13 of the 18 spotted buckets pointed at folders that don't exist. They held 119 of the cues, and no sound.
+  - Folder buckets have no scenes, so the docked bucket hid them: 26 SFX were reachable there.
+- **Choice:**
+  - **File-name matching (`apc-sound::matching`).** One query per cue (its tags, in order) or, for a hand-made or folder bucket without cues, per keyword. Tags score on the file's words and its folder: first tag 3, others 2, +2 for a tag of several words, +1 when it hits the name's first part or the folder. Weak words (materials, wide categories) score 1, noise words nothing. 3 is a match, at most 5 sounds per query. Tuned on Episode 2 with a prototype of the scoring: 88 of 154 non-music cues found a sound, and the threshold drops most false hits ("metal" alone no longer gives a telescope every metal impact).
+  - **Never stored.** Matches are worked out with each `buckets` call, like folder membership in D65, so a new file shows on rescan and nothing goes stale. No format change and nothing to undo. It takes about 0.2 s of CPU on Episode 2.
+  - **Filters.** A bucket's length and leave-out filters apply. An ambience cue only takes sounds of 10 s or more. Music buckets, vocal buckets and music files stay out.
+  - **A match is a reference.** Nothing is copied, so a match doesn't create a spotted bucket's missing folder or duplicate audio over Syncthing. Removing a match hides it in this episode, like a folder sound.
+  - **Scenes.** With a scene, a bucket shows what that scene's cues ask for.
+  - **Whole show.** Buckets of no scene are offered in every scene's docked bucket, under "Whole show", closed. Empty ones are left out.
+  - **Loose SFX.** One bucket on `sfx/` itself holds the loose sounds no bucket matched. It disappears when none are left.
+  - **Clean up (`sound_sort`, `plan_cleanup`, `apply_cleanup`).** One AI call on names only. It covers loose files in `sfx/` only: folders Rob already filed stay as they are, and music is left alone. The AI may pick a folder on disk, a spotted bucket's folder, or a new one, and answers null when unsure.
+  - **Moves are confirmed.** They change the shared pipeline for every machine and episode, so the AI only proposes. The sheet lists the moves, each can be unticked, and nothing moves until *Move N files*. `cutaway sfx clean-up` only prints the plan; `--apply` moves it.
+  - **Move safety.** A move is a rename inside `sfx/`, one level deep, and never overwrites. A file that can't move is reported and the others go on. Each run writes `Sound/Cutaway/moves/<stamp>.json` (one file per run, so machines can't conflict) as the way back. There is no undo button.
+  - **Moved files stay linked.** Hash ids and `library.json` are unaffected. Playback and export read an asset's stored path, which D65's "found again by hash" didn't cover, so `relink_sounds` repoints `show:` assets by hash on open, on rescan and after a clean up. Other episodes catch up when they next open.
+- **Options not taken:**
+  - Storing matches on the bucket: stale as soon as the pipeline changes (D65), and would need a format change.
+  - Using `bucket_keep` for matches: it copies files into the bucket's folder.
+  - Linking spotted buckets to folders by keyword again: `9b18780` removed that because one keyword pulled a whole folder into the wrong bucket. Per-sound matching gets the sounds without that.
+  - Moving without review, or sorting files already in folders: too much change to a shared folder for one AI pass.
+- **Known:** spotted cues are grouped by substring in `category_of`, so "ring" catches *spring* and *whimpering*, and "hum" catches *thump*. Phones holds UFO, Time Spring and turkey cues, and now their sounds too. Not fixed here; changing it needs a re-spot.

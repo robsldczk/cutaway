@@ -15,6 +15,7 @@ pub enum AiTask {
     SoundTag,
     NameMatch,
     TakeRescue,
+    SoundSort,
 }
 
 impl AiTask {
@@ -28,6 +29,7 @@ impl AiTask {
             AiTask::SoundTag => "sound_tag",
             AiTask::NameMatch => "name_match",
             AiTask::TakeRescue => "take_rescue",
+            AiTask::SoundSort => "sound_sort",
         }
     }
 }
@@ -177,30 +179,39 @@ impl AiTaskIo for RoomClassifyInput {
 }
 
 // ---- note_condense ----
+/// A take on one side of a stretch of room talk.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct TakeNotes {
+pub struct GapTake {
     pub take_id: String,
+    pub character: String,
     pub line_text: String,
-    pub direction_text: String,
-    pub feedback_text: String,
+}
+
+/// Everything the room said between two takes of a session (or before the first, or
+/// after the last), chatter included.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct RoomGap {
+    pub gap_id: String,
+    /// The take the talk follows.
+    pub previous: Option<GapTake>,
+    /// The take the talk leads into.
+    pub next: Option<GapTake>,
+    pub text: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct NoteCondenseInput {
-    pub takes: Vec<TakeNotes>,
+    pub gaps: Vec<RoomGap>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct CondensedNote {
-    pub take_id: String,
-    /// A few words: what was asked before the take ("quieter, to yourself").
-    /// Models leave out empty notes now and then, so missing means none.
+pub struct GapNote {
+    pub gap_id: String,
+    /// One or two full sentences on what the room meant. Models leave out empty notes
+    /// now and then, so missing means none.
     #[serde(default)]
-    pub direction: String,
-    /// A few words: the reaction after it ("liked it").
-    #[serde(default)]
-    pub feedback: String,
+    pub summary: String,
     #[serde(default)]
     pub tags: Vec<String>,
 }
@@ -208,21 +219,18 @@ pub struct CondensedNote {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NoteCondenseOutput {
-    pub notes: Vec<CondensedNote>,
+    pub notes: Vec<GapNote>,
 }
 
 impl Validate for NoteCondenseOutput {
     fn validate(&self) -> Result<(), String> {
-        // short notes are asked for; longer ones are fine (Rob), only a copied
-        // transcript is refused
+        // one or two sentences are asked for; only a copied transcript is refused
         for n in &self.notes {
-            for (k, v) in [("direction", &n.direction), ("feedback", &n.feedback)] {
-                if v.split_whitespace().count() > 40 {
-                    return Err(format!(
-                        "{k} of {} reads like a transcript, not a note",
-                        n.take_id
-                    ));
-                }
+            if n.summary.split_whitespace().count() > 80 {
+                return Err(format!(
+                    "the note of {} reads like a transcript, not a summary",
+                    n.gap_id
+                ));
             }
         }
         Ok(())
@@ -444,6 +452,62 @@ impl Validate for NameMatchOutput {
 impl AiTaskIo for NameMatchInput {
     const TASK: AiTask = AiTask::NameMatch;
     type Output = NameMatchOutput;
+}
+
+// ---- sound_sort ----
+/// A loose sound effect of the show's library.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct SortSound {
+    /// Its path under `Sound/`: the id to answer with.
+    pub file: String,
+    pub name: String,
+    pub duration_s: f64,
+}
+
+/// A folder a sound can go to: one on disk, or the folder a spotted bucket would make.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct SortFolder {
+    pub folder: String,
+    pub exists: bool,
+    /// Names of sounds already in it.
+    pub examples: Vec<String>,
+    /// What the episode's cues in this folder's bucket ask for.
+    pub cues: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct SoundSortInput {
+    pub sounds: Vec<SortSound>,
+    pub folders: Vec<SortFolder>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SortMove {
+    pub file: String,
+    /// A listed folder, a new folder's name, or null to leave the sound where it is.
+    pub folder: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SoundSortOutput {
+    pub moves: Vec<SortMove>,
+}
+
+impl Validate for SoundSortOutput {
+    fn validate(&self) -> Result<(), String> {
+        match self.moves.iter().find(|m| m.file.trim().is_empty()) {
+            Some(_) => Err("a move has no file".into()),
+            None => Ok(()),
+        }
+    }
+}
+
+impl AiTaskIo for SoundSortInput {
+    const TASK: AiTask = AiTask::SoundSort;
+    type Output = SoundSortOutput;
 }
 
 // ---- take_rescue ----

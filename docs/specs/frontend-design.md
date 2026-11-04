@@ -67,6 +67,8 @@ Rules:
 | 4 | Action lines (spacers) | Small glass pills between boxes, one line, low contrast |
 | 5 | Timecode, match score, file, full room transcript | Hidden; shown in the inspector on demand |
 
+*Changed in implementation (D72):* boxes, strips, word lanes and the playing-word highlight show the **script's** words, not the recognizer's. Matched words keep their timing; words it missed or misheard are spread over the time they were spoken in, so the highlight runs on cleanly. Repeats and ad-libs ride on the word before them. The Inspector and the Dev page still show what was heard.
+
 ## Screen layout (all pages)
 
 | Area | Content |
@@ -86,7 +88,7 @@ Pick the take per line while the rest of the scene stays in place.
 - Other lines are smaller glass boxes (24 px radius, 18 px dialogue) colored by their take's shade, fading with distance from the current line (−12 % opacity per step, minimum 35 %). Their header shows the name and `★ 2/3` (favorite, take position). Click selects; double-click opens the box editor.
 - The edges of a box with several takes show one or two stacked slivers.
 - The column fades out at the top and bottom (mask).
-- Scrolling the wheel steps line by line.
+- Scrolling the wheel steps line by line. Shift + wheel flies through the lines (one per 30 px of scroll, no rate limit).
 
 **The current box**
 - A deck: up to three cards of the next takes sit behind the box, offset 16 px to the right each and slightly shorter, showing their take number.
@@ -96,6 +98,7 @@ Pick the take per line while the rest of the scene stays in place.
 - Flipping takes slides the box in from the side.
 - **Take pills** below the box: one pill per take (`1`, `2 ★`, …), the selected one filled with its shade, the others glass with a shade underline. Partial takes get a dashed outline.
 - **Notes aside** (right of the box, 220 px): Direction and Feedback, each a small upper-case label and a 14 px note; below them a muted meta line (`3.4 s · match 94% · partial`). Hidden below 1100 px (then shown under the box).
+  - *Changed in implementation (D73):* Direction and Feedback became one **room strip** ("In the room"). It lists the line's takes and one take either side in recording order, with the room talk between them as sentences. The current take sits on the centre line, the talk on both sides of it is at full strength, and further steps fade. Changing takes slides the strip. The raw transcript shows only with the developer switch on.
 - **Time chip** (left of the box): the scene time of the playhead.
 
 **Gaps and action lines**
@@ -157,6 +160,7 @@ A floating glass bar at the bottom centre (`min(820px, 94%)`, 30 px radius):
 
 **Playback states:**
 - **Playing:** the current box glows in its take's color, the current word lights up, and the column auto-scrolls to keep it centred.
+  - *Changed in implementation (D70):* **Follow** (header pill and Settings, on by default, remembered per viewer). On, the current box moves with the playhead on Options and Arrange, and the Edit page pages along and highlights the line in its scene strip; stopping leaves the box where playback stopped, so Space carries on. Off, the box stays where you put it and Space plays from it again. Follow never changes the Edit page's clip selection.
 - **Stopped:** the playhead stays where it stopped.
 
 **Modes:**
@@ -286,7 +290,7 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 
 | Key | Action |
 |---|---|
-| Up / Down, scroll | Previous / next line |
+| Up / Down, scroll | Previous / next line (⇧ scroll: fast) |
 | Shift+Up / Shift+Down | Extend the passage selection |
 | Left / Right | Previous / next take |
 | Space | Play / stop |
@@ -307,6 +311,7 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 | ⌘Z / ⌘⇧Z | Undo / redo |
 | ⌘S | Save version |
 | Option+Left/Right | Nudge selected clip 10 ms (Edit page; Shift+Option 100 ms) |
+| ⌥ scroll (or ⌘ scroll) | Zoom the timeline around the mouse (Edit page) |
 | ? | Keyboard help |
 | ⌘ scroll / ⇧ scroll | Zoom / move the scene map |
 

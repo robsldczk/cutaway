@@ -6,6 +6,7 @@
   import { base, charColor, charLabel, itemShade, mix, rgba, shade, solid } from '../lib/colors';
   import { openEditor } from '../lib/keys';
   import type { ItemView } from '../lib/types';
+  import { lineText, lineWords, type ShownWord } from '../lib/words';
 
   const sc = $derived(app.scale);
   let activeEl: HTMLDivElement | undefined = $state();
@@ -64,8 +65,7 @@
   }
 
   function textOf(it: ItemView): string {
-    if (it.takes.length === 0 || it.words.length === 0 || it.dropped) return it.text;
-    return it.words.filter((w) => !w.deleted).map((w) => w.text).join(' ');
+    return it.takes.length === 0 ? it.text : lineText(it);
   }
 
   const cur = $derived(app.cur);
@@ -76,11 +76,14 @@
   const live = $derived(!!cur && (app.playing || (app.pos > cur.start_s + 0.01 && app.pos < cur.end_s)));
   const R = $derived(Math.round(32 * sc));
 
-  function wordStyle(w: { start_s: number; end_s: number; deleted: boolean; muted: boolean }) {
+  // the script's words, timed by what was heard
+  const curWords = $derived(cur ? lineWords(cur) : []);
+
+  function wordStyle(w: ShownWord) {
     if (w.deleted) return 'color: var(--text-dim); text-decoration: line-through';
     if (w.muted) return 'color: var(--text-dim)';
-    if (!live || w.end_s < app.pos) return 'color: var(--text-strong)';
-    if (w.start_s <= app.pos) return `transform: scale(1.22); color: var(--text-strong); text-shadow: 0 0 22px ${rgba(sh, 0.95)}`;
+    if (!live || w.end < app.pos) return 'color: var(--text-strong)';
+    if (w.start <= app.pos) return `transform: scale(1.22); color: var(--text-strong); text-shadow: 0 0 22px ${rgba(sh, 0.95)}`;
     return 'color: rgb(var(--ink-rgb) / 0.42)';
   }
 
@@ -111,6 +114,37 @@
   }
 
   const inPassage = (id: string) => app.passage.some((p) => p.line_id === id);
+
+  // the room strip: the current take on the centre line, the talk around it bright,
+  // further takes fading; changing takes slides the strip
+  let railEl: HTMLDivElement | undefined = $state();
+  let stripH = $state(0);
+  let railOff = $state(0);
+  let stripReady = $state(false);
+  let stripLine = '';
+  const strip = $derived(cur ? cur.room.filter((r) => r.kind !== 'talk' || r.summary || app.dev) : []);
+  const here = $derived(strip.findIndex((r) => r.kind === 'take' && r.key === take?.id));
+
+  $effect(() => {
+    void here;
+    void strip;
+    void sc;
+    if (cur?.line_id !== stripLine) {
+      stripLine = cur?.line_id ?? '';
+      stripReady = false;
+    }
+    void tick().then(() => {
+      const el = railEl?.querySelector<HTMLElement>(`[data-room-take="${CSS.escape(take?.id ?? '')}"]`);
+      if (!el) return;
+      railOff = el.offsetTop + el.offsetHeight / 2;
+      requestAnimationFrame(() => (stripReady = true));
+    });
+  });
+
+  function fade(i: number): string {
+    const d = here < 0 ? 1 : Math.abs(i - here);
+    return (d <= 1 ? 1 : Math.max(0.22, 1 - (d - 1) * 0.26)).toFixed(2);
+  }
 </script>
 
 <div class="optmask">
@@ -141,10 +175,10 @@
               </div>
               {#if cur.paren}<p class="script paren" style="font-size: {Math.round(14 * sc)}px">({cur.paren})</p>{/if}
               <p class="script line" style="font-size: {Math.round(24 * sc)}px" data-testid="current-text">
-                {#if cur.words.length}
+                {#if curWords.length}
                   <!-- the space between words keeps line wrapping (Svelte trims plain whitespace here) -->
                   <!-- eslint-disable-next-line svelte/no-useless-mustaches -->
-                  {#each cur.words as w (w.idx)}<span class="wd" style={wordStyle(w)}>{w.text}</span>{" "}{/each}
+                  {#each curWords as w (w.j)}<span class="wd" style={wordStyle(w)}>{w.text}</span>{" "}{/each}
                 {:else}
                   <span style="color: var(--text-4)">{cur.text}</span>
                 {/if}
@@ -158,9 +192,32 @@
               {/each}
             </div>
           {/if}
-          <aside class="side notes" aria-label="Notes for this take">
-            <div><div class="nm lab">Direction</div><p>{take?.direction || '—'}</p></div>
-            <div><div class="nm lab">Feedback</div><p>{take?.feedback || '—'}</p></div>
+          <aside class="side notes" aria-label="Room talk around this take">
+            <div class="nm lab">In the room</div>
+            {#if strip.some((r) => r.kind === 'talk')}
+              <div class="strip" style="height: {Math.round(320 * sc)}px" bind:clientHeight={stripH}>
+                <div class="rail" bind:this={railEl} style="transform: translateY({(stripH / 2 - railOff).toFixed(1)}px); transition: {stripReady ? 'transform var(--dur-scroll) var(--ease-scroll)' : 'none'}">
+                  {#each strip as r, ri (r.key)}
+                    {#if r.kind === 'take'}
+                      {#if r.own}
+                        <button class="rtake own" class:here={r.key === take?.id} data-room-take={r.key} onclick={() => app.pickTake(cur.line_id, r.key)} style="opacity: {fade(ri)}; {r.key === take?.id ? `color: ${color.name}; box-shadow: inset 0 0 0 1px ${rgba(sh, 0.7)}` : ''}">{r.label}</button>
+                      {:else}
+                        <div class="rtake ellip" data-room-take={r.key} title={r.label} style="opacity: {fade(ri)}">{r.label}</div>
+                      {/if}
+                    {:else if r.kind === 'talk'}
+                      <div class="talk" data-testid="room-talk" style="opacity: {fade(ri)}">
+                        <p class:none={!r.summary}>{r.summary || 'Nothing for the edit.'}</p>
+                        {#if app.dev && r.raw}<details class="raw"><summary>raw</summary><p>{r.raw}</p></details>{/if}
+                      </div>
+                    {:else}
+                      <div class="rbreak" style="opacity: {fade(ri)}" aria-hidden="true">⋯</div>
+                    {/if}
+                  {/each}
+                </div>
+              </div>
+            {:else}
+              <p class="none">—</p>
+            {/if}
             {#if take}<div class="meta">{(cur.end_s - cur.start_s).toFixed(1)} s · match {Math.round(take.score)}%{take.partial ? ` · ${take.take_type}` : ''}{take.needs_rematch ? ' · script changed' : ''}</div>{/if}
           </aside>
           <div class="side chip">{fmt(app.pos)}</div>
@@ -362,10 +419,64 @@
     z-index: 6;
   }
   .notes p {
-    margin: 4px 0 0;
-    font-size: 14px;
-    line-height: 1.4;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
     color: rgb(var(--ink-rgb) / 0.88);
+  }
+  .notes p.none {
+    color: var(--text-4);
+  }
+  .strip {
+    position: relative;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22%, #000 78%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 22%, #000 78%, transparent 100%);
+  }
+  .rail {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .talk {
+    transition: opacity 0.3s;
+  }
+  .rtake {
+    align-self: flex-start;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 2px 9px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    color: var(--text-4);
+    box-shadow: inset 0 0 0 1px var(--text-5);
+    transition: opacity 0.3s;
+  }
+  .rtake.own {
+    font-weight: 600;
+    color: var(--text-3);
+  }
+  .rtake.here {
+    font-weight: 700;
+  }
+  .rbreak {
+    font-size: 12px;
+    color: var(--text-5);
+    padding-left: 10px;
+  }
+  .raw summary {
+    font-size: 10px;
+    color: var(--text-4);
+    cursor: pointer;
+  }
+  .raw p {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-3);
   }
   .lab {
     font-size: 10px;

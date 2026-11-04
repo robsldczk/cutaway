@@ -84,6 +84,12 @@ pub struct PacingConfig {
     /// Default pause between lines; negative overlaps them (−1 s … 5 s).
     pub breath_gap_s: f64,
     pub splice_fade_ms: f64,
+    /// Fade at the start and end of every line (ms).
+    pub edge_fade_ms: f64,
+    /// Lead-in and tail: how much audio plays before a line's first sound and after its
+    /// last (ms). Heard and exported; the timing of the cut doesn't change.
+    pub handle_in_ms: f64,
+    pub handle_out_ms: f64,
     pub room_tone: bool,
 }
 
@@ -92,6 +98,9 @@ impl Default for PacingConfig {
         PacingConfig {
             breath_gap_s: 0.3,
             splice_fade_ms: 10.0,
+            edge_fade_ms: 20.0,
+            handle_in_ms: 100.0,
+            handle_out_ms: 150.0,
             room_tone: true,
         }
     }
@@ -208,7 +217,9 @@ impl ProjectConfig {
         Pacing {
             breath_gap_s: self.pacing.breath_gap_s.clamp(-1.0, 5.0),
             splice_fade_s: self.pacing.splice_fade_ms / 1000.0,
-            ..Pacing::default()
+            edge_fade_s: self.pacing.edge_fade_ms.clamp(1.0, 500.0) / 1000.0,
+            handle_in_s: self.pacing.handle_in_ms.clamp(0.0, 1000.0) / 1000.0,
+            handle_out_s: self.pacing.handle_out_ms.clamp(0.0, 1000.0) / 1000.0,
         }
     }
 

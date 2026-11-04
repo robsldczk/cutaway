@@ -22,8 +22,12 @@
       <dt>Favorite</dt><dd>{t.favorite ? (t.favorite_origin === 'director' ? 'director pick' : 'yours') : '—'}{t.pick === 1 ? ' · director liked it' : ''}</dd>
       <dt>Tags</dt><dd>{t.tags.join(', ') || '—'}</dd>
       <dt>Heard</dt><dd class="script">{t.heard}</dd>
-      <dt>Room before (direction)</dt><dd>{t.direction_raw || '—'}</dd>
-      <dt>Room after (feedback)</dt><dd>{t.feedback_raw || '—'}</dd>
+      <dt>Room before</dt><dd>{t.direction || '—'}</dd>
+      <dt>Room after</dt><dd>{t.feedback || '—'}</dd>
+      {#if app.dev}
+        <dt>Room before (raw)</dt><dd>{t.direction_raw || '—'}</dd>
+        <dt>Room after (raw)</dt><dd>{t.feedback_raw || '—'}</dd>
+      {/if}
       {#if t.ai_flag}<dt>Flag</dt><dd class="warn">{t.ai_flag}</dd>{/if}
       {#if t.needs_rematch}<dt>Script</dt><dd class="warn">the line changed in a new script version; re-run the analysis</dd>{/if}
     </dl>

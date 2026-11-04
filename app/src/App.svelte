@@ -33,8 +33,20 @@
     if (t.closest('[role="slider"]') || t.closest('aside') || t.tagName === 'INPUT') return;
     e.preventDefault();
     const now = performance.now();
-    if ((wAcc > 0) !== (e.deltaY > 0)) wAcc = 0;
-    wAcc += e.deltaY;
+    // macOS turns a Shift wheel into a horizontal one
+    let d = e.shiftKey && Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (e.deltaMode === 1) d *= 40;
+    if ((wAcc > 0) !== (d > 0)) wAcc = 0;
+    wAcc += d;
+    if (e.shiftKey) {
+      // fast: a line per 30 px with no rate limit; the column's slide glides through them
+      const n = Math.trunc(wAcc / 30);
+      if (n) {
+        app.go(n);
+        wAcc -= n * 30;
+      }
+      return;
+    }
     if (Math.abs(wAcc) >= 40 && now - wLast > 120) {
       app.go(wAcc > 0 ? 1 : -1);
       wAcc = 0;

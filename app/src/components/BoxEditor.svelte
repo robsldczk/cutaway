@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { app } from '../lib/app.svelte';
-  import { clamp } from '../lib/format';
+  import { clamp, firstSentence } from '../lib/format';
   import { charColor, charLabel, rgba, shade } from '../lib/colors';
   import Waveform from './Waveform.svelte';
   import type { CompSegment, ItemView, TakeView } from '../lib/types';
+  import { lineText, lineWords, takeWords, type ShownWord } from '../lib/words';
 
   const it = $derived(app.cur as ItemView);
   const color = $derived(charColor(app.view, it?.character ?? null));
@@ -64,7 +65,10 @@
     return out;
   });
 
-  const edText = $derived(it?.words.filter((w) => !w.deleted).map((w) => w.text).join(' ') ?? '');
+  const edText = $derived(it ? lineText(it) : '');
+  // the script's words, timed by what was heard; each stands for its heard words
+  const edWords = $derived(it ? lineWords(it) : []);
+  const takeOfWord = (w: ShownWord) => it?.words.find((x) => x.idx === w.idxs[0])?.take_id ?? it?.take_id ?? '';
   const ticks = $derived.by(() => {
     const out: { x: number; label: string }[] = [];
     for (let t = 0; t <= boxDur + 0.001; t += 0.5) out.push({ x: t / boxDur, label: t.toFixed(1) });
@@ -207,23 +211,31 @@
   }
 
   // ---- edit mode ----
-  function toggleWord(idx: number, deleted: boolean) {
-    if (deleted) {
-      void app.cmd({ cmd: 'restore_words', line_id: it.line_id, from: idx, to: idx });
-      return;
-    }
-    selWords = selWords.includes(idx) ? selWords.filter((x) => x !== idx) : [...selWords, idx].sort((a, b) => a - b);
-  }
-
-  async function deleteSelected() {
-    if (!selWords.length) return;
-    // contiguous runs
+  /** Contiguous runs of heard word indexes. */
+  function runsOf(idxs: number[]): [number, number][] {
     const runs: [number, number][] = [];
-    for (const i of selWords) {
+    for (const i of [...idxs].sort((a, b) => a - b)) {
       const r = runs[runs.length - 1];
       if (r && r[1] === i - 1) r[1] = i;
       else runs.push([i, i]);
     }
+    return runs;
+  }
+
+  function toggleWord(w: ShownWord) {
+    if (!w.idxs.length) return;
+    if (w.deleted) {
+      const cmds = runsOf(w.idxs).map(([from, to]) => ({ cmd: 'restore_words', line_id: it.line_id, from, to }));
+      void app.cmd(cmds.length === 1 ? cmds[0] : { cmd: 'batch', commands: cmds });
+      return;
+    }
+    const all = w.idxs.every((i) => selWords.includes(i));
+    selWords = all ? selWords.filter((x) => !w.idxs.includes(x)) : [...new Set([...selWords, ...w.idxs])].sort((a, b) => a - b);
+  }
+
+  async function deleteSelected() {
+    if (!selWords.length) return;
+    const runs = runsOf(selWords);
     selWords = [];
     for (const [a, b] of runs) await app.cmd({ cmd: 'delete_words', line_id: it.line_id, from: a, to: b });
   }
@@ -377,10 +389,10 @@
             </div>
           {/each}
           {#if showWords || mode === 'edit'}
-            {#each it.words as w (w.idx)}
-              {@const wsh = shadeOf(w.take_id)}
-              {@const on = app.pos >= w.start_s && app.pos <= w.end_s && !w.deleted}
-              <button class="ew" class:editable={mode === 'edit'} class:deleted={w.deleted} class:picked={selWords.includes(w.idx)} data-testid="comp-word" data-deleted={w.deleted} onclick={() => mode === 'edit' && toggleWord(w.idx, w.deleted)} style="left: {((w.start_s - it.start_s) / boxDur) * 100}%; min-width: {Math.max(0.5, ((w.end_s - w.start_s) / boxDur) * 100)}%; font-size: 14px{on ? '; ' + hl(wsh) : ''}">{w.text}</button>
+            {#each edWords as w (w.j)}
+              {@const wsh = shadeOf(takeOfWord(w))}
+              {@const on = app.pos >= w.start && app.pos <= w.end && !w.deleted}
+              <button class="ew" class:editable={mode === 'edit'} class:deleted={w.deleted} class:picked={w.idxs.length > 0 && w.idxs.every((i) => selWords.includes(i))} data-testid="comp-word" data-deleted={w.deleted} onclick={() => mode === 'edit' && toggleWord(w)} style="left: {((w.start - it.start_s) / boxDur) * 100}%; min-width: {Math.max(0.5, ((w.end - w.start) / boxDur) * 100)}%; font-size: 14px{on ? '; ' + hl(wsh) : ''}">{w.text}</button>
             {/each}
           {/if}
           {#each seams as s, i (i)}<span class="seam" style="left: {s.x * 100}%; background: {s.warn ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.75)'}{s.warn ? '; box-shadow: 0 0 10px var(--warn-glow)' : ''}"></span>{/each}
@@ -402,12 +414,12 @@
         {@const used = usedBars(t)}
         <div class="lane">
           <button class="lbl" onclick={() => app.cmd({ cmd: 'select_take', line_id: it.line_id, take_id: t.id })} aria-label="Use whole take {i + 1}" title="Use the whole take" style="box-shadow: inset 3px 0 0 {rgba(lsh, 0.95)}">
-            <span class="t2">{src === t.id ? '▶ ' : ''}T{i + 1}{t.favorite ? ' ★' : ''}{i === k ? ' · picked' : ''}</span><span class="sub ellip">{t.direction || t.feedback || t.heard}</span>
+            <span class="t2">{src === t.id ? '▶ ' : ''}T{i + 1}{t.favorite ? ' ★' : ''}{i === k ? ' · picked' : ''}</span><span class="sub ellip">{firstSentence(t.direction || t.feedback) || takeWords(it.tokens, t.words).map((w) => w.text).join(' ') || t.heard}</span>
           </button>
           <div class="area take" data-testid="take-lane" onmousedown={(e) => laneDown(e, i)} role="button" tabindex="-1" style="background: {rgba(lsh, src === t.id ? 0.1 : 0.05)}{src === t.id ? `; box-shadow: inset 0 0 0 1.5px ${rgba(lsh, 0.9)}` : ''}{t.partial ? '; outline: 1px dashed rgb(var(--ink-rgb) / 0.3); outline-offset: -1px' : ''}">
             <Waveform peaks={t.peaks} fill={rgba(lsh, used.length ? 0.72 : 0.42)} />
             {#each used as u, j (j)}<div class="used" style="left: {u.a * 100}%; width: {(u.b - u.a) * 100}%; background: {rgba(lsh, 1)}"></div>{/each}
-            {#if showWords}{#each t.words as w, wi (wi)}<span class="ew static" style="left: {(w.t0 / t.duration) * 100}%; width: {((w.t1 - w.t0) / t.duration) * 100}%{auditioning && src === t.id && app.pos >= w.t0 && app.pos <= w.t1 ? '; ' + hl(lsh) : ''}">{w.text}</span>{/each}{/if}
+            {#if showWords}{#each takeWords(it.tokens, t.words) as w (w.j)}<span class="ew static" style="left: {(w.start / t.duration) * 100}%; width: {((w.end - w.start) / t.duration) * 100}%{auditioning && src === t.id && app.pos >= w.start && app.pos <= w.end ? '; ' + hl(lsh) : ''}">{w.text}</span>{/each}{/if}
             {#if paint && paint.lane === i}<div class="paint" style="left: {Math.min(paint.a, paint.b) * 100}%; width: {Math.abs(paint.b - paint.a) * 100}%; background: {rgba(lsh, 0.25)}; box-shadow: inset 0 0 0 1px {rgba(lsh, 0.95)}"></div>{/if}
           </div>
         </div>
