@@ -3,6 +3,8 @@
 import { call, BridgeError } from './bridge';
 import type { DragSound, EditView, ItemView, Job, SceneView, ShowView, SoundFace, SoundKey, SoundPreview, Status } from './types';
 
+const soundId = (key: SoundKey) => key.asset_id ?? key.remote_id ?? key.clip?.id ?? '';
+
 export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'dev';
 export type ImportTab = 'files' | 'sounds' | 'rooms';
 export type Tool = 'pointer' | 'split' | 'fade' | 'gain' | 'marquee';
@@ -131,6 +133,8 @@ class AppState {
   roomPick = $state<{ scene: string; night?: boolean } | null>(null);
   // Edit page (Logic-style control bar)
   editBucket = $state(true);
+  /** What the docked bucket's search looks through. */
+  bucketSearch = $state<'sounds' | 'characters'>('sounds');
   editInspector = $state(false);
   mixer = $state(false);
   tool = $state<Tool>('pointer');
@@ -586,7 +590,7 @@ class AppState {
     const r = await this.run(() => call<{ playing: boolean; duration_s: number }>('play_sound', { ...key, from_s: from }));
     if (!r?.playing) return;
     this.transportStopped();
-    this.preview = { ...face, id: key.asset_id ?? key.remote_id ?? '', key, duration_s: r.duration_s, pos: from, playing: true };
+    this.preview = { ...face, id: soundId(key), key, duration_s: r.duration_s, pos: from, playing: true };
     this.startPreviewPolling();
   }
 
@@ -596,7 +600,7 @@ class AppState {
   }
 
   toggleSound(key: SoundKey, face: SoundFace) {
-    return this.previewing(key.asset_id ?? key.remote_id ?? '') ? this.stopSound() : this.playSound(key, 0, face);
+    return this.previewing(soundId(key)) ? this.stopSound() : this.playSound(key, 0, face);
   }
 
   async stopSound() {

@@ -159,3 +159,65 @@ test('Arrange lengthens a clip into its handle and undo shortens it again', asyn
   await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(len).toBeCloseTo(before, 1);
 });
+
+test('the bucket finds what a character said, trims it and places it', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('current-box')).toBeVisible();
+  await page.keyboard.press('3');
+  await expect(page.getByTestId('dialogue-clip').first()).toBeVisible();
+
+  await page.getByTestId('search-characters').click();
+  await expect(page.getByTestId('cast-pick').filter({ hasText: 'Paul' })).toBeVisible();
+  await page.getByTestId('cast-pick').filter({ hasText: 'Paul' }).click();
+  const box = page.getByTestId('character-search');
+  await expect(box).toHaveValue('Paul ');
+  await box.pressSequentially('lunch');
+
+  // both of Paul's lunches, none of anyone else's words
+  const hits = page.getByTestId('performance-hit');
+  await expect(hits.first()).toContainText('Lunch');
+  await expect(hits.first()).toContainText('Paul');
+  await box.fill('paul nothing like this');
+  await expect(page.getByText('Nothing like that from Paul.')).toBeVisible();
+  await box.fill('paul lunch');
+  await expect(hits.first()).toContainText('Lunch');
+
+  if (shots) await page.screenshot({ path: `${shots}/character-search.png` });
+
+  // the end edge drags in, and the clip is that long
+  const hit = hits.first();
+  const before = await hit.getByTestId('clip-length').textContent();
+  const end = (await hit.getByTestId('clip-end').boundingBox())!;
+  await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(end.x + end.width / 2 - 8, end.y + end.height / 2, { steps: 3 });
+  await page.mouse.up();
+  await expect(hit.getByTestId('clip-length')).not.toHaveText(before!);
+
+  // and the keys step an edge
+  const trimmed = await hit.getByTestId('clip-length').textContent();
+  await hit.getByTestId('clip-start').focus();
+  await page.keyboard.press('Shift+ArrowRight');
+  await expect(hit.getByTestId('clip-length')).not.toHaveText(trimmed!);
+
+  // it plays on the preview player, as trimmed
+  await hit.getByRole('button', { name: 'Play Lunch.' }).click();
+  await expect(page.getByTestId('preview-player')).toContainText('Paul: Lunch.');
+  await page.getByRole('button', { name: /^Stop preview/ }).click();
+
+  // a drop cuts it onto the character's lane; one undo takes it all back
+  const lane = page.locator('[data-testid=edit-lane][data-lane*="PAUL" i]').first();
+  await lane.scrollIntoViewIfNeeded();
+  const vocals = page.getByTestId('vocal-clip');
+  const had = await vocals.count();
+  const from = (await hit.locator('.top').boundingBox())!;
+  const to = (await lane.boundingBox())!;
+  await page.mouse.move(from.x + 120, from.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(to.x + 200, to.y + to.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(vocals).toHaveCount(had + 1);
+  await page.keyboard.press('Meta+z');
+  await expect(vocals).toHaveCount(had);
+  await page.getByTestId('search-sounds').click();
+});

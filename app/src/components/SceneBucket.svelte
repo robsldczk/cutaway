@@ -6,6 +6,7 @@
   import { grab } from '../lib/drag.svelte';
   import { len } from '../lib/format';
   import Icon from './Icon.svelte';
+  import PerformanceSearch from './PerformanceSearch.svelte';
   import PreviewPlayer from './PreviewPlayer.svelte';
   import Waveform from './Waveform.svelte';
   import type { Asset, Bucket, BucketsView } from '../lib/types';
@@ -48,6 +49,10 @@
 
   // ---- search: this scene's buckets narrow down, the rest of the library comes in below ----
   let q = $state('');
+  /** The character search has its own query: "paul huh" is no sound's name. */
+  let who = $state('');
+  let finder = $state<HTMLInputElement>();
+  const people = $derived(app.bucketSearch === 'characters');
   let library = $state<Asset[]>([]);
   const words = $derived(q.toLowerCase().split(/\s+/).filter(Boolean));
   const hit = (text: string) => words.every((w) => text.toLowerCase().includes(w));
@@ -75,8 +80,19 @@
   function searchKey(e: KeyboardEvent) {
     if (e.key !== 'Escape') return;
     e.stopPropagation();
-    q = '';
+    if (people) who = '';
+    else q = '';
     (e.currentTarget as HTMLElement).blur();
+  }
+
+  function searchIn(mode: 'sounds' | 'characters') {
+    app.bucketSearch = mode;
+    finder?.focus();
+  }
+
+  function pickCharacter(name: string) {
+    who = `${name} `;
+    finder?.focus();
   }
 
   function isOpen(id: string, i: number) {
@@ -126,11 +142,19 @@
     <button class="btn" onclick={() => app.toggleFullBucket()}>Full bucket <span class="kb">⇧B</span></button>
     <button class="ib" aria-label="Hide bucket (B)" title="Hide (B)" onclick={() => (app.editBucket = false)}><Icon name="chevron-right" /></button>
   </div>
+  <div class="seg mode" role="group" aria-label="Search">
+    <button class="tab" class:on={!people} aria-pressed={!people} onmousedown={(e) => e.preventDefault()} onclick={() => searchIn('sounds')} data-testid="search-sounds">Sounds</button>
+    <button class="tab" class:on={people} aria-pressed={people} onmousedown={(e) => e.preventDefault()} onclick={() => searchIn('characters')} data-testid="search-characters">Characters</button>
+  </div>
+  {#if people}
+    <input class="field find" type="search" placeholder="Name and what they said: paul huh" aria-label="Search what the characters said" bind:this={finder} bind:value={who} onkeydown={searchKey} data-testid="character-search" />
+    <PerformanceSearch query={who} onpick={pickCharacter} />
+  {:else}
   <div class="legend muted">
     <span><span class="dot gold"></span>Downloaded</span>
     <span><span class="dot ring"></span>Preview, downloads on drop</span>
   </div>
-  <input class="field find" type="search" placeholder="Search sounds" aria-label="Search sounds" bind:value={q} onkeydown={searchKey} data-testid="bucket-search" />
+  <input class="field find" type="search" placeholder="Search sounds" aria-label="Search sounds" bind:this={finder} bind:value={q} onkeydown={searchKey} data-testid="bucket-search" />
   <div class="list">
     {#if eyes?.others}
       {@const faded = eyes.hidden.includes(eyes.others.id)}
@@ -203,6 +227,7 @@
       <p class="muted note">No sound by that name.</p>
     {/if}
   </div>
+  {/if}
   {#if !off}<PreviewPlayer />{/if}
 </aside>
 
@@ -373,6 +398,15 @@
     flex: none;
     height: 32px;
     font-size: 12.5px;
+  }
+  .mode {
+    flex: none;
+    align-self: flex-start;
+  }
+  .mode .tab {
+    height: 26px;
+    padding: 0 12px;
+    font-size: 12px;
   }
   .cat {
     font-size: 10.5px;

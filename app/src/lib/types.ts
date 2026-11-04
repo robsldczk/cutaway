@@ -559,6 +559,9 @@ export interface DragSound {
   bucket_id?: string;
   asset_id?: string;
   remote_id?: string;
+  /** A stretch of a recording, cut when it's dropped (the character search). */
+  clip?: PerformanceClip;
+  character?: string;
   /** The cue it answers, for a candidate. */
   cue_id?: string;
   name: string;
@@ -569,6 +572,46 @@ export interface DragSound {
 export interface SoundKey {
   asset_id?: string;
   remote_id?: string;
+  clip?: PerformanceClip & { id: string };
+}
+
+/** A stretch of a recording, in source-file seconds. */
+export interface PerformanceClip {
+  source_id: string;
+  t0: number;
+  t1: number;
+  text: string;
+}
+
+/** A place a character said it: `t0`–`t1` is the clip, `w0`–`w1` the audio around it. */
+export interface PerformanceHit {
+  id: string;
+  source_id: string;
+  character: string;
+  name: string;
+  color_index: number;
+  t0: number;
+  t1: number;
+  w0: number;
+  w1: number;
+  peaks: number[];
+  text: string;
+  before: string;
+  after: string;
+  /** The kind of sound, for one without words. */
+  tag: string | null;
+  close: boolean;
+  alone: boolean;
+  at: string;
+}
+
+export interface PerformanceResults {
+  cast: { id: string; label: string; color_index: number }[];
+  character: string | null;
+  hits: PerformanceHit[];
+  total: number;
+  /** There were transcripts to look in. */
+  heard: boolean;
 }
 
 /** What the preview player shows of it. */

@@ -923,9 +923,9 @@
 
   async function place(at: NonNullable<ReturnType<typeof dropSpot>>, sound: DragSound) {
     const where = at.target ? { anchor_line_id: at.target.anchor.line_id, anchor_word: at.target.anchor.word, anchor_edge: at.target.anchor.edge, offset_s: at.target.offset_s ?? 0 } : { at_s: +at.t.toFixed(3) };
-    const params = { scene: app.sceneId, bucket_id: sound.bucket_id, asset_id: sound.asset_id, remote_id: sound.remote_id, depth: +depthAt(at.p.x, field).toFixed(3), ...where };
+    const params = { scene: app.sceneId, bucket_id: sound.bucket_id, asset_id: sound.asset_id, remote_id: sound.remote_id, clip: sound.clip, character: sound.character, depth: +depthAt(at.p.x, field).toFixed(3), ...where };
     let id: string | undefined;
-    if (sound.asset_id) {
+    if (sound.asset_id || sound.clip) {
       const r = await app.method<{ id: string }>('place_from_bucket', params);
       id = r?.id;
     } else {
@@ -939,6 +939,10 @@
       id = (j?.result as { placement?: { id: string } } | undefined)?.placement?.id;
     }
     if (!id) return;
+    if (sound.clip) {
+      app.say(`${sound.name} is on the character's lane: find it on the Edit page`);
+      return;
+    }
     const placedHere = app.edit?.placements.find((p) => p.id === id);
     if (placedHere && placedHere.lane !== 'sfx' && placedHere.lane !== 'ambience') {
       app.say('That one plays outside the room: find it on the Edit page');

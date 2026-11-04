@@ -10,6 +10,7 @@
   import { clamp, fmt } from '../lib/format';
   import { charColor, charLabel, rgba } from '../lib/colors';
   import { GROUP_LABEL, laneLabel, laneRgb, mixOf, placementLane, setMix, type LaneGroup, type LaneRow } from '../lib/lanes';
+  import { ownArrows } from '../lib/keys';
   import { TOOLS } from '../lib/tools';
   import { LANE_COLORS, colorOf, type Rgb } from '../theme';
   import Waveform from '../components/Waveform.svelte';
@@ -771,9 +772,9 @@
     const where = snap ? { anchor_line_id: snap.line_id, anchor_word: snap.word ?? undefined } : { at_s: +t.toFixed(3) };
     // a dialogue lane takes the sound as that character's (a vocal sits with their lines)
     const lane = r.lane;
-    const character = r.lane === 'dialogue' ? r.char : undefined;
-    if (s.asset_id) {
-      await app.method('place_from_bucket', { scene: v.scene.id, bucket_id: s.bucket_id, asset_id: s.asset_id, cue_id: s.cue_id, lane, character, ...where });
+    const character = r.lane === 'dialogue' ? r.char : s.character;
+    if (s.asset_id || s.clip) {
+      await app.method('place_from_bucket', { scene: v.scene.id, bucket_id: s.bucket_id, asset_id: s.asset_id, clip: s.clip, cue_id: s.cue_id, lane, character, ...where });
       await app.loadEdit();
       return;
     }
@@ -800,6 +801,7 @@
     const k = e.key;
     const mod = e.metaKey || e.ctrlKey;
     const lr = k === 'ArrowLeft' || k === 'ArrowRight';
+    if (ownArrows(e)) return;
     const dir = k === 'ArrowLeft' ? -1 : 1;
     let handled = true;
     if (toolMenu) {

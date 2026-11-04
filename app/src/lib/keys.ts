@@ -1,12 +1,18 @@
 // Keyboard map (docs/specs/frontend-design.md). The box editor handles its own keys.
 import { app } from './app.svelte';
 
+/** A left or right arrow on a control that steps with them: a clip's trim edge. */
+export function ownArrows(e: KeyboardEvent) {
+  return (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.target instanceof Element && e.target.hasAttribute('data-own-arrows');
+}
+
 export function onKey(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null;
   // a slider keeps the focus after a drag: its undo must still work, its arrows stay its own
   const sliderUndo = t instanceof HTMLInputElement && t.type === 'range' && (e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z');
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && e.key !== 'Escape' && !sliderUndo) return;
   if (app.overlay === 'editor') return;
+  if (ownArrows(e)) return;
   // a button reached with Tab does what it says; after a click Space still plays
   if ((e.key === 'Enter' || e.key === ' ') && t?.tagName === 'BUTTON' && t.closest('[data-own-keys]') && t.matches(':focus-visible')) return;
   // Arrange's sounds layer sees keys first: it passes on whatever isn't about its sounds
