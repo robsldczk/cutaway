@@ -647,6 +647,15 @@ Decisions: D92–D99.
 - [x] Snap button and ⌥ on Arrange.
 - [x] Tests, docs, RUN notes.
 
+### Character search in the bucket (Rob, 2026-11-04)
+
+Decisions: D101.
+
+- [x] `search_performances`: a name and what they said, on the actor's own mic, clipped to the sound. Close sounds, phrases, sounds without words, other voices left out.
+- [x] Sounds and Characters modes on the docked bucket; hits with edges to trim, played on the preview player.
+- [x] A drop cuts the stretch into the character's vocals and places it, in one undo step.
+- [x] Tests, docs, RUN notes.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -711,3 +720,4 @@ Decisions: D92–D99.
 - 2026-11-04 Bucket search, voices in the room, Room mix in Dev, actions on Arrange (D90, D91). Each voice now takes a little of its scene's room, 0.25 by default, and every scene rings out a little past its last line. Wet moved to Dev › Room mix. Actions read in full between the cards and take sounds. Not listened to: the voice send is Rob's to judge.
 - 2026-11-04 Rooms tab, smooth ambience, directions on the timeline, sorting drops (D92–D96). Ambience leaves the SFX buckets for Import › Rooms, one per room. Loops turn around from 85 % to 45 % on a crossfade of up to 3 s. Directions before the first line take time, so Episode 2's scenes grow. A Finder drop opens a sheet with the bucket guessed by name: Enter files it and places it. Same locations share a room and its ambience (D97), new ambience starts at −28 dB, and ambience has its own drop zones. The Cuts a word tag and the hints are gone. A real Finder drag and the loop by ear wait for Rob.
 - 2026-11-04 One name at a time (D100): the balls lost their labels; the selection's name sits in the middle of the transport.
+- 2026-11-04 Character search in the bucket (D101): "paul huh" finds where an actor's own mic heard it, clipped to the sound, with the edges to trim. A drop cuts it into their vocals and places it, one undo step. Tried on a copy of Episode 2; not listened to, and not driven in the desktop webview.
