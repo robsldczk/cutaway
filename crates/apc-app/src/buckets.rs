@@ -1102,8 +1102,12 @@ pub fn play(
     svc: &mut Service,
     asset_id: Option<String>,
     remote_id: Option<String>,
+    clip: Option<crate::methods::ClipP>,
     from_s: f64,
 ) -> Result<Value> {
+    if let Some(c) = clip {
+        return crate::player::play_stretch(svc, &c, from_s);
+    }
     if let Some(aid) = asset_id {
         let a = crate::sound::find_asset(svc, &aid)?
             .ok_or_else(|| AppError::Params(format!("no sound '{aid}'")))?;
@@ -1124,6 +1128,7 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         scene,
         asset_id,
         remote_id,
+        clip,
         bucket_id,
         cue_id,
         lane,
@@ -1165,6 +1170,9 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         depth,
         dropped: None,
     };
+    if let Some(c) = clip {
+        return crate::vocals::place_clip(svc, &c, p);
+    }
     if let Some(aid) = asset_id {
         let a = crate::sound::find_asset(svc, &aid)?;
         let dropped = Some(a.is_some_and(|a| loops(svc.doc(), bucket_id.as_deref(), &a)));

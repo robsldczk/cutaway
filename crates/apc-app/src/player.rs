@@ -265,10 +265,41 @@ pub fn play_file(
     } else {
         0.0
     };
+    on_preview(svc, id, path, label, (0.0, duration), gain_db, from_s)
+}
+
+/// Plays a stretch of a source on the preview player, before it's cut (the character search).
+/// `sound_playhead` then reports seconds into the stretch.
+pub fn play_stretch(svc: &mut Service, clip: &crate::methods::ClipP, from_s: f64) -> Result<Value> {
+    let Some(src) = svc.doc().sources.get(&clip.source_id).cloned() else {
+        return Err(crate::AppError::Params(format!(
+            "unknown source '{}'",
+            clip.source_id
+        )));
+    };
+    let gain_db = source_gain(svc, &svc.config().playback, &src.id);
+    let path = svc.paths.resolve(&src.path);
+    let id = format!("source:{}", src.id);
+    let range = (clip.t0.max(0.0), clip.t1.max(clip.t0));
+    on_preview(svc, id.clone(), &path, &id, range, gain_db, from_s)
+}
+
+/// Loads `path` from `range.0` to `range.1` on the preview deck and plays it from `from_s`
+/// (seconds into the range).
+fn on_preview(
+    svc: &mut Service,
+    id: String,
+    path: &std::path::Path,
+    label: &str,
+    range: (f64, f64),
+    gain_db: f64,
+    from_s: f64,
+) -> Result<Value> {
+    let duration = range.1 - range.0;
     let clip = apc_audio::ScheduledClip {
         source_id: id.clone(),
-        src_in: 0.0,
-        src_out: duration,
+        src_in: range.0,
+        src_out: range.1,
         start_s: 0.0,
         gain_db,
         fade_in_s: 0.003,
@@ -286,13 +317,14 @@ pub fn play_file(
         ..Default::default()
     };
     let from_s = from_s.clamp(0.0, duration);
+    let level = svc.config().playback.level;
     stop_timeline(svc);
     let p = &mut svc.player.preview;
     p.deck.open();
     if let Some(e) = &p.deck.engine {
         let mut set = SourceSet::new(e.sample_rate());
         set.add(id, path.to_path_buf());
-        e.set_limiter(cfg.level);
+        e.set_limiter(level);
         e.load(sched, Arc::new(set));
         e.play(from_s, Some(duration));
     } else {

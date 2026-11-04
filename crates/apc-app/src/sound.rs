@@ -502,6 +502,12 @@ fn shape_drop(svc: &Service, scene: &Scene, looping: bool, p: &mut Placement) {
 
 pub fn place(svc: &mut Service, p: PlaceSoundP) -> Result<Value> {
     let a = ensure_asset_in_doc(svc, &p.asset_id)?;
+    let placement = placement_of(svc, &a, &p)?;
+    Ok(svc.exec(&Command::PlaceSound { placement })?.result)
+}
+
+/// The placement `p` asks for, not placed yet.
+pub fn placement_of(svc: &Service, a: &Asset, p: &PlaceSoundP) -> Result<Placement> {
     let scene = scene_of(svc, &p.scene)?;
     let cue = p
         .cue_id
@@ -564,7 +570,7 @@ pub fn place(svc: &mut Service, p: PlaceSoundP) -> Result<Value> {
     if let Some(looping) = p.dropped {
         shape_drop(svc, &scene, looping, &mut placement);
     }
-    Ok(svc.exec(&Command::PlaceSound { placement })?.result)
+    Ok(placement)
 }
 
 /// Stores an API key in the credential store after checking it (Epidemic: a test search).

@@ -566,9 +566,12 @@ pub struct PlaceFromBucketP {
     /// A kept sound …
     #[serde(default)]
     pub asset_id: Option<String>,
-    /// … or a preview (downloads first, in the background).
+    /// … or a preview (downloads first, in the background) …
     #[serde(default)]
     pub remote_id: Option<String>,
+    /// … or a stretch of a recording, cut into the character's vocals.
+    #[serde(default)]
+    pub clip: Option<ClipP>,
     #[serde(default)]
     pub bucket_id: Option<String>,
     /// The cue it answers.
@@ -594,6 +597,26 @@ pub struct PlaceFromBucketP {
     /// Where it starts in the room: 0 close … 1 far.
     #[serde(default)]
     pub depth: f64,
+}
+
+/// A stretch of a recording, from `search_performances`.
+#[derive(Deserialize, JsonSchema, Clone)]
+pub struct ClipP {
+    pub source_id: String,
+    /// Source-file seconds.
+    pub t0: f64,
+    pub t1: f64,
+    /// What was said, for the sound's name.
+    #[serde(default)]
+    pub text: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct PerformanceSearchP {
+    /// A character's name and what they said: "paul huh". Only a name lists their vocal sounds;
+    /// without a name every character is searched.
+    #[serde(default)]
+    pub query: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -659,6 +682,8 @@ pub struct PlaySoundP {
     pub asset_id: Option<String>,
     #[serde(default)]
     pub remote_id: Option<String>,
+    #[serde(default)]
+    pub clip: Option<ClipP>,
     #[serde(default)]
     pub from_s: f64,
 }
@@ -856,7 +881,8 @@ registry! {
     "bucket_remove", BucketAssetP, Write, true, "Take a kept sound out of a bucket (it stays in the library). A removed vocal stays out on the next analysis.";
     "bucket_dismiss", BucketRemoteP, Write, true, "Dismiss a preview so searches skip it.";
     "bucket_generate", BucketGenerateP, Write, true, "Generate sounds for a bucket (ElevenLabs) and keep them.";
-    "place_from_bucket", PlaceFromBucketP, Write, true, "Place a bucket sound on the timeline. A preview downloads first (returns a job_id).";
+    "place_from_bucket", PlaceFromBucketP, Write, true, "Place a bucket sound on the timeline. A preview downloads first (returns a job_id). A clip from search_performances is cut into the character's vocals and goes on their lane.";
+    "search_performances", PerformanceSearchP, Read, true, "Search what the actors said and did on their own mics: \"paul huh\". Gives stretches already cut to the sound, to trim and place with place_from_bucket's clip.";
     "play_sound", PlaySoundP, Read, false, "Audition a bucket sound (kept or preview) on the preview player. The timeline stops; its playhead stays.";
     "stop_sound", NoParams, Read, false, "Stop the preview player.";
     "sound_playhead", NoParams, Read, false, "The preview player's sound, position and state.";
@@ -955,7 +981,7 @@ fn export_target(svc: &Service, p: &ExportP, ext: &str) -> (ExportScope, PathBuf
 
 impl Service {
     /// Peaks of a source range: |max| per bucket, at most the cached 100 per second.
-    fn peaks_of(&mut self, p: &PeaksP) -> Result<Vec<f32>> {
+    pub(crate) fn peaks_of(&mut self, p: &PeaksP) -> Result<Vec<f32>> {
         let a = self
             .analysis_of(&p.source_id)
             .ok_or_else(|| AppError::Params("unknown source".into()))?;
@@ -1564,7 +1590,11 @@ impl Service {
             }
             "play_sound" => {
                 let p: PlaySoundP = parse(params)?;
-                crate::buckets::play(self, p.asset_id, p.remote_id, p.from_s)
+                crate::buckets::play(self, p.asset_id, p.remote_id, p.clip, p.from_s)
+            }
+            "search_performances" => {
+                let p: PerformanceSearchP = parse(params)?;
+                crate::performances::search(self, &p.query)
             }
             "stop_sound" => crate::player::stop_sound(self),
             "sound_playhead" => crate::player::sound_playhead(self),
