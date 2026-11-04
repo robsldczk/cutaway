@@ -300,6 +300,8 @@ pub enum SfxCmd {
     Batch { edits: String },
     /// Each scene's room.
     Rooms,
+    /// How much of the scene's room a character's voice takes (0 dry … 1).
+    VoiceWet { character: String, wet: f64 },
     /// Loop a scene's room tone from a library sound. Without --sound it plays its location's.
     RoomTone {
         scene: String,
@@ -416,6 +418,11 @@ fn sound_call(sess: &mut Session, cmd: &SfxCmd) -> Option<anyhow::Result<Value>>
             .context("the edits are not valid JSON")
             .and_then(|edits| call(sess, "batch_sounds", json!({ "edits": edits }))),
         SfxCmd::Rooms => call(sess, "scene_rooms", json!({})),
+        SfxCmd::VoiceWet { character, wet } => call(
+            sess,
+            "set_character_wet",
+            json!({ "character": character, "wet": wet }),
+        ),
         SfxCmd::RoomTone { scene, sound, gain } => call(
             sess,
             "set_scene_tone",

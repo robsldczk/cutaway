@@ -237,6 +237,18 @@ pub(crate) fn set_room(tx: &mut Tx, scene_id: &str, room: &SceneRoom) -> Result<
     Ok(serde_json::to_value(scene.room)?)
 }
 
+pub(crate) fn set_voice_wet(tx: &mut Tx, character_id: &str, wet: f64) -> Result<Value> {
+    let mut c = tx
+        .doc()
+        .characters
+        .get(character_id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("character", character_id))?;
+    c.wet = finite("wet", wet)?.clamp(0.0, 1.0);
+    tx.put(&c)?;
+    Ok(json!({ "wet": c.wet }))
+}
+
 pub(crate) fn set_tone(tx: &mut Tx, scene_id: &str, tone: &Option<SceneTone>) -> Result<Value> {
     let mut scene = tx
         .doc()

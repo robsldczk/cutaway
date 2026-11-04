@@ -90,7 +90,7 @@ const ms = (x: number) => Math.round(x * 1000) / 1000;
 export function moveCommands(sounds: SoundState[], delta: number, grabId: string | null, target: SnapTarget | null): Cmd[] {
   return sounds.map((s) => {
     const placement_id = s.id;
-    if (s.id === grabId && target) return { cmd: 'move_sound', placement_id, anchor: target.anchor, offset_s: 0 };
+    if (s.id === grabId && target) return { cmd: 'move_sound', placement_id, anchor: target.anchor, offset_s: target.offset_s ?? 0 };
     if (s.anchor && s.id !== grabId) return { cmd: 'move_sound', placement_id, offset_s: ms(s.offset_s + delta) };
     return { cmd: 'move_sound', placement_id, at_s: ms(s.start_s + delta) };
   });

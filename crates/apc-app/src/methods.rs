@@ -588,6 +588,9 @@ pub struct PlaceFromBucketP {
     /// Which edge of the line or word: `start` (default) or `end`.
     #[serde(default)]
     pub anchor_edge: Edge,
+    /// Seconds after the anchor or time.
+    #[serde(default)]
+    pub offset_s: f64,
     /// Where it starts in the room: 0 close … 1 far.
     #[serde(default)]
     pub depth: f64,
@@ -603,6 +606,13 @@ pub struct BucketLoopP {
     #[serde(default)]
     pub remote_id: Option<String>,
     pub on: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct CharacterWetP {
+    pub character: String,
+    /// 0 dry … 1.
+    pub wet: f64,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -834,6 +844,8 @@ registry! {
     "remove_sound", PlacementP, Write, true, "Take a placed sound off the timeline. Undoable.";
     "batch_sounds", BatchSoundsP, Write, true, "Several sound edits as one undo step (a multi-select move, gain or depth change); if one fails, none applies. Each edit is {op: move|trim|fades|gain|pan|depth|slip|remove, ...the fields of that method}.";
     "scene_rooms", NoParams, Read, true, "Each scene's room: size, damping, wet, what they come to (decay, pre-delay) and how many sounds play in it.";
+    "voice_rooms", NoParams, Read, true, "Each character and how much of the scene's room their voice takes.";
+    "set_character_wet", CharacterWetP, Write, true, "Set how much of the scene's room a character's voice takes, 0 dry to 1.";
     "set_scene_tone", SceneToneP, Write, true, "Set the room tone looping under a scene, from a library sound, and its level. Without asset_id the scene plays its location's.";
     "bucket_set_loop", BucketLoopP, Write, true, "Set whether a bucket sound loops. Dropped, a sound over 6 s with Loop on goes on the ambience lane and repeats to the end of the scene.";
     "set_scene_room", SceneRoomP, Write, true, "Set a scene's room: size, damping, wet (0 to 1 each; left out stays). Each scene has its own room, shared by all its sounds.";
@@ -1543,6 +1555,16 @@ impl Service {
             "scene_rooms" => Ok(serde_json::to_value(crate::sound_edit::rooms(self)?)?),
             "set_scene_room" => crate::sound_edit::set_room(self, parse(params)?),
             "set_scene_tone" => crate::sound_edit::set_tone(self, parse(params)?),
+            "voice_rooms" => Ok(crate::sound_edit::voices(self)?),
+            "set_character_wet" => {
+                let p: CharacterWetP = parse(params)?;
+                Ok(self
+                    .exec(&Command::SetCharacterWet {
+                        character_id: p.character,
+                        wet: p.wet,
+                    })?
+                    .result)
+            }
             "bucket_set_loop" => {
                 let p: BucketLoopP = parse(params)?;
                 crate::buckets::set_loop(self, p)

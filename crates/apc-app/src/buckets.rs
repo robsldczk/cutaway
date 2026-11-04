@@ -1043,6 +1043,7 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         anchor_line_id,
         anchor_word,
         anchor_edge,
+        offset_s,
         depth,
     } = q;
     let vocal_of = bucket_id
@@ -1071,7 +1072,7 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         anchor_word,
         anchor_edge,
         at_s,
-        offset_s: 0.0,
+        offset_s,
         depth,
         dropped: None,
     };

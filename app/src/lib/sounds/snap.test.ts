@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemView, LayoutWord } from '../types';
-import { nearestTarget, snapTargets, startLabel } from './snap';
+import { actionTargets, nearestTarget, snapTargets, startLabel } from './snap';
 import { rowSpans, TimeMap } from './timemap';
 
 const w = (idx: number, text: string, start_s: number, end_s: number, more: Partial<LayoutWord> = {}): LayoutWord => ({ idx, text, take_id: 't', start_s, end_s, deleted: false, script_idx: idx, part: 0, muted: false, ...more });
@@ -76,3 +76,42 @@ describe('snapping', () => {
     expect(startLabel(targets[0], 2)).toBe('On “That is”');
   });
 });
+
+describe('action lines', () => {
+  const map = new TimeMap(
+    [
+      { t0: 0, t1: 2, y0: 0, y1: 100 },
+      { t0: 2, t1: 3, y0: 100, y1: 200 },
+      { t0: 3, t1: 5, y0: 200, y1: 300 },
+    ],
+    14,
+  );
+  const row = (y: number, start_s = 2, until = 3) => ({ line_id: 'a', text: 'He slams the door behind him quietly', start_s, until, y, height: 30 });
+
+  it('sits at the time beside its row, hanging on the action', () => {
+    const [t] = actionTargets([row(150)], map);
+    expect(t.t).toBeCloseTo(2.5);
+    expect(t.offset_s).toBeCloseTo(0.5);
+    expect(t.anchor).toEqual({ line_id: 'a', word: null, edge: 'start' });
+    expect(t.start).toBe('On “He slams the door…”');
+  });
+
+  it('stays in its pause', () => {
+    expect(actionTargets([row(290)], map)[0].t).toBe(3);
+    expect(actionTargets([row(10)], map)[0].offset_s).toBe(0);
+  });
+
+  it('catches anywhere on its row, and nowhere past it', () => {
+    const targets = actionTargets([row(150)], map);
+    expect(nearestTarget(targets, map.t(138), map)?.anchor.line_id).toBe('a');
+    expect(nearestTarget(targets, map.t(120), map)).toBeNull();
+  });
+
+  it('tells two rows of one instant apart by height', () => {
+    const a = { ...row(150, 2, 2), line_id: 'a' };
+    const b = { ...row(190, 2, 2), line_id: 'b' };
+    const targets = actionTargets([a, b], map);
+    expect(nearestTarget(targets, 2, map, 8, 188)?.anchor.line_id).toBe('b');
+  });
+});
+

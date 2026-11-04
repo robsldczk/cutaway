@@ -10,6 +10,7 @@
   import { MARK_KINDS, splitMatches, type DevLine, type DevRow, type DevSession, type DevSessionItem, type MarkKind } from '../lib/dev';
   import DevMarks from '../components/DevMarks.svelte';
   import DevLearn from '../components/DevLearn.svelte';
+  import DevRoomMix from '../components/DevRoomMix.svelte';
 
   type Filter = 'all' | 'takes' | 'rescued' | 'near' | 'unmatched' | 'director' | 'marked';
   const FILTERS: { id: Filter; label: string }[] = [
@@ -22,7 +23,7 @@
     { id: 'marked', label: 'Marked' },
   ];
 
-  let tab = $state<'hood' | 'learn'>('hood');
+  let tab = $state<'hood' | 'learn' | 'mix'>('hood');
   let sessions = $state<DevSessionItem[]>([]);
   let sourceId = $state('');
   let s = $state<DevSession | null>(null);
@@ -204,8 +205,9 @@
     <div class="seg" role="tablist" aria-label="Dev view">
       <button role="tab" aria-selected={tab === 'hood'} class:on={tab === 'hood'} onclick={() => (tab = 'hood')}>Under the hood</button>
       <button role="tab" aria-selected={tab === 'learn'} class:on={tab === 'learn'} onclick={() => (tab = 'learn')}>Learn</button>
+      <button role="tab" aria-selected={tab === 'mix'} class:on={tab === 'mix'} onclick={() => (tab = 'mix')}>Room mix</button>
     </div>
-    <select class="field" aria-label="Actor session" bind:value={sourceId}>
+    <select class="field" class:gone={tab === 'mix'} aria-label="Actor session" bind:value={sourceId}>
       {#each sessions as x (x.source_id)}
         <option value={x.source_id}>{x.character} · {x.name} ({x.takes.matcher} matched, {x.takes.rescue} rescued{x.takes.manual ? `, ${x.takes.manual} by hand` : ''})</option>
       {/each}
@@ -221,7 +223,9 @@
     {#if job}<span class="job muted">{job.message || job.stage}…</span>{/if}
   </div>
 
-  {#if tab === 'learn'}
+  {#if tab === 'mix'}
+    <DevRoomMix />
+  {:else if tab === 'learn'}
     <DevLearn session={s} {sessions} reload={load} open={(n) => { tab = 'hood'; filter = 'all'; sceneFilter = String(n); }} />
   {:else if s}
     <div class="chips" role="group" aria-label="Filter">
@@ -313,6 +317,9 @@
 </div>
 
 <style>
+  .gone {
+    display: none;
+  }
   .dev {
     position: absolute;
     inset: 0;

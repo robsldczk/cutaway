@@ -79,6 +79,7 @@ async function bucketRow(page: Page) {
   const row = sec.getByTestId('bucket-sound');
   if (!(await row.count())) await sec.locator('button[aria-expanded]').click();
   await expect(row.first()).toBeVisible();
+  await row.first().scrollIntoViewIfNeeded();
   return row.first();
 }
 
@@ -393,6 +394,74 @@ test('play: ⇧ Space plays from the start of the selected sound, the first of s
   await page.keyboard.press('Shift+Space');
   await expect(play).toHaveAttribute('data-playing', 'true');
   await rpc('stop');
+});
+
+test('search: the bucket narrows down, the library comes in, and a result drags like any sound', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'finds-'));
+  const file = join(dir, 'Zebra_crossing.wav');
+  wav(file, 1);
+  await rpc('import_sounds', { paths: [file] });
+  await open(page);
+  await bucketRow(page);
+  const box = page.getByTestId('bucket-search');
+
+  // a word of a sound's name: its row stays, and other buckets step aside
+  await box.fill('foil_cr');
+  await expect(foil(page).getByTestId('bucket-sound').first()).toContainText('Foil_crackle');
+  await expect(foil(page).getByTestId('bucket-sound').filter({ hasNotText: 'Foil_crackle' })).toHaveCount(0);
+  await box.fill('zzz nothing');
+  await expect(foil(page)).toHaveCount(0);
+  await expect(page.getByText('No sound by that name.')).toBeVisible();
+
+  // a sound in no bucket of this scene comes from the library, and plays and drags
+  await box.fill('zebra');
+  const found = page.getByTestId('library-sound').filter({ hasText: 'Zebra_crossing' });
+  await expect(found).toHaveCount(1);
+  await found.getByRole('button', { name: /^Play / }).click();
+  await expect(page.getByTestId('preview-player')).toContainText('Zebra_crossing');
+  await page.keyboard.press('Space');
+  const field = (await page.getByTestId('sounds-field').boundingBox())!;
+  const y = (await page.getByTestId('arrange-row').nth(1).boundingBox())!.y;
+  await found.dragTo(page.getByTestId('sounds-field'), { targetPosition: { x: 330, y: y - field.y + 1 } });
+  await expect.poll(async () => (await list()).length).toBe(1);
+
+  // Esc clears it, and the buckets come back
+  await box.focus();
+  await page.keyboard.press('Escape');
+  await expect(box).toHaveValue('');
+  await expect(foil(page)).toBeVisible();
+});
+
+test('actions: they read between the lines, and a sound dropped on one hangs on it', async ({ page }) => {
+  await open(page);
+  const acts = page.getByTestId('action-row');
+  await expect(acts.first()).toContainText('A kettle whistles');
+  await expect(acts.last()).toContainText('The door opens');
+  const spoken = (await rpc<{ line_id: string }[]>('list_lines', { scene: '1' })).map((l) => l.line_id);
+
+  // on the action itself
+  const row = acts.last();
+  await (await bucketRow(page)).dragTo(row);
+  await expect.poll(async () => (await list()).length).toBe(1);
+  const [s] = await list();
+  const action = s.anchor!.line_id;
+  expect(spoken).not.toContain(action);
+  await expect(row.getByTestId('action-tag')).toContainText('Foil_crackle');
+  await expect(page.getByTestId('sound-ball')).toHaveCount(1);
+
+  // beside it counts too, and the tooltip says what it's on
+  await rpc('remove_sound', { placement_id: s.id });
+  await expect(row.getByTestId('action-tag')).toHaveCount(0);
+  const b = (await row.boundingBox())!;
+  const field = (await page.getByTestId('sounds-field').boundingBox())!;
+  const from = await centre(await bucketRow(page));
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x - 40, from.y);
+  await page.mouse.move(field.x + 330, b.y + b.height / 2);
+  await expect(page.getByTestId('sound-tip')).toContainText('On “The door opens');
+  await page.mouse.up();
+  await expect.poll(async () => (await list())[0]?.anchor?.line_id).toBe(action);
 });
 
 test('depth: sideways is depth, and small vertical motion leaves the timing alone', async ({ page }) => {

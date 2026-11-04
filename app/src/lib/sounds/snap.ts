@@ -15,6 +15,23 @@ export interface SnapTarget {
   /** What the tooltip says when a sound starts here, and when one ends here. */
   start: string;
   end: string;
+  /** How far past its anchor it sits: an action has no time of its own, so a sound hangs on
+   *  it at the place in the pause where the action is written. */
+  offset_s?: number;
+  /** An action's row: where it sits, and how far from there it catches. */
+  y?: number;
+  reach?: number;
+}
+
+/** An action line as Arrange shows it. */
+export interface ActionRow {
+  line_id: string;
+  text: string;
+  start_s: number;
+  /** Where the next line starts; an action stays in its pause. */
+  until: number;
+  y: number;
+  height: number;
 }
 
 const word = (it: ItemView, script_idx: number | null, text: string) => (script_idx != null ? (it.tokens[script_idx] ?? text) : text);
@@ -57,14 +74,31 @@ export function snapTargets(lines: ItemView[], pauseS = PAUSE_S): SnapTarget[] {
   return out.sort((a, b) => a.t - b.t);
 }
 
-/** The nearest target within `px` on the spine. */
-export function nearestTarget(targets: SnapTarget[], t: number, map: TimeMap, px = SNAP_PX): SnapTarget | null {
-  const y = map.y(t);
+/** Action lines as targets, each at the time beside its row. */
+export function actionTargets(rows: ActionRow[], map: TimeMap): SnapTarget[] {
+  return rows.map((r) => {
+    const t = Math.min(Math.max(map.t(r.y), r.start_s), Math.max(r.until, r.start_s));
+    const words = r.text.split(/\s+/).slice(0, 4).join(' ');
+    return {
+      t,
+      anchor: { line_id: r.line_id, word: null, edge: 'start' as const },
+      offset_s: +(t - r.start_s).toFixed(3),
+      start: `On “${words}…”`,
+      end: `Ends on “${words}…”`,
+      y: r.y,
+      reach: r.height / 2,
+    };
+  });
+}
+
+/** The nearest target within `px` on the spine, or within an action's row. `y` is the height
+ *  asked about, where a pause with no time in it can't tell heights apart. */
+export function nearestTarget(targets: SnapTarget[], t: number, map: TimeMap, px = SNAP_PX, y = map.y(t)): SnapTarget | null {
   let best: SnapTarget | null = null;
-  let bd = px;
+  let bd = Infinity;
   for (const s of targets) {
-    const d = Math.abs(map.y(s.t) - y);
-    if (d < bd) {
+    const d = Math.abs((s.y ?? map.y(s.t)) - y);
+    if (d < (s.reach ?? px) && d < bd) {
       bd = d;
       best = s;
     }

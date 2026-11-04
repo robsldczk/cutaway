@@ -1,7 +1,7 @@
 // UI state. Document state comes only from the core (view models); every change is a
 // command sent through the bridge. Local state here is selection, page, playhead, overlays.
 import { call, BridgeError } from './bridge';
-import type { EditView, ItemView, Job, SceneView, ShowView, SoundFace, SoundKey, SoundPreview, Status } from './types';
+import type { DragSound, EditView, ItemView, Job, SceneView, ShowView, SoundFace, SoundKey, SoundPreview, Status } from './types';
 
 export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'dev';
 export type ImportTab = 'files' | 'sounds';
@@ -141,7 +141,7 @@ class AppState {
    *  the document or the mix. */
   hiddenBuckets = $state<string[]>([]);
   /** Keys and the wheel go to the sounds layer first, while it is on the page. */
-  soundsUi: { key(e: KeyboardEvent): boolean; wheel(e: WheelEvent): boolean; dropFiles(paths: string[], x: number, y: number): Promise<void> } | null = null;
+  soundsUi: { key(e: KeyboardEvent): boolean; wheel(e: WheelEvent): boolean; dropFiles(paths: string[], x: number, y: number): Promise<void>; dropOnAction(line_id: string, s: DragSound): void } | null = null;
   /** Bucket the full bucket highlights or opens in its side panel. */
   openBucket = $state<string | null>(null);
   /** The buckets' preview player: the sound last auditioned, playing or not. */

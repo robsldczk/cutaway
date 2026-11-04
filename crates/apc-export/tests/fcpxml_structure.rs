@@ -104,6 +104,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
                 aliases: vec![],
                 color_index: i,
                 profile: Default::default(),
+                wet: 0.0,
             },
         );
     }

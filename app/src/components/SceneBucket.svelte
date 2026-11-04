@@ -8,11 +8,13 @@
   import Icon from './Icon.svelte';
   import PreviewPlayer from './PreviewPlayer.svelte';
   import Waveform from './Waveform.svelte';
-  import type { BucketsView } from '../lib/types';
+  import type { Asset, Bucket, BucketsView } from '../lib/types';
   import { colorOf, solid } from '../theme';
 
   /** Up to here a dropped sound keeps its length, looped or not. */
   const LOOP_MIN_S = 6;
+  /** Library results shown under a search. */
+  const LIBRARY_ROWS = 30;
 
   /** On Arrange the layer owns the buckets: it hands them in, with an eye per bucket. */
   interface Eyes {
@@ -44,7 +46,41 @@
     if (!reload) void load();
   });
 
+  // ---- search: this scene's buckets narrow down, the rest of the library comes in below ----
+  let q = $state('');
+  let library = $state<Asset[]>([]);
+  const words = $derived(q.toLowerCase().split(/\s+/).filter(Boolean));
+  const hit = (text: string) => words.every((w) => text.toLowerCase().includes(w));
+  const whole = (b: Bucket) => !words.length || hit(`${b.name} ${b.keywords.join(' ')}`);
+  const keptOf = (b: Bucket) => (whole(b) ? b.kept : b.kept.filter((s) => hit(`${s.name} ${s.tags.join(' ')}`)));
+  const previewsOf = (b: Bucket) => (whole(b) ? b.previews : b.previews.filter((p) => hit(p.title)));
+  const shows = (b: Bucket) => !words.length || keptOf(b).length + previewsOf(b).length > 0;
+  const listed = $derived(new Set((data?.buckets ?? []).flatMap((b) => b.kept.map((s) => s.id))));
+  const further = $derived(library.filter((a) => !listed.has(a.id)).slice(0, LIBRARY_ROWS));
+  const nameOf = (a: Asset) => (a.file.split('/').pop() ?? a.id).replace(/\.\w+$/, '');
+
+  $effect(() => {
+    const term = q.trim();
+    if (!term) {
+      library = [];
+      return;
+    }
+    const wait = setTimeout(async () => {
+      const r = await app.run(() => call<Asset[]>('list_library', { query: term }));
+      if (q.trim() === term) library = r ?? [];
+    }, 180);
+    return () => clearTimeout(wait);
+  });
+
+  function searchKey(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    q = '';
+    (e.currentTarget as HTMLElement).blur();
+  }
+
   function isOpen(id: string, i: number) {
+    if (words.length) return true;
     return closed[id] === undefined ? i < 2 && !data?.buckets[i].show_wide : !closed[id];
   }
 
@@ -94,6 +130,7 @@
     <span><span class="dot gold"></span>Downloaded</span>
     <span><span class="dot ring"></span>Preview, downloads on drop</span>
   </div>
+  <input class="field find" type="search" placeholder="Search sounds" aria-label="Search sounds" bind:value={q} onkeydown={searchKey} data-testid="bucket-search" />
   <div class="list">
     {#if eyes?.others}
       {@const faded = eyes.hidden.includes(eyes.others.id)}
@@ -108,7 +145,7 @@
       {@const open = isOpen(b.id, i)}
       {@const col = eyes ? eyes.color(b.id) : b.character ? solid(colorOf(b.color_index ?? 0).rgb) : null}
       {@const faded = !!eyes?.hidden.includes(b.id)}
-      {#if !eyes || col}
+      {#if (!eyes || col) && shows(b)}
       {#if b.show_wide && !data?.buckets[i - 1]?.show_wide}<div class="label wide">Whole show</div>{/if}
       <section class="bkt" class:faded aria-label={b.name}>
         <div class="bhrow">
@@ -121,7 +158,7 @@
         {#if eyes}{@render eye(b.id, b.name, faded)}{/if}
         </div>
         {#if open}
-          {#each b.kept as s (s.id)}
+          {#each keptOf(b) as s (s.id)}
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions (dragging is the mouse's; D82) -->
             <div class="srow kept" class:used={eyes?.used.has(s.id)} style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} role="listitem" onmousedown={(e) => grab(e, { kind: 'bucket', bucket_id: b.id, asset_id: s.id, name: s.name, duration_s: s.duration_s })} data-testid={b.character ? 'vocal-sound' : 'bucket-sound'}>
               <span class="grip"><Icon name="grip" /></span>
@@ -131,7 +168,7 @@
               <span class="muted tn d">{len(s.duration_s)}</span>
             </div>
           {/each}
-          {#each b.previews.slice(0, 6) as p (p.remote_id)}
+          {#each previewsOf(b).slice(0, 6) as p (p.remote_id)}
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions (dragging is the mouse's; D82) -->
             <div class="srow" role="listitem" onmousedown={(e) => grab(e, { kind: 'bucket', bucket_id: b.id, remote_id: p.remote_id, name: p.title, duration_s: p.duration_s })} data-testid="bucket-preview">
               <span class="grip"><Icon name="grip" /></span>
@@ -148,6 +185,23 @@
     {:else}
       <p class="muted note">No buckets for this scene. Open the full bucket (⇧B) to spot the script or start one.</p>
     {/each}
+    {#if further.length}
+      <section class="bkt" aria-label="In the library">
+        <span class="bn">In the library</span>
+        {#each further as a (a.id)}
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions (dragging is the mouse's; D82) -->
+          <div class="srow" role="listitem" onmousedown={(e) => grab(e, { kind: 'bucket', asset_id: a.id, name: nameOf(a), duration_s: a.duration_s })} data-testid="library-sound">
+            <span class="grip"><Icon name="grip" /></span>
+            <button class="play ring" aria-label="Play {nameOf(a)}" onmousedown={(e) => e.preventDefault()} onclick={() => app.toggleSound({ asset_id: a.id }, { name: nameOf(a), duration_s: a.duration_s, peaks: [] })}><Icon name={app.previewing(a.id) ? 'stop' : 'play'} size={10} /></button>
+            <div class="mid"><span class="ellip nm4">{nameOf(a)}</span><span class="muted ellip cat">{a.category}</span></div>
+            <span></span>
+            <span class="muted tn d">{len(a.duration_s)}</span>
+          </div>
+        {/each}
+      </section>
+    {:else if words.length && !data?.buckets.some(shows)}
+      <p class="muted note">No sound by that name.</p>
+    {/if}
   </div>
   {#if !off}<PreviewPlayer />{/if}
 </aside>
@@ -314,6 +368,14 @@
   }
   .srow.kept {
     background: rgb(var(--sfx-rgb) / 0.1);
+  }
+  .find {
+    flex: none;
+    height: 32px;
+    font-size: 12.5px;
+  }
+  .cat {
+    font-size: 10.5px;
   }
   .lp {
     height: 20px;

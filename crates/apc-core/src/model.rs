@@ -331,8 +331,18 @@ pub struct Character {
     /// The writers' notes on the character (Throughline), newest import wins.
     #[serde(default)]
     pub profile: CharacterProfile,
+    /// How much of the scene's room the voice takes, 0 dry … 1 (D90).
+    #[serde(default = "default_voice_wet")]
+    pub wet: f64,
 }
 entity!(Character, Character);
+
+/// A little: the voice stays close and whole, and sits in the same space as its sounds.
+pub const DEFAULT_VOICE_WET: f64 = 0.25;
+
+fn default_voice_wet() -> f64 {
+    DEFAULT_VOICE_WET
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, schemars::JsonSchema)]
 #[serde(default)]

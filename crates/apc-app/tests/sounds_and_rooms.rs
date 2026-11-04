@@ -299,17 +299,44 @@ fn room_settings_are_set_per_scene_and_are_heard() {
 }
 
 #[test]
-fn a_scene_with_no_sound_bounces_as_it_always_did() {
+fn a_voice_takes_the_room_only_as_far_as_its_wet_says() {
     env();
     let dir = tempfile::tempdir().unwrap();
     let (mut svc, _) = episode(dir.path());
+    let cast = svc.call("voice_rooms", &json!({})).unwrap();
+    let wet = |svc: &mut Service, wet: f64| {
+        for c in cast.as_array().unwrap() {
+            svc.call(
+                "set_character_wet",
+                &json!({ "character": c["id"], "wet": wet }),
+            )
+            .unwrap();
+        }
+    };
+    assert_eq!(cast[0]["wet"], 0.25, "a little, from the start");
+
+    // dry voices are the recording as it was, whatever the room
+    wet(&mut svc, 0.0);
     let plain = bounce(&mut svc);
     svc.call(
         "set_scene_room",
         &json!({ "scene": "1", "size": 1.0, "wet": 1.0 }),
     )
     .unwrap();
-    assert_eq!(bounce(&mut svc), plain, "dialogue never touches the room");
+    assert_eq!(
+        bounce(&mut svc),
+        plain,
+        "a dry voice never touches the room"
+    );
+
+    wet(&mut svc, 0.25);
+    assert_ne!(bounce(&mut svc), plain, "heard");
+    svc.call("undo", &json!({})).unwrap();
+    let r = svc.call(
+        "set_character_wet",
+        &json!({ "character": "nobody", "wet": 0.5 }),
+    );
+    assert!(r.is_err());
 }
 
 #[test]

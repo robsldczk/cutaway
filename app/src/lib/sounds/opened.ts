@@ -161,7 +161,7 @@ export function reshapeCommands(part: Part, s: OpenState, r: Reshaped, keep = fa
   if (part === 'in') {
     if (!changed(r.at, s.start_s)) return [];
     const trim: Cmd = { cmd: 'trim_placement', placement_id, edge: 'start', delta_s: ms(r.at - s.start_s) };
-    return r.target ? [trim, { cmd: 'move_sound', placement_id, anchor: r.target.anchor, offset_s: 0 }] : [trim];
+    return r.target ? [trim, { cmd: 'move_sound', placement_id, anchor: r.target.anchor, offset_s: r.target.offset_s ?? 0 }] : [trim];
   }
   if (part === 'out') {
     const delta = r.at - (s.start_s + s.len_s);

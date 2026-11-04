@@ -52,8 +52,8 @@ test('import › sounds: a room stays with its scene', async ({ page }) => {
   await openRooms(page);
   const rows = page.getByTestId('scene-room');
   test.skip((await rows.count()) < 2, 'the demo session has one scene');
-  const wet1 = page.getByRole('slider', { name: 'Wet of scene 1' });
-  const wet2 = page.getByRole('slider', { name: 'Wet of scene 2' });
+  const wet1 = page.getByRole('slider', { name: 'Damping of scene 1' });
+  const wet2 = page.getByRole('slider', { name: 'Damping of scene 2' });
   const other = await wet2.inputValue();
   await setSlider(wet1, 0.2);
   await expect(wet1).toHaveValue('0.2');
@@ -64,7 +64,7 @@ test('import › sounds: a room stays with its scene', async ({ page }) => {
 
 test('import › sounds: arrow keys on a room slider stay on the slider', async ({ page }) => {
   await openRooms(page);
-  const wet = page.getByRole('slider', { name: 'Wet of scene 1' });
+  const wet = page.getByRole('slider', { name: 'Damping of scene 1' });
   const start = +(await wet.inputValue());
   await wet.focus();
   await page.keyboard.press('ArrowRight');
@@ -117,5 +117,33 @@ test('room tone: a scene picks a sound marked Loop, sets its level, and can drop
   await expect.poll(async () => (await rows())[0].tone).toBeNull();
   await expect(level).toHaveCount(0);
   await rpc('delete_bucket', { bucket_id, confirm: true });
+});
+
+test('room mix: wet lives in the Dev tab, for scenes and voices, one undo step each', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('current-box')).toBeVisible();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const dev = page.getByTestId('dev-switch');
+  if (!(await dev.isChecked())) await dev.check();
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Dev', exact: true }).click();
+  await page.getByRole('tab', { name: 'Room mix' }).click();
+
+  const wet = page.getByRole('slider', { name: 'Wet of scene 1' });
+  await setSlider(wet, 0.3);
+  await expect(wet).toHaveValue('0.3');
+  const voices = page.getByTestId('voice-wet');
+  await expect(voices.first()).toBeVisible();
+  await expect(voices.first().getByRole('slider')).toHaveValue('0.25');
+  await setSlider(voices.first().getByRole('slider'), 0.5);
+  await expect(voices.first().getByRole('slider')).toHaveValue('0.5');
+  await voices.first().getByRole('slider').focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(voices.first().getByRole('slider')).toHaveValue('0.25');
+
+  // and it's gone from Import › Sounds
+  await openRooms(page);
+  await expect(page.getByRole('slider', { name: 'Wet of scene 1' })).toHaveCount(0);
+  await expect(page.getByRole('slider', { name: 'Size of scene 1' })).toBeVisible();
 });
 

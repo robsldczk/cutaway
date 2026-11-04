@@ -16,13 +16,13 @@
   import { arc, circle, focusBody, focusFade, linePath, panLine, restOfSource, ringPoint, spinePaths } from '../lib/sounds/paths';
   import { announce, autoFadeOut, ballsInBand, bandSelect, clickSelect, dbOfRing, dbText, depthCommands, GAIN_MAX_DB, GAIN_MIN_DB, gainCommands, groupDelta, moveCommands, normRect, oneStep, panCommands, panText, pressSelect, removeCommands, ringAt, ringOf, timeDrag, toggleHidden, zone, type Cmd, type Rect, type SoundState } from '../lib/sounds/select';
   import { settledOf, Settler, snapshot, withFresh } from '../lib/sounds/settle';
-  import { nearestTarget, snapTargets, startLabel, type SnapTarget } from '../lib/sounds/snap';
+  import { actionTargets, nearestTarget, snapTargets, startLabel, type ActionRow, type SnapTarget } from '../lib/sounds/snap';
   import type { TimeMap } from '../lib/sounds/timemap';
   import type { Bucket, BucketsView, DragSound, ItemView, Job, PlacementView } from '../lib/types';
   import OpenedSound from './OpenedSound.svelte';
   import SceneBucket from './SceneBucket.svelte';
 
-  let { map, spineX, off, slide, on, lines }: { map: TimeMap; spineX: number; off: number; slide: string; on: boolean; lines: ItemView[] } = $props();
+  let { map, spineX, off, slide, on, lines, actions = [] }: { actions?: ActionRow[]; map: TimeMap; spineX: number; off: number; slide: string; on: boolean; lines: ItemView[] } = $props();
 
   const OTHER = 'other';
   const TONES = 6;
@@ -97,7 +97,7 @@
   const rightEdge = $derived(stageW - (panelShown ? 400 : 28));
   const field = $derived<Field>({ x0: spineX + 126, width: Math.max(120, rightEdge - spineX - 214), y: (t) => map.y(t) });
   const laneX = (l: number) => spineX + 22 + l * 5;
-  const targets = $derived(snapTargets(lines));
+  const targets = $derived([...snapTargets(lines), ...actionTargets(actions, map)].sort((a, b) => a.t - b.t));
   const spine = $derived([...spinePaths(lines, map, spineX)].map(([who, d]) => ({ who, d, fill: rgba(charColor(app.view, who).rgb, 0.95) })));
   const sceneEnd = $derived(app.view?.duration_s ?? 0);
 
@@ -845,7 +845,7 @@
   }
 
   onMount(() => {
-    app.soundsUi = { key: onKey, wheel: onWheel, dropFiles };
+    app.soundsUi = { key: onKey, wheel: onWheel, dropFiles, dropOnAction };
     return () => {
       app.soundsUi = null;
       app.soundOpen = null;
@@ -864,7 +864,7 @@
     const p = point(e);
     if (p.x < spineX - 20 || p.x > rightEdge) return null;
     const t = Math.max(0, map.t(p.y));
-    const target = nearestTarget(targets, t, map);
+    const target = nearestTarget(targets, t, map, undefined, p.y);
     return { p, t: target?.t ?? t, target };
   }
 
@@ -891,6 +891,12 @@
     if (at) void place(at, s);
   }
 
+  /** A sound dropped on an action line in the column: it hangs on that action. */
+  function dropOnAction(line_id: string, s: DragSound) {
+    const target = targets.find((x) => x.anchor.line_id === line_id);
+    if (target) void place({ p: { x: (spineX + rightEdge) / 2, y: map.y(target.t) }, t: target.t, target }, s);
+  }
+
   /** Audio dragged in from the Finder: into the library, and placed if it landed by a line.
    *  It's a sound here, never a recording. */
   async function dropFiles(paths: string[], x: number, y: number) {
@@ -903,7 +909,7 @@
   }
 
   async function place(at: NonNullable<ReturnType<typeof dropSpot>>, sound: DragSound) {
-    const where = at.target ? { anchor_line_id: at.target.anchor.line_id, anchor_word: at.target.anchor.word, anchor_edge: at.target.anchor.edge } : { at_s: +at.t.toFixed(3) };
+    const where = at.target ? { anchor_line_id: at.target.anchor.line_id, anchor_word: at.target.anchor.word, anchor_edge: at.target.anchor.edge, offset_s: at.target.offset_s ?? 0 } : { at_s: +at.t.toFixed(3) };
     const params = { scene: app.sceneId, bucket_id: sound.bucket_id, asset_id: sound.asset_id, remote_id: sound.remote_id, depth: +depthAt(at.p.x, field).toFixed(3), ...where };
     let id: string | undefined;
     if (sound.asset_id) {

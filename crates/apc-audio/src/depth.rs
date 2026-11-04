@@ -12,6 +12,19 @@ const SEND_FAR_DB: f64 = 4.0;
 pub const LOWPASS_OPEN_HZ: f64 = 20_000.0;
 const LOWPASS_FAR_HZ: f64 = 3_000.0;
 
+/// A voice's send to its scene's room at the bottom and top of its wet setting.
+const VOICE_SEND_MIN_DB: f64 = -30.0;
+const VOICE_SEND_MAX_DB: f64 = -6.0;
+
+/// A voice's send to the room (linear) for its wet setting, 0 … 1. Only the send: a voice stays
+/// at full level and full brightness, however much room it takes.
+pub fn voice_send(wet: f64) -> f64 {
+    if !wet.is_finite() || wet <= 0.0 {
+        return 0.0;
+    }
+    gain(VOICE_SEND_MIN_DB + (VOICE_SEND_MAX_DB - VOICE_SEND_MIN_DB) * wet.min(1.0))
+}
+
 /// What a depth does to a sound.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DepthMix {
@@ -46,6 +59,14 @@ pub fn depth_mix(depth: f64) -> DepthMix {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_voice_takes_less_of_the_room_than_a_close_sound_by_default() {
+        assert_eq!(voice_send(0.0), 0.0, "dry is dry");
+        let a_little = voice_send(0.25);
+        assert!(a_little > 0.0 && a_little < depth_mix(0.0).send_gain);
+        assert!(voice_send(1.0) > a_little);
+    }
 
     #[test]
     fn close_is_the_sound_as_it_is() {

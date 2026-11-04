@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { dropzone, type DropZone } from '../lib/drag.svelte';
+  import type { ActionRow } from '../lib/sounds/snap';
   import ClipState from '../components/ClipState.svelte';
   import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
@@ -25,7 +27,7 @@
     it: ItemView;
     j: number;
     gapAfter: number | null; // pause before the next line
-    acts: string[]; // action lines in that pause
+    acts: ItemView[]; // action lines in that pause
     next: ItemView | null;
   }
 
@@ -36,16 +38,49 @@
     const lines = v.items.filter((i) => i.kind === 'line');
     lines.forEach((it, j) => {
       const next = lines[j + 1] ?? null;
-      const acts: string[] = [];
+      const acts: ItemView[] = [];
       if (next) {
         const a = v.items.indexOf(it);
         const b = v.items.indexOf(next);
-        for (const x of v.items.slice(a + 1, b)) if (x.kind === 'spacer') acts.push(x.text);
+        for (const x of v.items.slice(a + 1, b)) if (x.kind === 'spacer') acts.push(x);
       }
       out.push({ it, j, gapAfter: next ? next.gap_before_s : null, acts, next });
     });
     return out;
   });
+
+  // actions before the first line and after the last have no pause to sit in
+  const lineItems = $derived((app.view?.items ?? []).filter((i) => i.kind === 'line'));
+  const head = $derived.by(() => {
+    const items = app.view?.items ?? [];
+    const first = lineItems[0];
+    return (first ? items.slice(0, items.indexOf(first)) : items).filter((i) => i.kind === 'spacer');
+  });
+  const tail = $derived.by(() => {
+    const items = app.view?.items ?? [];
+    const last = lineItems[lineItems.length - 1];
+    return last ? items.slice(items.indexOf(last) + 1).filter((i) => i.kind === 'spacer') : [];
+  });
+  let actEls: Record<string, HTMLDivElement> = $state({});
+  let actionRows = $state.raw<ActionRow[]>([]);
+  let dropOn = $state<string | null>(null);
+
+  /** Sounds hanging on an action. */
+  const tagsOf = (a: ItemView) => (on ? (app.edit?.placements ?? []).filter((p) => p.anchor?.line_id === a.line_id) : []);
+
+  const actionZone = (a: ItemView): DropZone<'bucket'> | null =>
+    on
+      ? {
+          takes: 'bucket',
+          over: () => {
+            dropOn = a.line_id;
+          },
+          leave: () => {
+            dropOn = null;
+          },
+          drop: (_, s) => app.soundsUi?.dropOnAction(a.line_id, s),
+        }
+      : null;
 
   // local previews while dragging; committed on mouse up
   let gapPreview = $state<{ id: string; g: number } | null>(null);
@@ -64,6 +99,10 @@
     void app.view;
     void sc;
     void gapPreview;
+    // action text wraps to the column's width, so it's measured once that has settled
+    void stageW;
+    void moving;
+    void on;
     void tick().then(() => {
       const next: RowBox[] = [];
       for (const r of rows) {
@@ -71,6 +110,13 @@
         if (el) next.push({ start_s: r.it.start_s, end_s: r.it.end_s, top: el.offsetTop, height: el.offsetHeight });
       }
       boxes = next;
+      // the column takes its first place at once: there's nothing to glide from
+      requestAnimationFrame(() => requestAnimationFrame(() => (placed = true)));
+      const measure = (a: ItemView, until: number) => {
+        const el = actEls[a.line_id];
+        return el ? [{ line_id: a.line_id, text: a.text, start_s: a.start_s, until, y: el.offsetTop + el.offsetHeight / 2, height: el.offsetHeight }] : [];
+      };
+      actionRows = [...head.flatMap((a) => measure(a, lineItems[0]?.start_s ?? a.start_s)), ...rows.flatMap((r) => r.acts.flatMap((a) => measure(a, r.next?.start_s ?? a.start_s))), ...tail.flatMap((a) => measure(a, a.start_s))];
     });
   });
 
@@ -98,6 +144,7 @@
   let stageW = $state(window.innerWidth);
   const plainW = $derived(Math.min(Math.round(600 * sc), stageW * 0.86));
   let moving = $state(false);
+  let placed = $state(false);
   let moveTimer: ReturnType<typeof setTimeout> | undefined;
   let wasOn: boolean | null = null;
   $effect(() => {
@@ -111,7 +158,7 @@
   });
 
   /** While the playhead runs the column follows it closely; a jump glides; the toggle is one move. */
-  const slide = $derived(drag ? 'none' : moving ? 'transform var(--dur-move) var(--ease-move)' : on && app.playing ? 'transform .1s linear' : 'transform .3s var(--ease-out)');
+  const slide = $derived(drag || !placed ? 'none' : moving ? 'transform var(--dur-move) var(--ease-move)' : on && app.playing ? 'transform .1s linear' : 'transform .3s var(--ease-out)');
 
   function takeOf(it: ItemView) {
     return it.takes[it.take_index ?? 0];
@@ -334,8 +381,17 @@
   }
 </script>
 
+{#snippet action(a: ItemView)}
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the playhead's keys reach it too) -->
+  <div class="act" class:over={dropOn === a.line_id} bind:this={actEls[a.line_id]} use:dropzone={actionZone(a)} onclick={() => on && app.scrubTo(a.start_s)} data-testid="action-row" title={on ? 'Drop a sound here to tag it to this action' : undefined}>
+    <span class="script atext">{a.text}</span>
+    {#each tagsOf(a) as p (p.id)}<span class="tag ellip" data-testid="action-tag">{p.name}</span>{/each}
+  </div>
+{/snippet}
+
 <div class="col" class:masked={on} bind:clientWidth={stageW}>
 <div class="arr" style="left: {on ? COLUMN_LEFT : (stageW - plainW) / 2}px; width: {on ? columnW : plainW}px; transform: translateY({(-off).toFixed(1)}px); transition: {slide}{moving ? ', left var(--dur-move) var(--ease-move), width var(--dur-move) var(--ease-move)' : ''}">
+  {#each head as a (a.line_id)}{@render action(a)}{/each}
   {#each rows as r, i (r.it.line_id)}
     {@const t = takeOf(r.it)}
     {@const tr = trims(r.it)}
@@ -344,7 +400,7 @@
     {@const h = fx(r.it, tr.a)}
     {@const tl = fx(r.it, tr.z)}
     {@const shd = itemShade(app.view, r.it)}
-    {@const prevGap = i > 0 ? gapOf(rows[i - 1]) : 0}
+    {@const prevGap = i > 0 && !rows[i - 1].acts.length ? gapOf(rows[i - 1]) : 0}
     <div class="snip" class:clip-muted={r.it.muted} class:clip-dropped={r.it.dropped} bind:this={rowEls[r.it.line_id]} style={rowStyle(r, prevGap)} onclick={() => app.select(r.it.line_id)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} role="button" tabindex="-1" onkeydown={() => {}} data-testid="arrange-row">
       <div class="top">
         <span class="grip" onmousedown={(e) => grabRow(e, r.it)} title="Drag to reorder" aria-label="Drag to reorder" role="button" tabindex="-1">
@@ -382,16 +438,17 @@
         <div class="gapline"></div>
         <div class="gappill" style="color: {g < 0 ? 'var(--overlap)' : 'rgb(var(--ink-rgb) / 0.78)'}">
           <span class="num">{gapLabel(g)}</span>
-          {#if r.acts.length}<span class="script ellip actx">{r.acts.join(' ')}</span>{/if}
         </div>
       </div>
+      {#each r.acts as a (a.line_id)}{@render action(a)}{/each}
     {/if}
   {/each}
+  {#each tail as a (a.line_id)}{@render action(a)}{/each}
   {#if dropY != null}<div class="drop" style="top: {dropY}px"></div>{/if}
 </div>
 </div>
 {#if !on}<div class="side tchip" style="left: calc(50% - {Math.round(300 * sc)}px - 24px)">{fmt(app.pos)}</div>{/if}
-<SoundsLayer {map} {spineX} {off} {slide} {on} lines={app.lines} />
+<SoundsLayer {map} {spineX} {off} {slide} {on} lines={app.lines} actions={actionRows} />
 
 <style>
   .col {
@@ -551,9 +608,39 @@
     font-variant-numeric: tabular-nums;
     font-weight: 600;
   }
-  .actx {
-    max-width: 320px;
-    color: var(--text-4);
+  /* the script's stage directions, between the cards: what a sound gets tagged to */
+  .act {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    margin: 4px 14px;
+    padding: 5px 10px;
+    border-radius: 8px;
+    border-left: 2px solid rgb(var(--ink-rgb) / 0.22);
+    color: var(--text-3);
+    transition:
+      background var(--dur-fast),
+      color var(--dur-fast);
+  }
+  .act.over {
+    color: var(--text-strong);
+    background: rgb(var(--sfx-rgb) / 0.14);
+    border-left-color: var(--sfx);
+  }
+  .atext {
+    flex: 1 1 100%;
+    font-size: var(--fs-small);
+    line-height: 1.4;
+  }
+  .tag {
+    max-width: 100%;
+    padding: 1px 8px;
+    border-radius: var(--radius-pill);
+    font-size: 10.5px;
+    color: var(--on-sfx);
+    background: var(--sfx);
   }
   .drop {
     position: absolute;

@@ -278,6 +278,19 @@ pub struct ToneView {
 /// Where a scene's room tone starts, the level a location's starts at too.
 const DEFAULT_TONE_DB: f64 = -6.0;
 
+/// The cast with their wet settings, in cast order.
+pub fn voices(svc: &mut Service) -> Result<Value> {
+    svc.bus.refresh()?;
+    let mut cast: Vec<&Character> = svc.doc().characters.values().collect();
+    cast.sort_by_key(|c| c.color_index);
+    Ok(serde_json::json!(cast
+        .iter()
+        .map(|c| serde_json::json!({
+            "id": c.id, "label": c.label, "color_index": c.color_index, "wet": c.wet,
+        }))
+        .collect::<Vec<_>>()))
+}
+
 /// Sets a scene's room tone from a library sound, which joins the episode for it.
 pub fn set_tone(svc: &mut Service, p: SceneToneP) -> Result<Value> {
     let scene = svc

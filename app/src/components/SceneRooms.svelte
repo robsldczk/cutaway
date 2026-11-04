@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Import › Sounds: each scene's room. All sounds of a scene play in it, so they sit in the
+  // Import › Sounds: each scene's room (its wet is in Dev › Room mix). All sounds of a scene play in it, so they sit in the
   // same space; a sound's depth says how far back. A slider previews here and sends one
   // command on release (one undo step), holding its value until the document has it.
   // Each scene also picks the room tone that loops under it, from the sounds marked Loop.
@@ -11,7 +11,6 @@
   const CONTROLS: { key: keyof SceneRoom; label: string; low: string; high: string }[] = [
     { key: 'size', label: 'Size', low: 'Small', high: 'Large' },
     { key: 'damping', label: 'Damping', low: 'Bright', high: 'Dark' },
-    { key: 'wet', label: 'Wet', low: 'Dry', high: 'Full' },
   ];
 
   let { buckets = [] }: { buckets?: Bucket[] } = $props();
@@ -152,7 +151,7 @@
   }
   .row {
     display: grid;
-    grid-template-columns: minmax(150px, 1.2fr) repeat(3, minmax(100px, 1fr)) minmax(200px, 1.6fr);
+    grid-template-columns: minmax(150px, 1.2fr) repeat(2, minmax(120px, 1fr)) minmax(240px, 1.6fr);
     gap: 18px;
     align-items: center;
     padding: 6px 8px;

@@ -340,6 +340,11 @@ pub enum Command {
         scene_id: String,
         room: SceneRoom,
     },
+    /// How much of the scene's room a character's voice takes.
+    SetCharacterWet {
+        character_id: String,
+        wet: f64,
+    },
     /// The room tone looping under a scene; `None` falls back on its location's.
     SetSceneTone {
         scene_id: String,
@@ -455,6 +460,7 @@ impl Command {
             Command::SetSoundDepth { .. } => "set_sound_depth",
             Command::SlipSound { .. } => "slip_sound",
             Command::SetSceneRoom { .. } => "set_scene_room",
+            Command::SetCharacterWet { .. } => "set_character_wet",
             Command::SetSceneTone { .. } => "set_scene_tone",
             Command::PutBucket { .. } => "put_bucket",
             Command::DeleteBucket { .. } => "delete_bucket",
@@ -1120,6 +1126,9 @@ impl Command {
             } => sounds::set_depth(tx, placement_id, *depth),
             Command::SlipSound { placement_id, in_s } => sounds::slip(tx, placement_id, *in_s),
             Command::SetSceneRoom { scene_id, room } => sounds::set_room(tx, scene_id, room),
+            Command::SetCharacterWet { character_id, wet } => {
+                sounds::set_voice_wet(tx, character_id, *wet)
+            }
             Command::SetSceneTone { scene_id, tone } => sounds::set_tone(tx, scene_id, tone),
             Command::PutBucket { bucket } => {
                 let mut b = bucket.clone();

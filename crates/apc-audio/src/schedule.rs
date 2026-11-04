@@ -43,7 +43,7 @@ pub struct ScheduledClip {
     pub linear_fade: bool,
     /// Line or placement this clip belongs to.
     pub owner: String,
-    /// In the scene's room; `None` plays dry (dialogue, music, room tone).
+    /// In the scene's room; `None` plays dry (music, room tone, a take auditioned alone).
     #[serde(default)]
     pub space: Option<ClipSpace>,
 }
@@ -122,6 +122,16 @@ pub fn apply_lane_mix(doc: &Document, clips: &mut Vec<ScheduledClip>) {
     }
 }
 
+/// A voice in its scene's room: the direct sound untouched, plus the character's send.
+fn voice_space(doc: &Document, character: Option<&str>) -> Option<ClipSpace> {
+    let send_gain = crate::depth::voice_send(doc.characters.get(character?)?.wet);
+    (send_gain > 0.0).then_some(ClipSpace {
+        dry_gain: 1.0,
+        send_gain,
+        lowpass_hz: crate::depth::LOWPASS_OPEN_HZ,
+    })
+}
+
 impl PlaySchedule {
     pub fn from_scene(
         doc: &Document,
@@ -168,7 +178,7 @@ impl PlaySchedule {
                     pan: 0.0,
                     linear_fade: false,
                     owner: item.item_id.clone(),
-                    space: None,
+                    space: voice_space(doc, item.character.as_deref()),
                 });
             }
         }
@@ -184,14 +194,19 @@ impl PlaySchedule {
                 .filter(|p| p.scene_id == scene.id && !p.muted)
             {
                 let start = placement_start(layout, p);
-                let space = p.in_room().then(|| {
+                let space = if p.in_room() {
                     let m = depth_mix(p.depth);
-                    ClipSpace {
+                    Some(ClipSpace {
                         dry_gain: m.dry_gain,
                         send_gain: m.send_gain,
                         lowpass_hz: m.lowpass_hz,
-                    }
-                });
+                    })
+                } else if p.lane == Lane::Dialogue {
+                    // an actor's breath sits in the room with their lines
+                    voice_space(doc, p.character.as_deref())
+                } else {
+                    None
+                };
                 // a loop repeats the file from its in point, for as long as it's set to
                 let file_end = doc
                     .assets

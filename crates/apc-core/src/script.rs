@@ -379,6 +379,7 @@ pub fn apply_version(
                 aliases: Vec::new(),
                 color_index: next_color,
                 profile: Default::default(),
+                wet: crate::model::DEFAULT_VOICE_WET,
             })?;
             next_color += 1;
         }

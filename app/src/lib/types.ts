@@ -301,6 +301,14 @@ export interface RoomRow {
   sounds: number;
 }
 
+/** A character's voice in the room. */
+export interface VoiceRoom {
+  id: string;
+  label: string;
+  color_index: number;
+  wet: number;
+}
+
 export interface PlacementView {
   id: string;
   asset_id: string;

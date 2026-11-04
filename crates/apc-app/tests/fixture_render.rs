@@ -50,7 +50,10 @@ fn tarmac_s1_render_length_and_exports() {
         len,
         wav.display()
     );
-    assert!((len - layout.duration_s).abs() <= 0.010);
+    // the voices are in the room, so it rings on a little past the last line
+    let tail = apc_audio::RoomShape::new(s1.room.size, s1.room.damping, s1.room.wet).tail_s();
+    assert!(len >= layout.duration_s - 0.010);
+    assert!(len <= layout.duration_s + tail + 0.010);
 
     for (m, p) in [
         ("export_fcpxml", json!({})),
