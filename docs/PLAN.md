@@ -656,6 +656,15 @@ Decisions: D101.
 - [x] A drop cuts the stretch into the character's vocals and places it, in one undo step.
 - [x] Tests, docs, RUN notes.
 
+### Adlibs have their own track (Rob, 2026-11-04)
+
+Decisions: D102.
+
+- [x] `Lane::Adlib`: one track, in layers, through the room, in the schedule and both exports.
+- [x] Every drop of a character's vocal lands there, whatever lane it came in on.
+- [x] Arrange: vocal buckets in the panel, adlibs as balls. Edit: an Adlibs lane.
+- [x] Tests, docs, RUN notes.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -721,3 +730,4 @@ Decisions: D101.
 - 2026-11-04 Rooms tab, smooth ambience, directions on the timeline, sorting drops (D92–D96). Ambience leaves the SFX buckets for Import › Rooms, one per room. Loops turn around from 85 % to 45 % on a crossfade of up to 3 s. Directions before the first line take time, so Episode 2's scenes grow. A Finder drop opens a sheet with the bucket guessed by name: Enter files it and places it. Same locations share a room and its ambience (D97), new ambience starts at −28 dB, and ambience has its own drop zones. The Cuts a word tag and the hints are gone. A real Finder drag and the loop by ear wait for Rob.
 - 2026-11-04 One name at a time (D100): the balls lost their labels; the selection's name sits in the middle of the transport.
 - 2026-11-04 Character search in the bucket (D101): "paul huh" finds where an actor's own mic heard it, clipped to the sound, with the edges to trim. A drop cuts it into their vocals and places it, one undo step. Tried on a copy of Episode 2; not listened to, and not driven in the desktop webview.
+- 2026-11-04 Adlibs have their own track (D102): any drop of a character's vocal goes on the Adlibs lane and shows as a ball on Arrange. Vocals already on dialogue lanes stay there.

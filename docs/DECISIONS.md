@@ -728,7 +728,20 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Not their voice:** left out if it's over 3 dB louder in another actor's mic of the session, or 18 dB under this mic's typical take level. The analysis's bleed margin is 10 dB; a grunt may be quieter than a line.
 - **The clip:** word times snapped to the speech like a take's edges, 80 ms before and 150 ms after, stopping at the words around it. 1.5 s of audio shows either side. The edges drag, or step with the arrow keys (10 ms, ⇧ 100 ms). Playing it uses the preview player, on the source itself: nothing is cut to listen.
 - **A drop** cuts the stretch into `Library/Vocals/<Character>/` as a `recorded` asset, keeps it in that character's vocal bucket, creating the bucket if needed, and places it, in one undo step (the file stays in the library, as an analysis's do). The same stretch again is the same sound. Source media isn't touched. It keeps its length, as vocals do (D85).
-- **Lanes:** it goes on the character's dialogue lane, or the lane it's dropped on on the Edit page. Dropped on Arrange, it's at that time on the dialogue lane, and a toast points to the Edit page: Arrange shows `sfx` and `ambience` only (D80s). Options: place it there as an effect so it shows as a ball, but then it leaves the actor's track in the mix and the export. For Rob to confirm.
+- **Lanes:** *replaced by D102.* It went on the character's dialogue lane, and a drop on Arrange didn't show there.
 - **Lengths** on a hit read to the hundredth: `len` rounds to whole seconds, and a grunt is under one.
 - **On Episode 2's transcripts** (a copy): "paul huh" gives 12, "paul grunt" 3, "paul breath" 332, the best 30 shown. Not listened to.
+
+### D102 Adlibs have their own track (Rob, 2026-11-04)
+- **Rob:** a character's adlib dragged out of a bucket is an adlib. It goes on an adlib track, and on Arrange it looks like a sound effect. It goes there and not somewhere else.
+- **`Lane::Adlib`:** one track for the whole cast, stacking in layers when adlibs overlap, as SFX does (`adlib1`, `adlib2` in the mixer). `Placement::character` keeps whose voice it is. It replaces the dialogue lane as a vocal's home (the placement part of the vocals decision) and D80's "vocal sounds stay on the Edit page".
+- **What counts as an adlib:** a sound kept in a character's vocal bucket, or a clip from the character search (D101).
+- **Always there:** the lane a drop came in on is ignored, on the Edit page too. A dialogue or SFX lane doesn't take an adlib, and the Adlibs lane lights up while one is over any lane. The Adlibs lane takes nothing else.
+- **On Arrange:** the vocal buckets are in the panel, after the scene's effects and before the whole show's, with their own colour and eye. Colours go to the effects first, so these don't shift. A dropped adlib is a ball like any sound: depth, pan, fades, anchors, one undo step.
+- **In the room:** an adlib plays through the scene's room like an effect, so a ball's depth means something. That's also what "like a sound effect" gives. `Character.wet` doesn't apply to it.
+- **Length and fades:** it keeps its length (D85) and its short vocal fades. Loop doesn't apply.
+- **On the Edit page:** an Adlibs group between Dialogue and Sound effects, always shown, with each clip in its character's colour.
+- **Export:** FCPXML has `ADLIB 1` … as lanes of their own, with the role `dialogue.Adlibs`. They're no longer on the actor's track. Options: a track per character, closer to the old export; Rob asked for an adlib track.
+- **Vocals already on a dialogue lane stay there.** Nothing moves by itself. They keep working as before, and don't show on Arrange.
+- **The file:** a project with an adlib in it needs this build or later. An older one can't read the lane.
 
