@@ -310,23 +310,51 @@ test('loop: a long sound with Loop on drops as ambience, and is cropped with it 
   await rpc('bucket_remove', { bucket_id: bucket, asset_id: long });
 });
 
-test('the Sounds toggle eases: nothing in the layer overshoots', async ({ page }) => {
+test('the Sounds toggle is one even move: nothing goes past where it is going', async ({ page }) => {
   await place(1, 0.5);
   await open(page);
   await expect(page.getByTestId('sound-ball')).toHaveCount(1);
-  await page.keyboard.press('s');
-  await page.waitForTimeout(60);
-  const off = await page.getByTestId('sound-ball').evaluate((e) => getComputedStyle(e).transitionTimingFunction);
-  await page.waitForTimeout(700);
-  await page.keyboard.press('s');
-  await page.waitForTimeout(60);
-  const on = await page.getByTestId('sound-ball').evaluate((e) => getComputedStyle(e).transitionTimingFunction);
-  for (const t of [off, on]) {
-    for (const m of t.matchAll(/cubic-bezier\(([^)]+)\)/g)) {
-      const [, y1, , y2] = m[1].split(',').map(Number);
-      expect(Math.max(y1, y2), t).toBeLessThanOrEqual(1);
+  await page.waitForTimeout(1000);
+  for (let i = 0; i < 4; i++) {
+    // every frame of the move, measured: two motions can each ease and still add up to a swing
+    const paths = await page.evaluate(
+      () =>
+        new Promise<Record<string, number[]>>((done) => {
+          const row = document.querySelector('[data-testid="arrange-row"]')!;
+          const panel = document.querySelector('aside.panel')!;
+          const out: Record<string, number[]> = { left: [], top: [], width: [], panel: [] };
+          const t0 = performance.now();
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }));
+          const frame = () => {
+            const b = row.getBoundingClientRect();
+            out.left.push(b.left);
+            out.top.push(b.top);
+            out.width.push(b.width);
+            out.panel.push(panel.getBoundingClientRect().left);
+            if (performance.now() - t0 < 1000) requestAnimationFrame(frame);
+            else done(out);
+          };
+          requestAnimationFrame(frame);
+        }),
+    );
+    for (const [name, p] of Object.entries(paths)) {
+      const way = Math.sign(p[p.length - 1] - p[0]);
+      for (let k = 1; k < p.length; k++) expect((p[k] - p[k - 1]) * way, `${name} turned back at frame ${k}: ${p.join(' ')}`).toBeGreaterThanOrEqual(-0.5);
     }
+    expect(Math.abs(paths.left[0] - paths.left[paths.left.length - 1])).toBeGreaterThan(100);
+    await page.waitForTimeout(300);
   }
+});
+
+test('no easing in the app overshoots', () => {
+  const files = readdirSync('src', { recursive: true, encoding: 'utf8' }).filter((f) => /\.(svelte|css|ts)$/.test(f));
+  const over: string[] = [];
+  for (const f of files)
+    for (const m of readFileSync(join('src', f), 'utf8').matchAll(/cubic-bezier\(([^)]+)\)/g)) {
+      const [, y1, , y2] = m[1].split(',').map(Number);
+      if (y1 > 1 || y2 > 1 || y1 < 0 || y2 < 0) over.push(`${f}: ${m[0]}`);
+    }
+  expect(over).toEqual([]);
 });
 
 test('play: ⇧ Space plays from the start of the selected sound, the first of several', async ({ page }) => {

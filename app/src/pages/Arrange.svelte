@@ -92,8 +92,26 @@
     off = map.y(app.pos);
   });
 
-  /** While the playhead runs the column follows it closely; a jump glides. */
-  const slide = $derived(drag ? 'none' : on && app.playing ? 'transform .1s linear' : 'transform .3s var(--ease-out)');
+  // The column moves between its two places as one thing: `left` and `width`, in pixels, on one
+  // curve. A centring translate on its own timing adds up with `left` and swings the column
+  // far past where it's going (D89). Only the toggle animates this: a window resize doesn't.
+  let stageW = $state(window.innerWidth);
+  const plainW = $derived(Math.min(Math.round(600 * sc), stageW * 0.86));
+  let moving = $state(false);
+  let moveTimer: ReturnType<typeof setTimeout> | undefined;
+  let wasOn: boolean | null = null;
+  $effect(() => {
+    const now = on;
+    if (wasOn !== null && wasOn !== now) {
+      moving = true;
+      clearTimeout(moveTimer);
+      moveTimer = setTimeout(() => (moving = false), 800);
+    }
+    wasOn = now;
+  });
+
+  /** While the playhead runs the column follows it closely; a jump glides; the toggle is one move. */
+  const slide = $derived(drag ? 'none' : moving ? 'transform var(--dur-move) var(--ease-move)' : on && app.playing ? 'transform .1s linear' : 'transform .3s var(--ease-out)');
 
   function takeOf(it: ItemView) {
     return it.takes[it.take_index ?? 0];
@@ -316,8 +334,8 @@
   }
 </script>
 
-<div class="col" class:masked={on}>
-<div class="arr" style="left: {on ? `${COLUMN_LEFT}px` : '50%'}; width: {on ? `${columnW}px` : `min(${Math.round(600 * sc)}px, 86%)`}; transform: translate({on ? '0' : '-50%'}, -{off.toFixed(1)}px); transition: {slide}, left .85s cubic-bezier(.65,0,.35,1), width .85s cubic-bezier(.65,0,.35,1)">
+<div class="col" class:masked={on} bind:clientWidth={stageW}>
+<div class="arr" style="left: {on ? COLUMN_LEFT : (stageW - plainW) / 2}px; width: {on ? columnW : plainW}px; transform: translateY({(-off).toFixed(1)}px); transition: {slide}{moving ? ', left var(--dur-move) var(--ease-move), width var(--dur-move) var(--ease-move)' : ''}">
   {#each rows as r, i (r.it.line_id)}
     {@const t = takeOf(r.it)}
     {@const tr = trims(r.it)}

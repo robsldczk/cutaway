@@ -1261,15 +1261,15 @@
   .ball.stagger,
   .mer.stagger {
     transition:
-      transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) var(--dl),
-      opacity 0.5s cubic-bezier(0.33, 0, 0.2, 1) var(--dl),
+      transform var(--dur-move) var(--ease-move) var(--dl),
+      opacity 0.5s var(--ease-move) var(--dl),
       filter 0.3s;
   }
   .ball.out.stagger,
   .mer.out.stagger {
     transition:
-      transform 0.4s cubic-bezier(0.4, 0, 0.2, 1) var(--dl),
-      opacity 0.3s cubic-bezier(0.4, 0, 1, 1) var(--dl),
+      transform 0.5s var(--ease-move) var(--dl),
+      opacity 0.4s var(--ease-move) var(--dl),
       filter 0.3s;
   }
   .ball.pulse {
@@ -1281,11 +1281,11 @@
     }
   }
   .ball.pop {
-    animation: pop 0.75s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: pop 0.5s var(--ease-move);
   }
   @keyframes pop {
     from {
-      transform: scale(0.05);
+      transform: scale(0.82);
       opacity: 0;
     }
   }

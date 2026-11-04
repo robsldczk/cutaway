@@ -129,6 +129,9 @@
   --ease-scroll: cubic-bezier(0.22, 0.9, 0.25, 1);
   /* things finding their place (merge, split, settle): calm, no overshoot */
   --ease-settle: cubic-bezier(0.25, 0.8, 0.25, 1);
+  /* the Sounds toggle: everything on Arrange moves on this one curve, for this long */
+  --ease-move: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-move: 0.7s;
   --dur-flip: 0.45s;
   --dur-scroll: 0.34s;
   --dur-fast: 0.2s;

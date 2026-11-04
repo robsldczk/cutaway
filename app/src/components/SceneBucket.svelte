@@ -197,8 +197,8 @@
     top: 76px;
     bottom: 96px;
     transition:
-      transform 0.7s var(--ease-out) 0.1s,
-      opacity 0.5s ease 0.1s;
+      transform var(--dur-move) var(--ease-move),
+      opacity 0.5s var(--ease-move);
   }
   .panel.beside.off {
     transform: translateX(420px);
