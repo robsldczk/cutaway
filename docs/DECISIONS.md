@@ -527,3 +527,41 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Choice:** `set_sound_gain` clamps to −24 … +6, which is what the UI, CLI and MCP will use for Arrange. The Edit tool stays as it is: the codebase wins (handover §1), and narrowing it would quietly change what an existing control can do. A sound already outside the range keeps its value until a gain command touches it.
 - **For card B:** the loudness ring must cope with a value beyond its ends, as the Edit page can set one. For Rob to confirm, or to narrow Edit to match.
 
+### D78 The sounds layer on Arrange (2026-11-04)
+- **Spec:** `tasks/Bokeh · live prototype-html/audioplay-cutter-handover-arrange-sounds.md`, card B. The prototype's behaviour and timings are ported; where it conflicts with the app, the app won.
+- **Which sounds show:** the `sfx` and `ambience` lanes, the ones in the room (D76), so depth always means something on a ball. Music and vocal sounds stay on the Edit page. Vocal buckets are left out of the panel; a music file dropped here is placed on its lane, and a toast says it is on the Edit page. For Rob to confirm.
+- **Bucket of a sound:** the first bucket of the scene that keeps its asset. Colours come from six `--bucket-n-rgb` tokens (light and dark), by the bucket's place in the scene's list, so seven or more buckets repeat a colour. Sounds in no bucket are grey and gather under **Other sounds**, with their own eye.
+- **Ties in a group:** ids are random, so nothing recorded which of two sounds came first. `Placement::added` is a new counter, set when a sound is placed or split. Older sounds read 0 and fall back to their id, a stable order. No schema change: the field is read with a default.
+- **Keyboard (chosen to fit the existing map):**
+
+  | Key | With sounds selected | Otherwise |
+  |---|---|---|
+  | ← / → | Depth, 5 % a press | Previous / next take |
+  | ⌥← / ⌥→ | Pan, 5 % a press | Nothing |
+  | ⇧↑ / ⇧↓ | Loudness, 1 dB a press | Extend the passage |
+  | , / . | Move 100 ms (⇧ 10 ms), anchors kept | Shorter / longer pause |
+  | ⌫ | Remove | Nothing |
+  | Esc | Clear the selection | As before |
+  | Tab, Enter | Reach a ball, select it (⇧ Enter adds) | |
+  | S | Show or hide the layer, on Arrange | |
+  | B | Show or hide the panel, with the layer on | The bucket drawer |
+
+  Arrows keep their everyday meaning until a sound is selected, so reading and picking takes is undisturbed. Enter on a ball selects it for now; card C makes it open the sound.
+- **Bursts:** key repeats and ⇧ scroll don't end in a release, and reading the value back between presses would lose steps to commands still in flight. They preview locally and commit once, 350 ms after the last step, as one undo step. ⌘Z sends what is pending first.
+- **A move that doesn't snap frees the sound** (M7: "free time when nothing snaps"), for the grabbed ball. The others of a multi-move keep their anchor and take a new offset, so they stay on their lines. Keyboard moves keep every anchor. A group stops as a whole at the start of the scene, and a snap it can't reach is dropped.
+- **Pause targets** are the end of the word before the pause, not the middle of the pause as in the prototype: that is the anchor M7 can resolve, and the tooltip reads the same. A pause is a silence of 120 ms or more between kept words.
+- **Trim snaps to every target,** with the prototype's end labels, not only line ends as the handover's prose says. Same reason it does in the prototype: a pause is a natural end.
+- **Time map:** real scenes overlap (scene 2 of Episode 2: 17 of 27 lines) and pinned clips can sit out of order, so the map doesn't assume rows rise in time. Each row adds only the time and height not covered yet.
+- **Scrolling** with the layer on moves the playhead continuously, and the column follows it on the centre line, as in the prototype. With it off, Arrange steps by line as before. Follow off keeps the column still during playback. Space plays from the playhead with the layer on, so a scrub into a pause stays there. The old rule jumped back to the line's start, and pauses are where sounds go.
+- **Layout:** the column moves left and narrows to 400 px, and fades out under the header and above the transport. The header's scene name gives way with an ellipsis rather than wrapping the row. The layer's state is remembered per viewer and on by default.
+- **Bucket eyes** live in `app.hiddenBuckets`: this page, this session (handover 9.5, Rob). They never reach the document or the mix.
+- **Gain outside the ring's range** (D77): the ring sits at its end and the tip shows the real value. Turning it brings the sound into range.
+- **Depth** runs to 1, not the prototype's 0.98: the command's range. A far ball still fits beside the panel.
+- **Selection is Arrange's own,** separate from the Edit page's, which also selects dialogue. The clips themselves are shared.
+- **Not done here:** double click and Enter opening a sound, the quick buttons and fades in the opened view (card C).
+
+### D79 Unit tests for the UI's logic: vitest (2026-11-04)
+- **Context:** the card asks for tests of snapping, lanes, the merge rule, settling and multi-select maths without a browser. The app had Playwright only.
+- **Options:** Node's own test runner (needs `.ts` extensions in imports, which the app's other code doesn't use) or vitest.
+- **Choice:** vitest 5 as a dev dependency (MIT), run by `npm test` and `scripts/check.sh`. The logic lives in `app/src/lib/sounds/` with no Svelte or browser in it. It shares the app's Vite toolchain.
+

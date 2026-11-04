@@ -563,6 +563,21 @@ Spec: `tasks/Bokeh · live prototype-html/audioplay-cutter-handover-arrange-soun
 - [ ] (Rob) Update every machine on the Syncthing share before a migrated episode reaches it (D76).
 - [ ] (Rob) Confirm the gain range (D77).
 
+### M16: Sounds beside the dialogue, card B: the sounds layer on Arrange (Rob, 2026-11-04)
+
+Decisions: D78, D79. Card C (opened sound) builds on this.
+
+- [x] Layout: dialogue cards, spine, length lines, balls, floating bucket with eyes.
+- [x] Interactions: add, move and anchor, depth, trim, loudness, pan, hover, select, delete, Space, scrub, ↑/↓, `S` and the Sounds button. One command per gesture.
+- [x] Multi-select: ⇧ click, band, one undo step, offsets kept, Esc and empty click clear, keys act on the selection.
+- [x] Rules of handover 5: settle, merge, split on hover, ties by added order, sticky lanes, no dimming but hidden buckets.
+- [x] Motion of handover 6 with reduced motion; spine and lines as a few paths.
+- [x] Keyboard and announcing; map in the spec, help overlay and D78.
+- [x] Playback with the room; balls pulse.
+- [x] Tests: vitest for the logic, Playwright for every gesture. Checked on a copy of Episode 2.
+- [ ] (Rob) Confirm which sounds show on Arrange (`sfx` and `ambience`; music stays on Edit, D78).
+- [ ] (Rob) By hand: the feel of a real drag, and playback on real sounds.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -617,3 +632,4 @@ Spec: `tasks/Bokeh · live prototype-html/audioplay-cutter-handover-arrange-soun
 - 2026-11-03 Editor feel (D70–D72), on `dev` (worktree `../cutaway-dev`, because another session works in the main folder on `director-text`): ⌥ scroll zooms the Edit page; ⇧ scroll flies through lines on Options/Arrange; drags hold their preview until the command lands (no snap-back) and pause rows follow the mouse; undo/redo wait for an in-flight command; **Follow** playhead switch (header + Settings, on by default); lead-in 100 ms / tail 150 ms / edge fade 20 ms around every line, heard and exported, stopping short of other words (Settings sliders, `pacing.*` keys); boxes and word lanes show the script's words timed by what was heard. check.sh green, Playwright 17/17. `gh` not authenticated: no PR opened.
 - 2026-11-04 Branch `sfx-matching` (D74): show sounds reach the buckets by file name (matched when the view is read, nothing stored), a Loose SFX bucket, whole-show buckets in the docked bucket, and Clean up: one AI call proposes folders for loose SFX, a review sheet moves what is confirmed, placed sounds are repointed. On a copy of Episode 2: spotted buckets without sounds 13 → 0, SFX in a bucket 68 → 104 of 104, reachable from the docked bucket 26 → 104. One live clean-up plan on the copy: 23 moves, 13 left loose. Nothing moved in the real pipeline. check.sh green, Playwright 15/18: `editor.spec.ts` (trim handles, Arrange lengthens a clip) and `smoke.spec.ts` (flip takes, delete a word) fail with identical numbers on untouched `dev` at bc2d9e4, so they predate this branch; not investigated here.
 - 2026-11-04 M15 card A done on `feature/1-sound-fx-a-data-layer-room-bus-and-depth` (D75–D77): sound clips gain pan, depth and auto fade; undoable commands for all of it from the UI, CLI and MCP; one room per scene (schema 2) with controls on Import › Sounds; a 16-line FDN room on a shared bus through one `Renderer` in the engine and the bounce, bit-identical from the start and below −80 dB after any seek. Depth 0 → 1 on noise: room against sound −30.8 → −4.8 dB, 12.7 dB quieter, 5× darker. `float_roundtrip` fixes last-bit drift on undo (12 % of full-precision values). A copy of Episode 2 migrated (16 scenes), and undo and redo through its old log came back hash-identical. Fixture tests run and green. check.sh green, Playwright green. Not listened to: the curves wait for Rob's ears.
+- 2026-11-04 M16 card B done on `feature/2-sound-fx-b-arrange-sounds-layer-spine-le` (D78, D79): the sounds layer on Arrange. Spine, sticky length lines, balls and the bucket with eyes, every gesture one command on release with a local preview until it lands, multi-select as one undo step, settle/merge/split per handover 5, motion per 6 with reduced motion. Logic in `lib/sounds` with vitest (new, in check.sh), every gesture in Playwright; three deliberate breakages were caught by the right tests. On a copy of Episode 2 (scene 2: 27 lines, 17 overlapping) no errors and drag moves at about 17 ms; that run also found the header wrapping on real scene names, and cards running under the header. Fixed.
