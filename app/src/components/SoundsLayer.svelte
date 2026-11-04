@@ -8,7 +8,7 @@
   import { call } from '../lib/bridge';
   import { charColor, rgba } from '../lib/colors';
   import { dropzone } from '../lib/drag.svelte';
-  import { clamp, fmt } from '../lib/format';
+  import { clamp, fmt, shortName } from '../lib/format';
   import { depthAt, groups, layoutBalls, type Field, type Shown } from '../lib/sounds/balls';
   import { soundKey } from '../lib/sounds/keymap';
   import { assignLanes, type Lanes, type Settled } from '../lib/sounds/lanes';
@@ -80,6 +80,13 @@
   const hidden = $derived(new Set(app.hiddenBuckets));
   const isHidden = (s: Sound) => hidden.has(s.bucket);
   const sel = $derived(app.soundSel);
+
+  // the transport names what's selected: one place for the eye, not a label under every ball
+  $effect(() => {
+    const picked = on ? sel.flatMap((id) => byId.get(id) ?? []) : [];
+    const [s] = picked;
+    app.soundPicked = !s ? null : picked.length > 1 ? { name: `${picked.length} sounds selected`, detail: '', tone: null } : { name: shortName(s.name), detail: `${s.bucketName} · ${s.len_s.toFixed(1)} s`, tone: s.tone };
+  });
   const selSet = $derived(new Set(sel));
 
   // what is selected must exist and be visible (handover 5.7)
@@ -861,6 +868,7 @@
       if (gesture) cancelGesture();
       settler.cancel();
       for (const t of [hoverTimer, groupTimer, staggerTimer, seekTimer]) clearTimeout(t);
+      app.soundPicked = null;
     };
   });
 

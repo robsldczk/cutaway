@@ -7,7 +7,7 @@
   import { app } from '../lib/app.svelte';
   import { call, inTauri, pickPath } from '../lib/bridge';
   import { fileDrag, AMBIENCE_ZONE } from '../lib/filedrop.svelte';
-  import { len } from '../lib/format';
+  import { len, shortName } from '../lib/format';
   import { placesOf } from '../lib/sounds/room';
   import type { RoomRow, SceneRoom, VoiceRoom } from '../lib/types';
   import { colorOf, solid } from '../theme';
@@ -103,7 +103,7 @@
   }
 
   const face = (s: { name: string; duration_s: number }) => ({ name: s.name, duration_s: s.duration_s, peaks: [] });
-  const shortOf = (n: string) => n.replace(/^ES_/, '').replace(/ - Epidemic Sound$/, '');
+  const shortOf = shortName;
 </script>
 
 {#snippet slider(label: string, low: string, high: string, key: string, stored: number, send: (v: number) => Promise<unknown>, aria: string)}

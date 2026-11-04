@@ -86,16 +86,15 @@
     return () => el.removeEventListener('wheel', wheel);
   });
 
-  /** The sounds name themselves here, one place for the eye, and not under every ball. */
-  const selected = $derived.by(() => {
-    if (app.page !== 'arrange' || !app.soundsOn) return '';
-    const on = (app.edit?.placements ?? []).filter((p) => app.soundSel.includes(p.id));
-    return on.length > 1 ? `${on.length} sounds selected` : (on[0]?.name ?? '');
+  // the tab keeps its words while it slides away
+  let tabText = $state<typeof app.soundPicked>(null);
+  $effect(() => {
+    if (app.soundPicked) tabText = app.soundPicked;
   });
 
   const mid = $derived.by(() => {
     const z = zoom > 1.05 ? `zoom ×${zoom.toFixed(1)} · ` : '';
-    if (app.page === 'arrange') return selected || z.replace(/ · $/, '');
+    if (app.page === 'arrange') return z.replace(/ · $/, '');
     if (!cur) return z;
     const n = cur.takes.length;
     const k = (cur.take_index ?? 0) + 1;
@@ -105,6 +104,13 @@
 </script>
 
 <section class="glass transport" aria-label="Transport" data-keeps-sound>
+  <div class="tabclip" aria-hidden="true">
+    <div class="stab" class:on={!!app.soundPicked} style={tabText?.tone ? `--c: var(${tabText.tone})` : ''} data-testid="sound-tab">
+      <span class="tdot"></span>
+      <span class="tname ellip">{tabText?.name}</span>
+      {#if tabText?.detail}<span class="tsub">{tabText.detail}</span>{/if}
+    </div>
+  </div>
   <button class="play" onclick={() => app.togglePlay()} aria-label="Play or stop (Space)" data-playing={app.playing} style="box-shadow: 0 0 0 6px {app.playing ? rgba(curShade, 0.3) : 'var(--glass-fill-3)'}">
     {#if app.playing}
       <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3" fill="var(--text-on-light)" /></svg>
@@ -113,7 +119,7 @@
     {/if}
   </button>
   <div class="mid">
-    <div class="times"><span data-testid="time-now">{fmt(head)}</span><span class="ellip" class:picked={!!selected} data-testid="transport-mid">{mid}</span><span>{fmt(total)}</span></div>
+    <div class="times"><span data-testid="time-now">{fmt(head)}</span><span class="ellip">{mid}</span><span>{fmt(total)}</span></div>
     <div class="map" bind:this={mapEl} role="slider" tabindex="-1" aria-label="Scene position. Command scroll zooms, Shift scroll moves" aria-valuenow={Math.round((head / total) * 100)} onmousedown={down} title="Click or drag to move the playhead. ⌘ scroll zooms, ⇧ scroll moves">
       <div class="inner" style="left: {-viewStart * zoom * 100}%; width: {zoom * 100}%">
         {#each segs as s, i (i)}<span class="mseg" style="flex: {s.w} 1 0; {s.style}">{s.lbl}</span>{/each}
@@ -153,6 +159,80 @@
     background: var(--panel);
     z-index: 10;
   }
+  /* The selected sound, on a tab growing out of the transport's top edge: same material, and
+     curved into it at the foot, so the two read as one piece. The clip is where it rises from. */
+  .tabclip {
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    transform: translateX(-50%);
+    max-width: 78%;
+    padding: 0 14px;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .stab {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 30px;
+    padding: 0 16px;
+    border-radius: 14px 14px 0 0;
+    /* solid: a blur nested in the transport's own blur has nothing to blur */
+    background: var(--panel-solid);
+    font-size: 12.5px;
+    white-space: nowrap;
+    transform: translateY(100%);
+    opacity: 0;
+    transition:
+      transform 0.32s var(--ease-move),
+      opacity 0.22s var(--ease-move);
+  }
+  .stab.on {
+    transform: none;
+    opacity: 1;
+  }
+  .stab::before,
+  .stab::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+  }
+  .stab::before {
+    right: 100%;
+    background: radial-gradient(circle at 0 0, transparent 13.5px, var(--panel-solid) 14px);
+  }
+  .stab::after {
+    left: 100%;
+    background: radial-gradient(circle at 100% 0, transparent 13.5px, var(--panel-solid) 14px);
+  }
+  .tdot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgb(var(--c, var(--ink-rgb)));
+    box-shadow: 0 0 10px rgb(var(--c, var(--ink-rgb)) / 0.7);
+  }
+  .tname {
+    min-width: 0;
+    font-weight: 600;
+    color: var(--text-strong);
+  }
+  .tsub {
+    flex: none;
+    font-size: 11.5px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .stab {
+      transition: none;
+    }
+  }
   .play {
     flex: none;
     width: 52px;
@@ -169,10 +249,6 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-  }
-  .picked {
-    color: var(--text-strong);
-    font-weight: 600;
   }
   .times {
     display: flex;

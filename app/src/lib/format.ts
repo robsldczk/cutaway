@@ -15,6 +15,9 @@ export function tc(sec: number, fps = 25): string {
   return `${p(Math.floor(s / 3600))}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}:${p(ff)}`;
 }
 
+/** A sound's name without what its library puts around every file. */
+export const shortName = (n: string) => n.replace(/^ES_/, '').replace(/ - Epidemic Sound$/, '');
+
 export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 /** m:ss for lengths of files and sounds. */

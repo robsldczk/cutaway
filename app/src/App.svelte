@@ -238,7 +238,7 @@
   .toast {
     position: absolute;
     left: 50%;
-    bottom: 120px;
+    bottom: 146px;
     transform: translateX(-50%);
     z-index: 50;
     max-width: min(640px, 90%);

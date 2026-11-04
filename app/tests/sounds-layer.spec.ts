@@ -600,7 +600,7 @@ test('directions: the bottom edge sets how long one takes, and what follows move
   await expect(handle).toContainText(`${was.toFixed(1)} s`);
 });
 
-test('names: no labels under the balls, only the selection, in the transport', async ({ page }) => {
+test('names: no labels under the balls, only the selection, on a tab on the transport', async ({ page }) => {
   const a = await place(1, 0.3);
   const b = await place(2.5, 0.7);
   await open(page);
@@ -608,14 +608,24 @@ test('names: no labels under the balls, only the selection, in the transport', a
   const field = page.getByRole('group', { name: 'Sounds of the scene' });
   await expect(field.getByText('Foil_crackle')).toHaveCount(0);
 
-  const name = page.getByTestId('transport-mid');
-  await expect(name).toHaveText('');
+  const tab = page.getByTestId('sound-tab');
+  await expect(tab).not.toHaveClass(/on/);
   await ballOf(page, a).click();
-  await expect(name).toContainText('Foil_crackle');
+  await expect(tab).toHaveClass(/on/);
+  await expect(tab).toContainText('Foil_crackle');
+  await expect(tab).toContainText('Layer test sounds');
+  await page.waitForTimeout(450);
+
+  // it stands on the transport's top edge
+  const t = (await tab.boundingBox())!;
+  const bar = (await page.getByRole('button', { name: 'Play or stop (Space)' }).locator('xpath=..').boundingBox())!;
+  expect(Math.abs(t.y + t.height - bar.y)).toBeLessThan(1);
+  await page.screenshot({ path: 'test-results/sound-tab.png' });
+
   await page.keyboard.press('ControlOrMeta+a');
-  await expect(name).toHaveText('2 sounds selected');
+  await expect(tab).toContainText('2 sounds selected');
   await page.keyboard.press('Escape');
-  await expect(name).toHaveText('');
+  await expect(tab).not.toHaveClass(/on/);
   await expect(ballOf(page, b)).toHaveAttribute('aria-label', /Foil_crackle/);
 });
 

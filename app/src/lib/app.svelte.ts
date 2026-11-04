@@ -123,6 +123,8 @@ class AppState {
   importBack = $state<Page | null>(null);
   /** Import › Sounds opens its Rooms on the current scene once. */
   roomsAsked = $state(false);
+  /** What's selected in the sounds layer, for the tab on the transport. */
+  soundPicked = $state<{ name: string; detail: string; tone: string | null } | null>(null);
   /** A sound from the Finder waiting to be told where it lives. */
   filing = $state<{ paths: string[]; x: number; y: number } | null>(null);
   /** A scene of the room open in Import › Rooms, and which of its ambiences. */
