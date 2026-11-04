@@ -608,7 +608,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 ### D84 The buckets have their own preview player (Rob, 2026-11-04)
 - **Rob:** Play in a bucket moved the timeline's playhead. A bucket gets a preview player; the main player is only for what sits on the timeline.
 - **Two decks in `player.rs`:** a preview has its own engine and clock, so it never touches the timeline's position, schedule or scene. Same `Engine`, a second instance opened on first use, so no change to the audio engine. New methods `stop_sound` and `sound_playhead`; `play_sound` keeps its name; `stop` stops both, so closing an episode leaves nothing playing.
-- **One at a time (not settled by Rob):** starting a preview stops the timeline, its playhead staying where it stopped, and starting the timeline stops the preview. That's how it already sounded. Mixing them would be a small change if Rob wants to hear a sound against running dialogue.
+- **One at a time (Rob):** starting a preview stops the timeline, its playhead staying where it stopped, and starting the timeline stops the preview.
 - **Space** while a preview plays stops the preview and doesn't start the timeline; otherwise stopping a sound by Space would set the scene off. The transport's button always means the timeline.
 - **The player:** a strip at the foot of the bucket panels (scene bucket, Import › Sounds' panel and search): name, waveform to click in, time. It stays after the sound ends, to play it again. Leaving it stops the sound, so nothing plays that has no stop button on screen.
 
