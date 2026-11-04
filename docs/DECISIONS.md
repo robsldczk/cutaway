@@ -646,3 +646,20 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Tests:** a browser test measures every frame of the toggle and fails if anything turns back, and another fails on any overshooting curve in the code.
 - **Left as they are:** the merged group's wobble and swirl, which are slow loops, not moves.
 
+### D90 Voices in the room, and where wet lives (Rob, 2026-11-04)
+- **Rob:** the people should have a little of the room too, per ambience, and the room's and the characters' wet and dry settings go to the Dev tab.
+- **Reading:** "room tone" here means the scene's room, its reverb, not the looped bed: he asks for wet and dry on characters in the same breath. So each voice sends a little into its scene's room, and it sounds like the place it's in.
+- **`Character.wet`,** 0 to 1, default 0.25, a send of −24 dB, four below a close sound. It's new: characters had no such setting. Per character, not per scene: the room's own Wet scales it, so the scene decides how much place there is and the character how much they take of it. Only the send: the voice keeps its level and brightness, so nothing changes in the editing of dialogue. Curve in `depth::voice_send`.
+- **An actor's vocal sounds** on a dialogue lane get the same. A take auditioned alone stays dry, so takes compare fairly. Music and room tone stay dry.
+- **This replaces D76's rule that dialogue never touches the room.** The guarantee that's left: a voice at wet 0 bounces exactly as it did, sample for sample.
+- **Every scene now rings out** a little past its last line in playback and the bounce, as scenes with sounds already did. Bounces are per scene, so nothing downstream shifts. FCPXML is unchanged: it carries no room.
+- **Dev › Room mix** holds each voice's wet and each scene's Wet. Wet left Import › Sounds › Rooms; Size and Damping stay there. The transport's read-out still names it, being a read-out, not a control. The Dev tab sits behind the developer switch in Settings.
+
+### D91 Search in the bucket, actions on Arrange (Rob, 2026-11-04)
+- **Search:** a bar on the docked bucket (Arrange and Edit). It narrows this scene's buckets, by sound or bucket name and keywords, and lists matches from the rest of the library under them, up to 30, to play and drag. Esc clears it. Import › Sounds keeps its Epidemic search.
+- **Rob:** on Arrange he needs to see the actions between the dialogue, to pick a sound to tag to them. They were one dim, cut-off phrase in the pause pill, and those before the first line or after the last didn't show at all, so a scene with no dialogue looked empty.
+- **Now:** each action has its own row in the column, in full, with tags for the sounds hanging on it. They show with the sounds layer off too.
+- **Tagging:** drop a sound on the action's row, or beside it in the field, where the row catches at its full height and the tooltip names it. A sound anchors to the action (M7) and follows it. A ball moved there hangs on it the same way.
+- **An action has no time of its own:** several in one pause share an instant unless their spacers are on. So a sound hangs on its action with an offset, at the place in the pause where the row sits, which keeps the ball beside its action. `place_from_bucket` gained `offset_s` for this.
+- **First layout:** the column now takes its place at once, without a glide. An action above the first line would otherwise slide it down each time Arrange opens.
+

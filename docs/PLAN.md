@@ -622,6 +622,16 @@ Decision: D88.
 - [x] Music keeps its full length on a drop: Rob's decision (D85).
 - [x] Starting rooms entered in Episode 2 at Rob's request, through the CLI with the app closed.
 
+### Bucket search, voices in the room, mix settings in Dev (Rob, 2026-11-04)
+
+Decisions: D90, D91.
+
+- [x] Search bar in the docked bucket: filters this scene's buckets, and finds the rest of the library to drag in.
+- [x] Voices get a little of their scene's room: a small send per character (`Character.wet`), so a scene's reverb sits on the dialogue too.
+- [x] Dev tab › Room mix: each scene's Wet and each character's wet. Wet leaves Import › Sounds › Rooms.
+- [x] Arrange shows the action lines between the dialogue, and a sound can snap to one and hang on it.
+- [x] Tests, docs, RUN notes.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -683,3 +693,4 @@ Decision: D88.
 - 2026-11-04 Drop lengths, Loop, room tone per scene, calmer toggle (D85–D87). Under 6 s a dropped sound keeps its length, past it 10 s, or with Loop on it repeats on the ambience lane to the scene's end. Each Rooms row picks a room tone. Loop seams crossfade in the mixer: they clicked before. FCPXML repeats the file. The toggle glides and fades. Rust tests, Playwright; not listened to, and the toggle's feel is Rob's to judge.
 - 2026-11-04 ⇧ Space from a selected sound on Arrange (D88). Rooms entered in the real Episode 2 at Rob's request: 16 `set_scene_room` commands with the app closed, rehearsed on a copy, and compared with a backup afterwards: only the 16 scenes' rooms changed.
 - 2026-11-04 Arrange moves evenly (D89): the column's overshoot was two motions adding up, 170 to 260 px past its mark, not a curve. One move now, on one curve, measured frame by frame in a test. The pop lost its overshoot too.
+- 2026-11-04 Bucket search, voices in the room, Room mix in Dev, actions on Arrange (D90, D91). Each voice now takes a little of its scene's room, 0.25 by default, and every scene rings out a little past its last line. Wet moved to Dev › Room mix. Actions read in full between the cards and take sounds. Not listened to: the voice send is Rob's to judge.

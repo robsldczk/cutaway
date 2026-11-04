@@ -163,6 +163,7 @@ A floating glass bar at the bottom centre (`min(820px, 94%)`, 30 px radius):
 - **Playing:** the current box glows in its take's color, the current word lights up, and the column auto-scrolls to keep it centred.
   - *Changed in implementation (D70):* **Follow** (header pill and Settings, on by default, remembered per viewer). On, the current box moves with the playhead on Options and Arrange, and the Edit page pages along and highlights the line in its scene strip; stopping leaves the box where playback stopped, so Space carries on. Off, the box stays where you put it and Space plays from it again. Follow never changes the Edit page's clip selection.
 - **Stopped:** the playhead stays where it stopped.
+  - *Changed in implementation (D90, D91):* each voice takes a little of its scene's room; wet for voices and scenes is in Dev › Room mix. The docked bucket has a search bar. Arrange shows action lines in full between the cards, and a sound dropped on one hangs on it.
   - *Changed in implementation (D89):* the Sounds toggle is one even move on one curve, and nothing on Arrange overshoots, a dropped sound's pop included.
   - *Changed in implementation (D88):* with sounds selected on Arrange, ⇧ Space plays from the start of the first of them.
   - *Changed in implementation (D85–D87):* a dropped sound keeps its length under 6 s and is cropped to 10 s past it; with **Loop** on (bucket rows over 6 s) it repeats on the ambience lane to the scene's end. Each row of Rooms picks a room tone. The Sounds toggle glides and fades, with no overshoot.

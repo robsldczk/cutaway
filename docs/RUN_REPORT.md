@@ -123,6 +123,17 @@ On branch `soundeffects-ui`, from `dev` after cards A and B. D80–D82.
 - Checked on the demo session only, not on a copy of Episode 2.
 - Not listened to: no audio device in the tests.
 
+## Bucket search, voices in the room, actions on Arrange (D90, D91, 2026-11-04)
+
+**Built:** a search bar on the docked bucket, over this scene's buckets and the whole library. Each voice takes a little of its scene's room. Dev › Room mix holds each voice's wet and each scene's Wet. Arrange shows every action line in full, and a sound can be tagged to one.
+
+**Verified:** Rust tests for the send; vitest for the action targets; Playwright for search, tagging and Room mix. Not listened to.
+
+**Rob, by ear and by hand:**
+- Play dialogue in the Hallway and the Colonel's Office: is 25 the right start for voices, and does the dialogue stay clear?
+- Turn on the developer switch in Settings to reach Dev › Room mix.
+- Drag a sound onto an action in a scene with no dialogue, such as scene 10.
+
 ## Drop lengths, Loop, room tone per scene, calmer toggle (D85–D87, 2026-11-04)
 
 **Built:** a dropped sound keeps its length under 6 s and is cropped to 10 s past it. With Loop on (a chip on bucket rows over 6 s) it goes on the ambience lane and repeats to the scene's end. Each row in Import › Sounds › Rooms has a Room tone picker and level. Loop seams crossfade. FCPXML repeats a looped file. The Sounds toggle glides and fades, with no overshoot.
