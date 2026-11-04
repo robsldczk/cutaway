@@ -612,3 +612,24 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Space** while a preview plays stops the preview and doesn't start the timeline; otherwise stopping a sound by Space would set the scene off. The transport's button always means the timeline.
 - **The player:** a strip at the foot of the bucket panels (scene bucket, Import › Sounds' panel and search): name, waveform to click in, time. It stays after the sound ends, to play it again. Leaving it stops the sound, so nothing plays that has no stop button on screen.
 
+### D85 What a drop makes of a sound (Rob, 2026-11-04)
+- **Rob:** a sound dropped from a bucket keeps its length under 6 s. Over 6 s it's cropped to 10 s, unless Loop is on: then it goes on as ambience. This replaces the prototype's rule (up to 3 s whole, 3 to 8 s cropped to 3, longer 20 s) and the full length the app used.
+- **So a sound of 6 to 10 s is whole,** there being nothing to crop. Loop matters only past 6 s, so the Loop chip shows only there.
+- **Loop lives on the bucket** (`SoundBucket.loops`, by asset or provider id): a show's sound isn't in the episode until placed, and a preview has no asset yet. Without a setting, ambience loops by default, which is the show's `room-tone` folder and anything else the library files as ambience. Rob can turn any of them off.
+- **A looped drop** goes on the ambience lane even if dropped on an effects lane, starts with a 1 s fade, and repeats to the scene's end as the scene stands then. It doesn't follow later changes of the scene's length; its tail trims like any sound's. `Placement.looped` is the one exception to "never longer than the source".
+- **Drops only:** `place_sound` (a cue's Place button) still places the whole sound. Finder drops follow the rule.
+- **Music and vocals keep their length (not Rob's words):** he said "everything", in talking about sound effects and beds. A 10 s crop of a score cue would rarely be wanted. One line in `shape_drop` if he does want it.
+- **Export:** a clip can't outlast its file in an edit, so FCPXML gets the file repeated, cut end to end. The crossfade at the seam exists only in playback and the bounce.
+
+### D86 A room tone per scene (Rob, 2026-11-04)
+- **Found:** room tone was per location, switched on in Settings, with no way to pick a sound.
+- **Rob:** set a looping room tone in Import › Sounds, per scene. `Scene.tone` (a sound and a level), `set_scene_tone`, and a picker and level in each Rooms row, with `cutaway sfx room-tone`. A scene without one still plays its location's, so nothing set before changes. Options: per location only, where the three scenes of one place couldn't differ. Rob asked for per scene.
+- **The picker lists sounds marked Loop,** room tone buckets first. A show's sound joins the episode when picked.
+- **Starts at −6 dB,** the location tone's default, with a range of −48 to +6 in the row.
+- **Seams:** a loop jumped straight back to its start, a click on any file not cut to loop. The mixer now crossfades the last half second into the first (equal power, a quarter of the file at most) for room tone and looped sounds alike, in playback and the bounce. The loop's period is that much shorter, and the Edit page's seam marks follow. Not tried by ear on real room tone yet.
+
+### D87 The Sounds toggle eases (Rob, 2026-11-04)
+- **Rob:** on and off was too wild with its overshoot; it should be premium, eased and sleek. This replaces handover 6's "playful" toggle (shrink into the spine, overshoot on return).
+- **Now:** the balls glide a fifth of the way toward the spine and fade, scaling only to 82 %. In: an expo-out, no overshoot, 0.7 s. Out: 0.4 s. The stagger is at most a quarter of a second in all, however many sounds. A browser test fails on an overshooting curve there.
+- **The column and panel** keep their ease-in-out and ease-out; they never overshot. **A dropped sound's pop** keeps its overshoot: handover 6 calls it rare, and Rob spoke of the toggle.
+

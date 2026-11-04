@@ -180,6 +180,8 @@ New data model entities:
 
 ## Room tone (planned)
 
+*Changed in implementation (D86):* a scene can loop a room tone of its own, picked in Import › Sounds › Rooms. A scene without one plays its location's. Loop seams crossfade.
+
 - The script already defines locations: every scene heading names a room (e.g. TARMAC - CANTEEN, TIME SPRING COMMAND).
 - Each location gets one room tone, set once (an extracted silence from the session or a library file).
 - It plays automatically under every scene in that location and fills gaps, cuts and spacers.

@@ -603,6 +603,17 @@ Decisions: D83, D84.
 - [x] Tried in the real WKWebView with the real audio device (in-page mouse events, temp project).
 - [ ] (Rob) By hand: a drag with a real mouse, and a Finder drop on Arrange. See RUN_REPORT.
 
+### Drop lengths, loops, room tone per scene, calmer toggle (Rob, 2026-11-04)
+
+Decisions: D85–D87.
+
+- [x] A sound dropped from a bucket: up to 6 s keeps its length; longer is cropped to 10 s (`sound::place`, drops only).
+- [x] Loop per bucket sound (on by default for ambience and room tone). Over 6 s with Loop on: the ambience lane, repeating to the scene's end. `Placement.looped`; the length rules, schedule and UI limits know a looped sound may outlast its file.
+- [x] Loop seams crossfade in the mixer, for loops and room tone alike. FCPXML repeats the file.
+- [x] Room tone per scene: `Scene.tone`, `set_scene_tone`, a picker and level in Import › Sounds › Rooms, CLI. A scene without one plays its location's.
+- [x] The Sounds toggle glides and fades: no overshoot, a short stagger.
+- [x] Tests, docs, RUN notes.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -661,3 +672,4 @@ Decisions: D83, D84.
 - 2026-11-04 `dev` brought together: `sfx-matching`, Sound FX A (merged by the board) and the Bokeh reference. The Playwright failures noted above were test timing, not app bugs: `openEdit` measured clips before the timeline's first measurement, and the lengthen test grabbed its handle while the column was still gliding. The trim test failed before its undo, which failed the tests after it. check.sh green, Playwright 21/21 on 8 runs in a row.
 - 2026-11-04 M17 card C done on `soundeffects-ui` (D80–D82): the opened sound on Arrange, the room in the transport, and the keyboard and screen reader pass over the feature. The branch was new: cards A and B had merged into `dev`, so it starts from there. Pan and depth were missing from the Edit inspector, which handover 10 asks for: added. A browser test found the wheel dead over the view's handles (the app ignores wheels over sliders): fixed. The app's own edits never reached a running schedule, so a room change was only heard from the next Play: `playhead` now reloads when the schedule differs (D81). check.sh green, Playwright 85/85. Not listened to, and not tried on real material or with VoiceOver: that waits for Rob.
 - 2026-11-04 Sounds in the real app (D83, D84): Rob couldn't drag a sound in, and bucket Play moved the playhead. Every drag was HTML5 drag and drop, which Tauri's file drop keeps from the page, so it only ever worked in the browser tests: all drags now use the mouse. A preview has its own deck and a small player in the bucket panels. A Finder drop on Arrange no longer files a sound as a recording. Checked in the real webview with the real device through in-page mouse events; a real mouse and a Finder drop wait for Rob.
+- 2026-11-04 Drop lengths, Loop, room tone per scene, calmer toggle (D85–D87). Under 6 s a dropped sound keeps its length, past it 10 s, or with Loop on it repeats on the ambience lane to the scene's end. Each Rooms row picks a room tone. Loop seams crossfade in the mixer: they clicked before. FCPXML repeats the file. The toggle glides and fades. Rust tests, Playwright; not listened to, and the toggle's feel is Rob's to judge.

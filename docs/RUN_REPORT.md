@@ -123,6 +123,17 @@ On branch `soundeffects-ui`, from `dev` after cards A and B. D80–D82.
 - Checked on the demo session only, not on a copy of Episode 2.
 - Not listened to: no audio device in the tests.
 
+## Drop lengths, Loop, room tone per scene, calmer toggle (D85–D87, 2026-11-04)
+
+**Built:** a dropped sound keeps its length under 6 s and is cropped to 10 s past it. With Loop on (a chip on bucket rows over 6 s) it goes on the ambience lane and repeats to the scene's end. Each row in Import › Sounds › Rooms has a Room tone picker and level. Loop seams crossfade. FCPXML repeats a looped file. The Sounds toggle glides and fades, with no overshoot.
+
+**Verified:** Rust tests for the rules, the seam, the scene tone and the export; Playwright for Loop, the picker and the toggle's curves. Not listened to.
+
+**Rob, by ear and by hand:**
+- Pick a room tone for a scene and play through a loop point: no click, no audible pulse.
+- Press `S` a few times: is the toggle sleek enough?
+- Export FCPXML with a looped sound and open it in Resolve: the repeats sit end to end on the ambience track.
+
 ## Sounds in the real app: drag and preview player (D83, D84, 2026-11-04)
 
 **Built:**
