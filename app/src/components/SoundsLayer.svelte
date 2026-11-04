@@ -303,16 +303,27 @@
     preview = next;
   }
 
+  /** Commands on their way, per sound. */
+  const landing: Record<string, number> = {};
+
+  /** A preview lives while anything still needs it: a gesture, a burst or a command on its
+   *  way. Whatever finishes calls this, and the last one out clears it, so a preview can
+   *  neither outlive its owners nor go before the document has the value. */
+  function letGo(ids: string[]) {
+    const held = new Set([...(gesture?.base ?? []), ...(burst?.base ?? [])].map((b) => b.id));
+    clearPreview(ids.filter((id) => !held.has(id) && !landing[id]));
+  }
+
   /** Sends what the gesture did as one undo step. The preview holds until it has landed, so
    *  nothing jumps back in between. */
   async function commit(cmds: Cmd[], ids: string[]) {
     const c = oneStep(cmds);
+    for (const id of ids) landing[id] = (landing[id] ?? 0) + 1;
     try {
       if (c) await app.cmd(c);
     } finally {
-      // a gesture or burst that began meanwhile still owns its preview
-      const busy = new Set([...(gesture?.base ?? []), ...(burst?.base ?? [])].map((b) => b.id));
-      clearPreview(ids.filter((id) => !busy.has(id)));
+      for (const id of ids) landing[id] -= 1;
+      letGo(ids);
       settler.soon();
     }
   }
@@ -436,6 +447,7 @@
     if (!g.moved) {
       // a plain click on a member of a selection selects just it
       if (g.kind === 'ball') app.soundSel = [g.id];
+      letGo(ids);
       return;
     }
     const cmds: Cmd[] = [];
@@ -452,7 +464,7 @@
   function cancelGesture() {
     const ids = gesture?.base.map((b) => b.id) ?? [];
     endGesture();
-    clearPreview(ids);
+    letGo(ids);
   }
 
   function ballDown(e: MouseEvent, id: string) {

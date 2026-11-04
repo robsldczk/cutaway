@@ -549,3 +549,83 @@ test('colours repeat: two characters seven colours apart still show Arrange', as
   expect(fills[0]).toBe(fills[1]);
   expect(errors).toEqual([]);
 });
+
+/** The ball and the document must agree: the ball shows what is stored, not a leftover preview. */
+async function agrees(page: Page, id: string, depth: number, x: number) {
+  await expect.poll(async () => (await sound(id)).depth).toBeCloseTo(depth, 3);
+  await expect(ballOf(page, id)).toHaveAttribute('data-depth', depth.toFixed(3));
+  await expect.poll(async () => (await ballOf(page, id).boundingBox())!.x).toBeCloseTo(x, 0);
+}
+
+test('previews: a click right after a nudge leaves no stale value behind', async ({ page }) => {
+  const a = await place(1, 0.3);
+  await open(page);
+  await ballOf(page, a).click();
+  await page.waitForTimeout(800);
+  const x = (await ballOf(page, a).boundingBox())!.x;
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+  // inside the burst window: the press itself sends the nudge
+  const c = await centre(ballOf(page, a));
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.waitForTimeout(100);
+  await page.mouse.up();
+  await expect.poll(async () => (await sound(a)).depth).toBeCloseTo(0.45, 3);
+  await page.keyboard.press('ControlOrMeta+z');
+  await agrees(page, a, 0.3, x);
+  // the next step starts from what is stored
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => (await sound(a)).depth).toBeCloseTo(0.35, 3);
+  await expect(ballOf(page, a)).toHaveAttribute('data-depth', '0.350');
+});
+
+test('previews: the same after ⇧ scroll', async ({ page }) => {
+  const a = await place(1, 0.3);
+  await open(page);
+  await ballOf(page, a).click();
+  const c = await centre(ballOf(page, a));
+  await page.mouse.move(c.x, c.y);
+  await page.keyboard.down('Shift');
+  for (let i = 0; i < 4; i++) await page.mouse.wheel(0, 40);
+  await page.keyboard.up('Shift');
+  await page.mouse.down();
+  await page.waitForTimeout(100);
+  await page.mouse.up();
+  await expect.poll(async () => (await sound(a)).gain_db).toBeLessThan(-5);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect.poll(async () => (await sound(a)).gain_db).toBe(0);
+  await expect(ballOf(page, a)).toHaveAttribute('aria-label', /loudness 0 dB/);
+});
+
+test('previews: Esc during a drag right after a nudge lands on the nudge', async ({ page }) => {
+  const a = await place(1, 0.3);
+  await open(page);
+  await ballOf(page, a).click();
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+  const c = await centre(ballOf(page, a));
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 90, c.y, { steps: 4 });
+  await page.keyboard.press('Escape');
+  await page.mouse.up();
+  await expect.poll(async () => (await sound(a)).depth).toBeCloseTo(0.45, 3);
+  await expect(ballOf(page, a)).toHaveAttribute('data-depth', '0.450');
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(ballOf(page, a)).toHaveAttribute('data-depth', '0.300');
+});
+
+test('previews: a drag that ends where it began right after a nudge', async ({ page }) => {
+  const a = await place(1, 0.3);
+  await open(page);
+  await ballOf(page, a).click();
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+  const c = await centre(ballOf(page, a));
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 30, c.y, { steps: 3 });
+  await page.mouse.move(c.x, c.y, { steps: 3 });
+  await page.mouse.up();
+  await expect.poll(async () => (await sound(a)).depth).toBeCloseTo(0.45, 3);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(ballOf(page, a)).toHaveAttribute('data-depth', '0.300');
+});
