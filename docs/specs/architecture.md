@@ -293,6 +293,12 @@ cutaway align                                  deterministic matching + AI for a
 cutaway notes                                  room classification, note condensing, picks
 cutaway sfx spot --scene S2                    AI sound spotting into the bucket
 cutaway sfx import ./sounds                    add files to the show library
+cutaway sfx list --scene S2                    sounds of a scene, with their ids
+cutaway sfx add ASSET --scene S2 --depth 0.4   place a sound (--line, --word, --end, --at)
+cutaway sfx move|trim|fade|gain|pan|depth|slip|remove ID …   shape a sound, one undo step each
+cutaway sfx batch '[{"op":"gain",…},…]'        several edits as one undo step
+cutaway sfx rooms                              each scene's room
+cutaway sfx room S2 --size 0.8 --wet 0.3       set a scene's room
 cutaway export fcpxml --scene S1               export a rough cut
 cutaway status                                 progress, match rate, flagged items
 cutaway mcp                                    run as MCP server (stdio)
