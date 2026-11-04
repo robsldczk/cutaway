@@ -121,6 +121,22 @@ fn show_sounds_reach_the_buckets_and_the_clean_up_files_them() {
         "a folder bucket's keyword: {k:?}"
     );
 
+    // a show sound can be heard from its bucket, and listening adds nothing to the episode
+    let spoon = named(&b, "Kitchen")["kept"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|k| k["name"].as_str().unwrap().contains("Spoon Drop"))
+        .unwrap()["id"]
+        .clone();
+    let rev = call(&mut s, "project_status", json!({}))["rev"].clone();
+    let played = call(&mut s, "play_sound", json!({ "asset_id": spoon }));
+    assert_eq!(played["playing"], true);
+    call(&mut s, "stop", json!({}));
+    assert_eq!(call(&mut s, "project_status", json!({}))["rev"], rev);
+    let gone = s.call("play_sound", &json!({ "asset_id": "nothing" }));
+    assert!(gone.is_err(), "an unknown sound still says so");
+
     // a hand-made bucket's keyword picks a loose sound out, without touching the file
     let id = call(
         &mut s,

@@ -165,18 +165,26 @@ pub fn merge(svc: &mut Service, ids: Vec<String>, into: String, show_level: bool
 }
 
 /// Makes sure a library asset is mirrored into the episode document (placements need it).
-pub fn ensure_asset_in_doc(svc: &mut Service, asset_id: &str) -> Result<Asset> {
+/// A sound of the episode or of the show's library. A bucket lists both, and a show's sound
+/// only joins the episode when it is placed.
+pub fn find_asset(svc: &Service, asset_id: &str) -> Result<Option<Asset>> {
     if let Some(a) = svc.doc().assets.get(asset_id) {
-        return Ok(a.clone());
+        return Ok(Some(a.clone()));
     }
     let local: Vec<Asset> = svc.doc().assets.values().cloned().collect();
-    let a = svc
+    Ok(svc
         .library()
         .list(&local)?
         .into_iter()
-        .find(|a| a.id == asset_id)
+        .find(|a| a.id == asset_id))
+}
+
+pub fn ensure_asset_in_doc(svc: &mut Service, asset_id: &str) -> Result<Asset> {
+    let a = find_asset(svc, asset_id)?
         .ok_or_else(|| AppError::Params(format!("no library sound '{asset_id}'")))?;
-    svc.exec(&Command::AddAsset { asset: a.clone() })?;
+    if !svc.doc().assets.contains_key(asset_id) {
+        svc.exec(&Command::AddAsset { asset: a.clone() })?;
+    }
     Ok(a)
 }
 

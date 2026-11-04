@@ -979,11 +979,7 @@ pub fn play(
     from_s: f64,
 ) -> Result<Value> {
     if let Some(aid) = asset_id {
-        let a = svc
-            .doc()
-            .assets
-            .get(&aid)
-            .cloned()
+        let a = crate::sound::find_asset(svc, &aid)?
             .ok_or_else(|| AppError::Params(format!("no sound '{aid}'")))?;
         let path = svc.library().path_of(&a);
         return crate::player::play_file(svc, &path, &aid, from_s);
