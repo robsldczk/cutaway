@@ -600,6 +600,25 @@ test('directions: the bottom edge sets how long one takes, and what follows move
   await expect(handle).toContainText(`${was.toFixed(1)} s`);
 });
 
+test('names: no labels under the balls, only the selection, in the transport', async ({ page }) => {
+  const a = await place(1, 0.3);
+  const b = await place(2.5, 0.7);
+  await open(page);
+  await expect(page.getByTestId('sound-ball')).toHaveCount(2);
+  const field = page.getByRole('group', { name: 'Sounds of the scene' });
+  await expect(field.getByText('Foil_crackle')).toHaveCount(0);
+
+  const name = page.getByTestId('transport-mid');
+  await expect(name).toHaveText('');
+  await ballOf(page, a).click();
+  await expect(name).toContainText('Foil_crackle');
+  await page.keyboard.press('ControlOrMeta+a');
+  await expect(name).toHaveText('2 sounds selected');
+  await page.keyboard.press('Escape');
+  await expect(name).toHaveText('');
+  await expect(ballOf(page, b)).toHaveAttribute('aria-label', /Foil_crackle/);
+});
+
 test('nothing along the bottom: no hints under the transport, no word tags on the cards', async ({ page }) => {
   await open(page);
   await expect(page.getByText('Cuts a word')).toHaveCount(0);

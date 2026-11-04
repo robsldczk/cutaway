@@ -86,9 +86,16 @@
     return () => el.removeEventListener('wheel', wheel);
   });
 
+  /** The sounds name themselves here, one place for the eye, and not under every ball. */
+  const selected = $derived.by(() => {
+    if (app.page !== 'arrange' || !app.soundsOn) return '';
+    const on = (app.edit?.placements ?? []).filter((p) => app.soundSel.includes(p.id));
+    return on.length > 1 ? `${on.length} sounds selected` : (on[0]?.name ?? '');
+  });
+
   const mid = $derived.by(() => {
     const z = zoom > 1.05 ? `zoom ×${zoom.toFixed(1)} · ` : '';
-    if (app.page === 'arrange') return z.replace(/ · $/, '');
+    if (app.page === 'arrange') return selected || z.replace(/ · $/, '');
     if (!cur) return z;
     const n = cur.takes.length;
     const k = (cur.take_index ?? 0) + 1;
@@ -106,7 +113,7 @@
     {/if}
   </button>
   <div class="mid">
-    <div class="times"><span data-testid="time-now">{fmt(head)}</span><span class="ellip">{mid}</span><span>{fmt(total)}</span></div>
+    <div class="times"><span data-testid="time-now">{fmt(head)}</span><span class="ellip" class:picked={!!selected} data-testid="transport-mid">{mid}</span><span>{fmt(total)}</span></div>
     <div class="map" bind:this={mapEl} role="slider" tabindex="-1" aria-label="Scene position. Command scroll zooms, Shift scroll moves" aria-valuenow={Math.round((head / total) * 100)} onmousedown={down} title="Click or drag to move the playhead. ⌘ scroll zooms, ⇧ scroll moves">
       <div class="inner" style="left: {-viewStart * zoom * 100}%; width: {zoom * 100}%">
         {#each segs as s, i (i)}<span class="mseg" style="flex: {s.w} 1 0; {s.style}">{s.lbl}</span>{/each}
@@ -162,6 +169,10 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+  .picked {
+    color: var(--text-strong);
+    font-weight: 600;
   }
   .times {
     display: flex;

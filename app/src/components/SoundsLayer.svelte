@@ -1019,7 +1019,6 @@
         <div class="shine"></div>
         <span class="badge tn">{g.members.length}</span>
       </div>
-      <span class="blab" style="left: {(g.x - 80).toFixed(0)}px; top: {(g.y + g.r + 5).toFixed(0)}px; opacity: {open || !on ? 0 : 0.75}">{byId.get(g.members[0].id)?.name} +{g.members.length - 1}</span>
     {/each}
 
     {#each sounds as s (s.id)}
@@ -1032,7 +1031,6 @@
       <div class="mer" class:faded class:tucked={b.tucked} class:out class:drag={dragSet.has(s.id)} class:stagger={staggering} style={box}>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d={panLine(s.pan)} class:on={focusId === s.id || selSet.has(s.id)} vector-effect="non-scaling-stroke" /></svg>
       </div>
-      <span class="blab" class:gone={faded || b.tucked || out} style="left: {(b.x - 80).toFixed(1)}px; top: {(b.y + b.r + 4).toFixed(1)}px; --c: var({s.tone}); --dl: {delay}s; opacity: {(1 - 0.6 * s.depth).toFixed(2)}">{s.name}</span>
     {/each}
 
     {#if ring}
@@ -1327,24 +1325,6 @@
     stroke: rgb(var(--highlight-rgb) / 0.9);
     stroke-width: 2;
   }
-  .blab {
-    position: absolute;
-    width: 160px;
-    text-align: center;
-    font-size: 11.5px;
-    font-weight: 600;
-    white-space: nowrap;
-    pointer-events: none;
-    z-index: 2;
-    color: color-mix(in srgb, rgb(var(--c, var(--ink-rgb))) 70%, rgb(var(--ink-rgb)));
-    transition:
-      left 0.6s var(--ease-settle) var(--dl, 0s),
-      top 0.6s var(--ease-settle) var(--dl, 0s),
-      opacity 0.4s ease var(--dl, 0s);
-  }
-  .blab.gone {
-    opacity: 0 !important;
-  }
   .clu {
     position: absolute;
     border-radius: 50%;
@@ -1513,7 +1493,6 @@
     .world,
     .ball,
     .mer,
-    .blab,
     .clu,
     .ribs,
     .art path {
