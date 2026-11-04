@@ -12,6 +12,18 @@ async function openEdit(page: Page) {
   await expect(page.getByTestId('dialogue-clip').first()).toBeVisible();
   // the docked bucket and its downloads are not part of these tests
   await page.keyboard.press('b');
+  // the first layout uses a default width: wait for the measured time scale
+  let w = 0;
+  await expect
+    .poll(
+      async () => {
+        const last = w;
+        w = (await page.getByTestId('dialogue-clip').first().boundingBox())!.width;
+        return Math.abs(w - last);
+      },
+      { intervals: [150] },
+    )
+    .toBeLessThan(0.5);
 }
 
 const box = async (page: Page, sel: string, i: number) => (await page.locator(sel).nth(i).boundingBox())!;
