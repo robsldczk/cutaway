@@ -158,7 +158,7 @@
       <div class="srow kept" class:cur={cursor === i} style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} data-testid="kept-row">
         <button class="ib pl gold" style={col ? `background: ${col}; color: #16110d` : ''} aria-label="Play {r.name}" onclick={() => toggle({ asset_id: r.id })}><Icon name={app.playing && app.sound === r.id ? 'stop' : 'play'} size={11} /></button>
         <div class="mid">
-          <span class="ellip nm3">{r.name}{#if r.heard}<span class="muted heard"> · “{r.heard}”</span>{/if}</span>
+          <span class="ellip nm3">{r.name}{#if r.heard}<span class="muted heard"> · “{r.heard}”</span>{/if}{#if r.matched}<span class="muted heard" title="Matched by its file name. It stays in Sound/{r.file.replace('show:', '')}; remove it to hide it here"> · matched</span>{/if}</span>
           <span class="wv" role="button" tabindex="-1" aria-label="Play {r.name} from here" onclick={(e) => playAt(e, { asset_id: r.id }, r.duration_s)} onkeydown={() => {}}>
             <Waveform peaks={r.peaks} fill={col ?? 'var(--sfx)'} />
             {#if app.playing && app.sound === r.id}<span class="ph" style="left: {progress(r.duration_s)}%"></span>{/if}

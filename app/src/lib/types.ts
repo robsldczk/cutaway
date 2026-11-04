@@ -429,6 +429,8 @@ export interface BucketSound {
   tags: string[];
   /** What the recogniser heard ("Mm.") for a character's vocal. */
   heard: string | null;
+  /** In this bucket because its file name answers the bucket's cues or keywords. */
+  matched?: boolean;
 }
 
 export interface Preview {
@@ -472,10 +474,20 @@ export interface Bucket {
   /** A character's vocal bucket: the actor's own recordings, found by the analysis. */
   character: string | null;
   color_index: number | null;
+  /** Belongs to no scene, so every scene can use it. */
+  show_wide?: boolean;
+}
+
+/** What Clean up proposes: nothing moves until the moves are confirmed. */
+export interface CleanupPlan {
+  moves: { file: string; name: string; to: string; new_folder: boolean; reason: string }[];
+  stay: string[];
 }
 
 export interface BucketsView {
   buckets: Bucket[];
+  /** Sound effects straight in `sfx/`, in no folder of their own. */
+  loose?: number;
   connected: { epidemic: boolean; elevenlabs: boolean };
   /** Scenes with script lines, and those not spotted yet or changed since. */
   spot: { scenes: number; pending: number };

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
@@ -84,6 +84,9 @@ test('a production folder as a show: backdrop, episode dropdown, folder buckets'
   writeFileSync(join(root, 'Episodes/Episode 2/episode.jetplane.json'), JSON.stringify({ kind: 'episode', name: 'Turkey Time', episodeNumber: 2 }));
   writeFileSync(join(root, 'Sound/sfx/doors/door slam.wav'), wav(300));
   writeFileSync(join(root, 'Sound/sfx/doors/door creak.wav'), wav(320));
+  writeFileSync(join(root, 'Sound/sfx/ES_Doors, Screen, Bang - Epidemic Sound.wav'), wav(340));
+  writeFileSync(join(root, 'Sound/sfx/ES_Doors, Wood, Knock - Epidemic Sound.wav'), wav(360));
+  writeFileSync(join(root, 'Sound/sfx/ES_Cloth, Puffer Jacket - Epidemic Sound.wav'), wav(380));
   const image = join(root, '..', 'poster.png');
   writeFileSync(image, png());
 
@@ -109,7 +112,27 @@ test('a production folder as a show: backdrop, episode dropdown, folder buckets'
   const doors = page.getByRole('article', { name: 'Bucket Doors' });
   await expect(doors).toBeVisible();
   await expect(doors).toContainText('Sound/sfx/doors');
-  await expect(doors.locator('.tl.kept')).toHaveCount(2);
+  // its two files, and the two loose door sounds its name matches
+  await expect(doors.locator('.tl.kept')).toHaveCount(4);
+
+  // what no bucket wants waits in its own bucket
+  await expect(page.getByRole('article', { name: 'Bucket Loose SFX' }).locator('.tl.kept')).toHaveCount(1);
+
+  // Clean up proposes first: nothing moves until the list is confirmed, and an unticked
+  // sound stays where it is
+  await page.getByRole('button', { name: 'Clean up 3 loose' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Clean up loose sounds' });
+  await expect(sheet.getByRole('region', { name: 'sfx/doors' })).toBeVisible();
+  await expect(sheet).toContainText('1 sound stays loose');
+  const loose = (n: string) => join(root, 'Sound/sfx', `ES_${n} - Epidemic Sound.wav`);
+  expect(existsSync(loose('Doors, Screen, Bang'))).toBe(true);
+  await sheet.getByRole('checkbox', { name: /Knock/ }).uncheck();
+  await sheet.getByRole('button', { name: 'Move 1 file' }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Clean up 2 loose' })).toBeVisible();
+  expect(existsSync(loose('Doors, Screen, Bang'))).toBe(false);
+  expect(existsSync(join(root, 'Sound/sfx/doors/ES_Doors, Screen, Bang - Epidemic Sound.wav'))).toBe(true);
+  expect(existsSync(loose('Doors, Wood, Knock'))).toBe(true);
 
   // the header switches episodes and goes back to the show's home
   await page.getByRole('button', { name: /tm-2610.*Episode 2/ }).click();

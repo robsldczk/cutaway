@@ -24,7 +24,7 @@
   });
 
   function isOpen(id: string, i: number) {
-    return closed[id] === undefined ? i < 2 : !closed[id];
+    return closed[id] === undefined ? i < 2 && !data?.buckets[i].show_wide : !closed[id];
   }
 
   function drag(e: DragEvent, s: DragSound) {
@@ -74,6 +74,7 @@
     {#each data?.buckets ?? [] as b, i (b.id)}
       {@const open = isOpen(b.id, i)}
       {@const col = b.character ? solid(colorOf(b.color_index ?? 0).rgb) : null}
+      {#if b.show_wide && !data?.buckets[i - 1]?.show_wide}<div class="label wide">Whole show</div>{/if}
       <section class="bkt" aria-label={b.name}>
         <button class="bh" aria-expanded={open} onclick={() => (closed = { ...closed, [b.id]: open })}>
           <span class="chev" style="transform: rotate({open ? 0 : -90}deg)"><Icon name="chevron" size={11} stroke={2.4} /></span>
@@ -108,6 +109,9 @@
 </aside>
 
 <style>
+  .wide {
+    margin-top: 6px;
+  }
   .panel {
     position: absolute;
     top: 138px;
