@@ -715,3 +715,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **In the opened view** ⌥ on the edges trims without snapping; ⌥ on the middle still slips.
 - **A sound put down free has no anchor,** so it stays at its time when the lines around it move.
 
+### D100 One name at a time (Rob, 2026-11-04)
+- **Rob:** the names under the balls clutter; show only the selected one, somewhere central.
+- **Now:** no labels under balls or merged groups. The selected sound's name is in the middle of the transport, or "3 sounds selected". The hints left that slot empty on Arrange. Screen readers keep each ball's full label.
+
