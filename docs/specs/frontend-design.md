@@ -163,6 +163,7 @@ A floating glass bar at the bottom centre (`min(820px, 94%)`, 30 px radius):
 - **Playing:** the current box glows in its take's color, the current word lights up, and the column auto-scrolls to keep it centred.
   - *Changed in implementation (D70):* **Follow** (header pill and Settings, on by default, remembered per viewer). On, the current box moves with the playhead on Options and Arrange, and the Edit page pages along and highlights the line in its scene strip; stopping leaves the box where playback stopped, so Space carries on. Off, the box stays where you put it and Space plays from it again. Follow never changes the Edit page's clip selection.
 - **Stopped:** the playhead stays where it stopped.
+  - *Changed in implementation (D84):* Play in a bucket doesn't use the transport. A preview player at the foot of the bucket panel shows it, on its own clock, and the playhead stays. One plays at a time: a preview stops the timeline, and the timeline stops a preview. Space stops a playing preview.
 
 **Modes:**
 - play the scene from the selected line (Space),

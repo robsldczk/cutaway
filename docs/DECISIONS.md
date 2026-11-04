@@ -596,3 +596,19 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Edit page:** handover 10 asks for pan and depth to show there, and they didn't. The inspector gains Pan and Depth (Depth only for sounds in the room) and marks an automatic fade out.
 - **Not done:** adding a sound from the bucket still needs a mouse drag. The card lists the controls to reach and this isn't one of them; a key on a bucket row that places at the playhead would be the natural way.
 
+### D83 Sounds drag with the mouse, not HTML5 drag and drop (2026-11-04)
+- **Found:** Rob couldn't drag a sound in. Every drag in the app used HTML5 drag and drop, and none of them can work in the desktop app: with `dragDropEnabled` on, Tauri's handler returns `true` for every drag (`tauri-runtime-wry`), so wry never passes it to the WKWebView and `dragover` and `drop` never reach the page. Chromium has no such layer, so every Playwright drag passed. The prototype used mouse events; card B's port changed that.
+- **Options:** turn `dragDropEnabled` off, which ends Finder drops (a page can't read a dropped file's path); use Tauri's native drag position for page drags; or drag with the mouse. **Chose the mouse:** it's what the prototype does, the same in a browser and the app, and Finder drops keep working.
+- **`lib/drag.svelte.ts`:** `grab` on a row's mousedown, `dropzone` on a target. Four pixels make a press a drag; Esc or losing the window calls it off. A pill follows the pointer until a zone shows the sound itself. All four sources (scene bucket, Epidemic results, both lists of the bucket drawer) and all three targets (the sounds layer, Edit lanes, Import › Sounds buckets) use it. A browser test fails if HTML5 drag comes back.
+- **Rule 5.1 holds:** a mouse drag fires hover, which an HTML5 drag doesn't, so during a drag nothing in the layer takes the pointer but the field.
+- **The bucket drawer's drag went nowhere even in a browser:** it set a type nothing read since the lanes moved to `application/x-cutaway-bucket`. It now drops on the lanes and keeps its cue (`cue_id` on `place_from_bucket`).
+- **Finder drops on Arrange:** with the sounds layer on, audio went to `import_audio` as a recording, re-ran the file matching and left the page. Now it's a sound: into the library, placed if it landed by a line. Tauri calls the drop position physical, but on macOS wry reports points, so it is used as CSS pixels. Not tried by hand yet.
+- **Dev note:** `tauri build` writes `target/debug/Cutaway`, which on a case-insensitive disk is the CLI's `target/debug/cutaway`. Delete it and `cargo build -p apc-cli` afterwards.
+
+### D84 The buckets have their own preview player (Rob, 2026-11-04)
+- **Rob:** Play in a bucket moved the timeline's playhead. A bucket gets a preview player; the main player is only for what sits on the timeline.
+- **Two decks in `player.rs`:** a preview has its own engine and clock, so it never touches the timeline's position, schedule or scene. Same `Engine`, a second instance opened on first use, so no change to the audio engine. New methods `stop_sound` and `sound_playhead`; `play_sound` keeps its name; `stop` stops both, so closing an episode leaves nothing playing.
+- **One at a time (not settled by Rob):** starting a preview stops the timeline, its playhead staying where it stopped, and starting the timeline stops the preview. That's how it already sounded. Mixing them would be a small change if Rob wants to hear a sound against running dialogue.
+- **Space** while a preview plays stops the preview and doesn't start the timeline; otherwise stopping a sound by Space would set the scene off. The transport's button always means the timeline.
+- **The player:** a strip at the foot of the bucket panels (scene bucket, Import › Sounds' panel and search): name, waveform to click in, time. It stays after the sound ends, to play it again. Leaving it stops the sound, so nothing plays that has no stop button on screen.
+

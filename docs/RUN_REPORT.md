@@ -123,6 +123,20 @@ On branch `soundeffects-ui`, from `dev` after cards A and B. D80–D82.
 - Checked on the demo session only, not on a copy of Episode 2.
 - Not listened to: no audio device in the tests.
 
+## Sounds in the real app: drag and preview player (D83, D84, 2026-11-04)
+
+**Built:**
+- Sounds drag with the mouse, from every bucket and search list onto Arrange, the Edit lanes and Import › Sounds buckets. HTML5 drag never reached the page in the desktop app, only in browser tests.
+- Bucket Play uses a preview player of its own at the foot of the bucket panel. The timeline's playhead doesn't move.
+- Audio dropped from the Finder on Arrange with the sounds layer on is a sound, placed where it landed. It used to be filed as a recording.
+
+**Verified:** `scripts/check.sh`; Playwright, with HTML drag events blocked as the webview does. In the real app on a temp project: the preview played on the real device on its own clock, the timeline stayed put, and a drag placed a sound that was in the project file afterwards. Those drags were mouse events sent inside the page, because this session can't send OS input.
+
+**Rob, by hand:**
+- Restart `npm run tauri dev`, then drag a sound from the bucket beside a line, and onto an Edit lane.
+- Press Play on a bucket sound: the playhead stays, the player shows at the foot of the panel, Space stops it.
+- Drop a WAV from the Finder beside a line on Arrange: it should land there, and not open Import › Files.
+
 ## What was built
 
 | Milestone | State | Notes |

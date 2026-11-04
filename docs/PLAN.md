@@ -593,6 +593,16 @@ Decisions: D80–D82.
 - [ ] (Rob) By ear: depth and room size on real material. See RUN_REPORT.
 - [ ] (Rob) By hand: the feel of the opened view with a real sound, and VoiceOver in the app.
 
+### Sounds in the real app: drag and preview player (Rob, 2026-11-04)
+
+Decisions: D83, D84.
+
+- [x] Drag with the mouse everywhere: HTML5 drag never reaches the page in the desktop app.
+- [x] The bucket drawer's drag lands on the lanes; Finder audio on Arrange is a sound, not a recording.
+- [x] Preview player on its own deck: bucket Play leaves the timeline alone.
+- [x] Tried in the real WKWebView with the real audio device (in-page mouse events, temp project).
+- [ ] (Rob) By hand: a drag with a real mouse, and a Finder drop on Arrange. See RUN_REPORT.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -650,3 +660,4 @@ Decisions: D80–D82.
 - 2026-11-04 M16 card B done on `feature/2-sound-fx-b-arrange-sounds-layer-spine-le` (D78, D79): the sounds layer on Arrange. Spine, sticky length lines, balls and the bucket with eyes, every gesture one command on release with a local preview until it lands, multi-select as one undo step, settle/merge/split per handover 5, motion per 6 with reduced motion. Logic in `lib/sounds` with vitest (new, in check.sh), every gesture in Playwright; three deliberate breakages were caught by the right tests. On a copy of Episode 2 (scene 2: 27 lines, 17 overlapping) no errors and drag moves at about 17 ms; that run also found the header wrapping on real scene names, and cards running under the header. Fixed.
 - 2026-11-04 `dev` brought together: `sfx-matching`, Sound FX A (merged by the board) and the Bokeh reference. The Playwright failures noted above were test timing, not app bugs: `openEdit` measured clips before the timeline's first measurement, and the lengthen test grabbed its handle while the column was still gliding. The trim test failed before its undo, which failed the tests after it. check.sh green, Playwright 21/21 on 8 runs in a row.
 - 2026-11-04 M17 card C done on `soundeffects-ui` (D80–D82): the opened sound on Arrange, the room in the transport, and the keyboard and screen reader pass over the feature. The branch was new: cards A and B had merged into `dev`, so it starts from there. Pan and depth were missing from the Edit inspector, which handover 10 asks for: added. A browser test found the wheel dead over the view's handles (the app ignores wheels over sliders): fixed. The app's own edits never reached a running schedule, so a room change was only heard from the next Play: `playhead` now reloads when the schedule differs (D81). check.sh green, Playwright 85/85. Not listened to, and not tried on real material or with VoiceOver: that waits for Rob.
+- 2026-11-04 Sounds in the real app (D83, D84): Rob couldn't drag a sound in, and bucket Play moved the playhead. Every drag was HTML5 drag and drop, which Tauri's file drop keeps from the page, so it only ever worked in the browser tests: all drags now use the mouse. A preview has its own deck and a small player in the bucket panels. A Finder drop on Arrange no longer files a sound as a recording. Checked in the real webview with the real device through in-page mouse events; a real mouse and a Finder drop wait for Rob.
