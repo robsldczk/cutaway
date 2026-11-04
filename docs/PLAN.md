@@ -614,6 +614,14 @@ Decisions: D85–D87.
 - [x] The Sounds toggle glides and fades: no overshoot, a short stagger.
 - [x] Tests, docs, RUN notes.
 
+### ⇧ Space from a sound, rooms for Episode 2 (Rob, 2026-11-04)
+
+Decision: D88.
+
+- [x] ⇧ Space with sounds selected on Arrange plays from the first of them.
+- [x] Music keeps its full length on a drop: Rob's decision (D85).
+- [x] Starting rooms entered in Episode 2 at Rob's request, through the CLI with the app closed.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -673,3 +681,4 @@ Decisions: D85–D87.
 - 2026-11-04 M17 card C done on `soundeffects-ui` (D80–D82): the opened sound on Arrange, the room in the transport, and the keyboard and screen reader pass over the feature. The branch was new: cards A and B had merged into `dev`, so it starts from there. Pan and depth were missing from the Edit inspector, which handover 10 asks for: added. A browser test found the wheel dead over the view's handles (the app ignores wheels over sliders): fixed. The app's own edits never reached a running schedule, so a room change was only heard from the next Play: `playhead` now reloads when the schedule differs (D81). check.sh green, Playwright 85/85. Not listened to, and not tried on real material or with VoiceOver: that waits for Rob.
 - 2026-11-04 Sounds in the real app (D83, D84): Rob couldn't drag a sound in, and bucket Play moved the playhead. Every drag was HTML5 drag and drop, which Tauri's file drop keeps from the page, so it only ever worked in the browser tests: all drags now use the mouse. A preview has its own deck and a small player in the bucket panels. A Finder drop on Arrange no longer files a sound as a recording. Checked in the real webview with the real device through in-page mouse events; a real mouse and a Finder drop wait for Rob.
 - 2026-11-04 Drop lengths, Loop, room tone per scene, calmer toggle (D85–D87). Under 6 s a dropped sound keeps its length, past it 10 s, or with Loop on it repeats on the ambience lane to the scene's end. Each Rooms row picks a room tone. Loop seams crossfade in the mixer: they clicked before. FCPXML repeats the file. The toggle glides and fades. Rust tests, Playwright; not listened to, and the toggle's feel is Rob's to judge.
+- 2026-11-04 ⇧ Space from a selected sound on Arrange (D88). Rooms entered in the real Episode 2 at Rob's request: 16 `set_scene_room` commands with the app closed, rehearsed on a copy, and compared with a backup afterwards: only the 16 scenes' rooms changed.

@@ -618,7 +618,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Loop lives on the bucket** (`SoundBucket.loops`, by asset or provider id): a show's sound isn't in the episode until placed, and a preview has no asset yet. Without a setting, ambience loops by default, which is the show's `room-tone` folder and anything else the library files as ambience. Rob can turn any of them off.
 - **A looped drop** goes on the ambience lane even if dropped on an effects lane, starts with a 1 s fade, and repeats to the scene's end as the scene stands then. It doesn't follow later changes of the scene's length; its tail trims like any sound's. `Placement.looped` is the one exception to "never longer than the source".
 - **Drops only:** `place_sound` (a cue's Place button) still places the whole sound. Finder drops follow the rule.
-- **Music and vocals keep their length (not Rob's words):** he said "everything", in talking about sound effects and beds. A 10 s crop of a score cue would rarely be wanted. One line in `shape_drop` if he does want it.
+- **Music and vocals keep their full length (Rob):** he crops music by hand.
 - **Export:** a clip can't outlast its file in an edit, so FCPXML gets the file repeated, cut end to end. The crossfade at the seam exists only in playback and the bounce.
 
 ### D86 A room tone per scene (Rob, 2026-11-04)
@@ -632,4 +632,9 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Rob:** on and off was too wild with its overshoot; it should be premium, eased and sleek. This replaces handover 6's "playful" toggle (shrink into the spine, overshoot on return).
 - **Now:** the balls glide a fifth of the way toward the spine and fade, scaling only to 82 %. In: an expo-out, no overshoot, 0.7 s. Out: 0.4 s. The stagger is at most a quarter of a second in all, however many sounds. A browser test fails on an overshooting curve there.
 - **The column and panel** keep their ease-in-out and ease-out; they never overshot. **A dropped sound's pop** keeps its overshoot: handover 6 calls it rare, and Rob spoke of the toggle.
+
+### D88 ⇧ Space from a selected sound (Rob, 2026-11-04)
+- **Rob:** with a sound selected on Arrange, ⇧ Space plays from its start.
+- **Several selected:** from the first of them. Pressed during playback it starts there again, the way ⇧ Space does from the locator. The playhead and locator move there, as a scrub does.
+- **Nothing selected:** the locator, as on every other page. A ball that only has the keyboard's focus counts as selected, as it does for the other sound keys. The opened sound counts too.
 
