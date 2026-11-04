@@ -124,6 +124,7 @@ Reorder lines and spacers, set pauses, trim heads and tails.
 - **Gap rows** between lines: a hairline and a centred pill showing the pause (`‖ 0.30 s`) and the action line that sits there. Drag the row up or down to change the pause in 50 ms steps; dragging below zero overlaps the two lines (`overlap 0.20 s`, shown with blended colors).
 - **Reorder:** drag the grip; a glowing insertion line shows the drop point; ripple is the default. Alt+Up/Down moves the current line.
 - The current row has a brighter gradient and a 1.5 px outline in its shade, and sits on the centre hairline.
+- *Changed in implementation (D78):* the **sounds layer** sits beside the dialogue, shown or hidden with **Sounds** or `S`. The column moves left and narrows; beside it runs the spine (the dialogue as a vertical waveform in character colours), a hairline per sound, and the sounds as balls (size = length, x = depth, y = start). The Edit page's bucket floats on the right, with an eye per bucket. Scrolling moves the playhead continuously, with the column on the centre line. Each gesture is one undo step, a selection moves as one, and a ball is the same clip the Edit page shows. Spec: `tasks/Bokeh · live prototype-html/audioplay-cutter-handover-arrange-sounds.md`.
 
 ## Edit page (full editor)
 
@@ -315,6 +316,16 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 | ⌥ scroll (or ⌘ scroll) | Zoom the timeline around the mouse (Edit page) |
 | ? | Keyboard help |
 | ⌘ scroll / ⇧ scroll | Zoom / move the scene map |
+| S | Show or hide the sounds (Arrange) |
+| Scroll | Scrub, with the sounds on (Arrange) |
+| Tab, Enter | Reach a ball, select it; ⇧ Enter adds it (Arrange) |
+| ⇧ click, drag on empty space | Select more sounds (Arrange) |
+| Left / Right | Depth, with sounds selected (Arrange) |
+| Option+Left/Right | Pan, with sounds selected (Arrange) |
+| Shift+Up / Shift+Down | Loudness, with sounds selected (Arrange) |
+| , / . | Move 100 ms, with sounds selected; ⇧ 10 ms (Arrange) |
+| ⇧ scroll over a ball | Loudness (Arrange) |
+| ⌫ / Esc | Remove / clear the selected sounds (Arrange) |
 
 **In the box editor:** Space play/stop, ⇧ Space from locator, ← → nudge segment (or move the playhead when no segment is selected; Shift coarse), Tab next segment, W words overlay, 1…5 use whole take, R reset comp, Delete delete selected words (Edit mode), Esc close.
 

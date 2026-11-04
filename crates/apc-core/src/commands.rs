@@ -1084,6 +1084,7 @@ impl Command {
                 b.len_s = p.len_s - cut;
                 b.offset_s = p.offset_s + cut;
                 b.fade_in_s = 0.01;
+                b.added = sounds::next_added(tx.doc());
                 sounds::settle(tx.doc(), &mut a);
                 sounds::settle(tx.doc(), &mut b);
                 tx.put(&a)?;

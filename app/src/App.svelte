@@ -32,6 +32,7 @@
     const t = e.target as HTMLElement;
     if (t.closest('[role="slider"]') || t.closest('aside') || t.tagName === 'INPUT') return;
     e.preventDefault();
+    if (app.page === 'arrange' && app.soundsUi?.wheel(e)) return;
     const now = performance.now();
     // macOS turns a Shift wheel into a horizontal one
     let d = e.shiftKey && Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;

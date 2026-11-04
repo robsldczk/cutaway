@@ -528,6 +528,7 @@ mod tests {
                 pan: 0.0,
                 depth: 0.0,
                 auto_fade: false,
+                added: 0,
             },
         );
         doc.locations.insert(

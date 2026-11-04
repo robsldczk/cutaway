@@ -7,6 +7,12 @@ export function onKey(e: KeyboardEvent) {
   const sliderUndo = t instanceof HTMLInputElement && t.type === 'range' && (e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z');
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && e.key !== 'Escape' && !sliderUndo) return;
   if (app.overlay === 'editor') return;
+  // Arrange's sounds layer sees keys first: it passes on whatever isn't about its sounds
+  if (!app.overlay && app.page === 'arrange' && app.soundsUi?.key(e)) {
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
   const k = e.key;
   const mod = e.metaKey || e.ctrlKey;
   let handled = true;
@@ -42,7 +48,8 @@ export function onKey(e: KeyboardEvent) {
   else if (k === 'p' || k === 'P') void app.applyPassage();
   else if (k === 'u' || k === 'U') app.drawer = app.drawer === 'unmatched' ? null : 'unmatched';
   else if ((k === 'b' || k === 'B') && e.shiftKey) app.toggleFullBucket();
-  else if ((k === 'b' || k === 'B') && app.page === 'edit') app.editBucket = !app.editBucket;
+  else if ((k === 'b' || k === 'B') && (app.page === 'edit' || (app.page === 'arrange' && app.soundsOn))) app.editBucket = !app.editBucket;
+  else if ((k === 's' || k === 'S') && app.page === 'arrange') app.toggleSounds();
   else if (app.page === 'import') handled = false;
   else if (k === 'b' || k === 'B') app.drawer = app.drawer === 'bucket' ? null : 'bucket';
   else if (k === '1' && app.view) app.setPage('options');

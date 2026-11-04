@@ -528,6 +528,7 @@ pub fn place(svc: &mut Service, p: PlaceSoundP) -> Result<Value> {
         pan: 0.0,
         depth: p.depth,
         auto_fade: !vocal,
+        added: 0,
     };
     Ok(svc.exec(&Command::PlaceSound { placement })?.result)
 }

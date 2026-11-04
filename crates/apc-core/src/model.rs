@@ -943,6 +943,10 @@ pub struct Placement {
     /// off. Off in projects from before it existed, so their fades stay as they were set.
     #[serde(default)]
     pub auto_fade: bool,
+    /// Order the sounds were added in (1, 2, …): breaks ties between sounds that start
+    /// together. 0 for sounds from before it existed.
+    #[serde(default)]
+    pub added: u64,
 }
 entity!(Placement, Placement, parent = scene_id);
 

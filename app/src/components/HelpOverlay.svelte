@@ -25,6 +25,18 @@
     ['Fly through the lines (Options, Arrange)', ['⇧ scroll']],
     ['Zoom / move scene bar (over the bar)', ['⌘ scroll', '⇧ scroll']],
   ];
+  const sounds: [string, string[]][] = [
+    ['Show / hide the sounds', ['S']],
+    ['Scrub', ['scroll']],
+    ['Select more sounds', ['⇧ click', 'drag on empty space']],
+    ['Reach a sound, select it', ['Tab', 'Enter']],
+    ['Depth', ['drag sideways', '←', '→']],
+    ['Pan', ['⌥ drag', '⌥←', '⌥→']],
+    ['Loudness', ['ring', '⇧ scroll', '⇧↑', '⇧↓']],
+    ['Move 100 ms / 10 ms earlier or later', [',', '.', '⇧,', '⇧.']],
+    ['Remove / clear the selection', ['⌫', 'Esc']],
+    ['Fade a bucket / show only it', ['eye', '⌥ eye']],
+  ];
   const edit: [string, string[]][] = [
     ['Show / hide the scene bucket', ['B']],
     ['Inspector / mixer / cycle', ['I', 'X', 'C']],
@@ -64,6 +76,8 @@
   <div class="glass box" role="dialog" aria-label="Keyboard shortcuts" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
     <div class="h1">Keyboard</div>
     {#each rows as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
+    <div class="h2">Sounds on the Arrange page</div>
+    {#each sounds as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
     <div class="h2">On the Edit page</div>
     {#each edit as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
     <div class="h2">In the box editor</div>

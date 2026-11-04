@@ -20,7 +20,7 @@
   const show = $derived(app.status?.show ?? null);
 </script>
 
-<header class="hdr" class:wide>
+<header class="hdr" class:wide class:fit={app.page === 'arrange'}>
   <div class="title">
     <div class="epm">
       <button class="ep" aria-haspopup="menu" aria-expanded={menu} title={app.status?.path ?? brand.displayName} onclick={() => (menu = !menu)}>{#if show}<span class="showname">{show.name}</span>{/if}{app.view?.episode ?? app.status?.name ?? brand.displayName}<Icon name="chevron" size={10} stroke={2.4} /></button>
@@ -48,7 +48,7 @@
         </select>
         Sc. {sc.number} · {sc.place}<Icon name="chevron" size={10} stroke={2.4} />
       </label>
-    {:else if sc && app.page !== 'import' && app.page !== 'dev'}<span class="muted2">Sc. {sc.number} · {sc.place}{sc.time_of_day ? ` · ${sc.time_of_day}` : ''}</span>{/if}
+    {:else if sc && app.page !== 'import' && app.page !== 'dev'}<span class="muted2 where" title={sc.heading}>Sc. {sc.number} · {sc.place}{sc.time_of_day ? ` · ${sc.time_of_day}` : ''}</span>{/if}
     <span class="dot" class:saving title={saving ? 'Saving…' : 'Saved'}></span>
   </div>
   <nav class="glass switch" aria-label="Pages">
@@ -59,6 +59,12 @@
   <div class="right">
     {#if app.page === 'import'}
       <button class="pillbtn" onclick={() => app.toggleFullBucket()} disabled={!ready}>{#if app.importTab === 'sounds'}<Icon name="back" size={13} />Back to Edit{:else}Edit{/if} <span class="kb">⇧B</span></button>
+    {/if}
+    {#if app.page === 'arrange'}
+      <button class="pillbtn sounds" class:on={app.soundsOn} aria-pressed={app.soundsOn} onclick={() => app.toggleSounds()} title="Sounds beside the dialogue" data-testid="sounds-toggle">
+        <svg width="22" height="14" viewBox="0 0 22 14" aria-hidden="true"><circle cx="4" cy="9" r="3.5" fill="rgb(var(--bucket-1-rgb))" /><circle cx="11" cy="5" r="4" fill="rgb(var(--bucket-2-rgb))" /><circle cx="18" cy="9" r="3" fill="rgb(var(--bucket-3-rgb))" /></svg>
+        Sounds <span class="kb">S</span>
+      </button>
     {/if}
     {#if app.page === 'options' || app.page === 'arrange' || app.page === 'edit'}
       <button class="pillbtn follow" class:on={app.follow} aria-pressed={app.follow} onclick={() => app.setFollow(!app.follow)} title={app.follow ? 'The current box moves with the playhead. Click to keep it where you put it.' : 'The current box stays where you put it. Click to move it with the playhead.'} data-testid="follow">Follow</button>
@@ -91,6 +97,29 @@
   .hdr.wide {
     left: 28px;
     right: 28px;
+  }
+  /* Arrange has the most buttons: the scene's name gives way, not the row */
+  @media (min-width: 1180px) {
+    .hdr.fit {
+      flex-wrap: nowrap;
+    }
+    .hdr.fit .title {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .hdr.fit .switch,
+    .hdr.fit .right {
+      flex: none;
+    }
+    .hdr.fit .ep {
+      white-space: nowrap;
+    }
+    .hdr.fit .where {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
   }
   .scene {
     position: relative;
@@ -217,6 +246,11 @@
     margin-left: 4px;
     background: rgba(127, 127, 127, 0.18);
     color: inherit;
+  }
+  .sounds {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
   }
   .right {
     display: flex;

@@ -79,6 +79,15 @@
 
   /* editor lanes (palette.ts LANE_COLORS): sound effects, room tone and ambience, music */
   --sfx-rgb: 216 182 87;
+  /* buckets on Arrange: separate from the character colours, so "who talks" and "what kind
+     of sound" read apart. The last is for sounds in no bucket. */
+  --bucket-1-rgb: 216 182 87;
+  --bucket-2-rgb: 142 197 240;
+  --bucket-3-rgb: 229 143 166;
+  --bucket-4-rgb: 150 214 158;
+  --bucket-5-rgb: 196 170 240;
+  --bucket-6-rgb: 240 168 112;
+  --bucket-none-rgb: 176 180 190;
   --room-rgb: 154 166 184;
   --music-rgb: 125 147 232;
   --sfx: rgb(var(--sfx-rgb));
@@ -118,6 +127,8 @@
   /* motion */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-scroll: cubic-bezier(0.22, 0.9, 0.25, 1);
+  /* things finding their place (merge, split, settle): calm, no overshoot */
+  --ease-settle: cubic-bezier(0.25, 0.8, 0.25, 1);
   --dur-flip: 0.45s;
   --dur-scroll: 0.34s;
   --dur-fast: 0.2s;
@@ -191,6 +202,13 @@
   --mix-base: rgb(246, 243, 236);
 
   --sfx-rgb: 176 136 30;
+  --bucket-1-rgb: 176 136 30;
+  --bucket-2-rgb: 52 120 180;
+  --bucket-3-rgb: 196 76 112;
+  --bucket-4-rgb: 56 142 84;
+  --bucket-5-rgb: 122 92 196;
+  --bucket-6-rgb: 200 112 44;
+  --bucket-none-rgb: 110 114 124;
   --room-rgb: 96 110 132;
   --music-rgb: 76 100 200;
   --on-sfx: #fffaf0;

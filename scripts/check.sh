@@ -23,6 +23,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 step "cargo test"
 cargo test --workspace
 
+step "ui: unit tests"
+(cd app && npm run test --silent)
+
 step "ui: lint"
 (cd app && npm run lint --silent)
 

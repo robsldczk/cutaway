@@ -1,7 +1,7 @@
 // UI state. Document state comes only from the core (view models); every change is a
 // command sent through the bridge. Local state here is selection, page, playhead, overlays.
 import { call, BridgeError } from './bridge';
-import type { EditView, ItemView, Job, SceneView, ShowView, Status } from './types';
+import type { DragSound, EditView, ItemView, Job, SceneView, ShowView, Status } from './types';
 
 export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'dev';
 export type ImportTab = 'files' | 'sounds';
@@ -57,6 +57,15 @@ function storedDev(): boolean {
 function storedFollow(): boolean {
   try {
     return localStorage.getItem('cutaway.follow') !== '0';
+  } catch {
+    return true;
+  }
+}
+
+/** The sounds layer on Arrange: on unless switched off, remembered per viewer. */
+function storedSounds(): boolean {
+  try {
+    return localStorage.getItem('cutaway.sounds') !== '0';
   } catch {
     return true;
   }
@@ -118,6 +127,17 @@ class AppState {
   waveGain = $state(1);
   /** Dialogue clips follow the script order and pauses; off, they move freely in time. */
   lockScript = $state(true);
+  /** Arrange: the sounds layer beside the dialogue (S). */
+  soundsOn = $state(storedSounds());
+  /** Arrange: selected sounds; the last one is the primary. */
+  soundSel = $state<string[]>([]);
+  /** Arrange: buckets faded out with their eye. View only: this page, this session, never
+   *  the document or the mix. */
+  hiddenBuckets = $state<string[]>([]);
+  /** The bucket sound being dragged (a drag can't be read until it is dropped). */
+  dragSound = $state<DragSound | null>(null);
+  /** Keys and the wheel go to the sounds layer first, while it is on the page. */
+  soundsUi: { key(e: KeyboardEvent): boolean; wheel(e: WheelEvent): boolean } | null = null;
   /** Bucket the full bucket highlights or opens in its side panel. */
   openBucket = $state<string | null>(null);
   /** Sound being auditioned from a bucket (asset id or remote id). */
@@ -240,6 +260,8 @@ class AppState {
     this.passageTo = null;
     this.editSel = null;
     this.editMany = [];
+    this.soundSel = [];
+    this.hiddenBuckets = [];
     this.openBucket = null;
     this.overlay = null;
     this.drawer = null;
@@ -337,8 +359,14 @@ class AppState {
       this.pos = first?.start_s ?? 0;
       this.locator = this.pos;
       this.passageTo = null;
+      this.soundSel = [];
     }
-    if (this.page === 'edit') await this.loadEdit();
+    if (this.wantsSounds) await this.loadEdit();
+  }
+
+  /** The Edit page, and Arrange with its sounds layer, read the placed sounds. */
+  private get wantsSounds() {
+    return this.page === 'edit' || (this.page === 'arrange' && this.soundsOn);
   }
 
   async loadEdit() {
@@ -382,7 +410,17 @@ class AppState {
 
   setPage(p: Page) {
     this.page = p;
-    if (p === 'edit') void this.loadEdit();
+    if (this.wantsSounds) void this.loadEdit();
+  }
+
+  toggleSounds() {
+    this.soundsOn = !this.soundsOn;
+    try {
+      localStorage.setItem('cutaway.sounds', this.soundsOn ? '1' : '0');
+    } catch {
+      /* private mode: the choice lasts for this session */
+    }
+    if (this.wantsSounds) void this.loadEdit();
   }
 
   /** ⇧B: between the editor and the full bucket, keeping scene and playhead. */
@@ -530,7 +568,9 @@ class AppState {
     }
     const c = this.cur;
     let from = this.pos;
-    if (!c || from < c.start_s - 0.001 || from >= c.end_s) from = c?.start_s ?? 0;
+    // with the sounds layer the playhead scrubs freely: a pause is where the sounds are
+    const free = this.page === 'arrange' && this.soundsOn;
+    if (!free && (!c || from < c.start_s - 0.001 || from >= c.end_s)) from = c?.start_s ?? 0;
     if (from >= (this.view?.duration_s ?? 0) - 0.05) from = c?.start_s ?? 0;
     await this.play(from);
   }
