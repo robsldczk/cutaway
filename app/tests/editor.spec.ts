@@ -135,7 +135,19 @@ test('Arrange lengthens a clip into its handle and undo shortens it again', asyn
   const before = await len();
   // the strip shows handle audio on both sides, so the end handle sits inside the strip
   const end = row.getByRole('slider', { name: 'Clip end' });
-  await end.hover(); // waits for the column to stop moving
+  // the column glides to the current line: grabbing it on the way misses the handle
+  let y = 0;
+  await expect
+    .poll(
+      async () => {
+        const last = y;
+        y = (await end.boundingBox())!.y;
+        return Math.abs(y - last);
+      },
+      { intervals: [200] },
+    )
+    .toBeLessThan(0.1);
+  await end.hover();
   const strip = (await row.locator('.strip').boundingBox())!;
   const eb = (await end.boundingBox())!;
   expect(eb.x + eb.width).toBeLessThan(strip.x + strip.width - 10);
