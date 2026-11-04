@@ -73,7 +73,7 @@ pub fn interjection_tag(word: &str) -> Option<&'static str> {
 const AMBIGUOUS: &[&str] = &["of", "he", "o", "hu", "wo", "uf", "arg", "eh"];
 
 /// Repeated letters once: "whoooaaah" → "whoah", "mmhmm" → "mhm", "oof" → "of".
-fn collapse(w: &str) -> String {
+pub(crate) fn collapse(w: &str) -> String {
     let mut out = String::new();
     for c in w.chars() {
         if !out.ends_with(c) {
@@ -95,11 +95,11 @@ fn cap(tag: &str) -> usize {
 const PAD_BEFORE: f64 = 0.08;
 const PAD_AFTER: f64 = 0.15;
 
-fn db(x: f32) -> f64 {
+pub(crate) fn db(x: f32) -> f64 {
     20.0 * (x.max(1e-6) as f64).log10()
 }
 
-fn level(env: &[f32], t0: f64, t1: f64) -> f32 {
+pub(crate) fn level(env: &[f32], t0: f64, t1: f64) -> f32 {
     let fps = ENV_FPS as f64;
     let a = ((t0 * fps).max(0.0) as usize).min(env.len());
     let b = ((t1 * fps).ceil().max(0.0) as usize).min(env.len());
@@ -139,6 +139,15 @@ fn bursts(env: &[f32], floor: f32) -> Vec<(f64, f64)> {
 /// Finds every character's vocal sounds. `tracks` are the actor mics of the episode; mics
 /// in the same session are compared so another actor's bleed isn't taken for this one.
 pub fn find_vocals(tracks: &[VocalTrack]) -> Vec<VocalCandidate> {
+    vocals_up_to(tracks, cap)
+}
+
+/// All of them, for a search: the bucket's caps keep it short, a search wants what's there.
+pub fn every_vocal(tracks: &[VocalTrack]) -> Vec<VocalCandidate> {
+    vocals_up_to(tracks, |_| usize::MAX)
+}
+
+fn vocals_up_to(tracks: &[VocalTrack], cap: impl Fn(&str) -> usize) -> Vec<VocalCandidate> {
     let mut all: Vec<VocalCandidate> = Vec::new();
     for (ti, tr) in tracks.iter().enumerate() {
         let near = |t0: f64, t1: f64, pad: f64| {

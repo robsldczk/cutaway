@@ -8,6 +8,7 @@ pub mod error;
 pub mod fuzzy;
 #[cfg(feature = "parakeet")]
 pub mod parakeet;
+pub mod performance;
 pub mod pipeline;
 pub mod rescue;
 pub mod roles;
