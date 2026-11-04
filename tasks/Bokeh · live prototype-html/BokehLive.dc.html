@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bokeh · Live prototype</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&amp;family=Figtree:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D12}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.script{font-family:'Courier Prime','Courier New',monospace}
+.nm{font-weight:600;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.glass{backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.09),inset 0 0 0 1px rgba(255,255,255,0.05),0 14px 40px rgba(0,0,0,0.3)}
+.mut{color:rgba(240,238,232,0.64)}
+.ellip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tn{font-variant-numeric:tabular-nums}
+.tab{height:36px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:500;color:rgba(240,238,232,0.68)}
+.tabon{background:rgba(240,238,232,0.92);color:#14161C;font-weight:600}
+.snip{position:absolute;box-sizing:border-box;border-radius:16px;padding:9px 14px 8px;display:flex;flex-direction:column;justify-content:space-between;transition:background .3s,box-shadow .3s}
+.srow{display:flex;align-items:center;gap:10px;min-width:0}
+.strip{position:relative;height:26px;border-radius:8px;background:rgba(8,9,12,0.35);overflow:hidden}
+.ph{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#F3F1EC;box-shadow:0 0 8px rgba(243,241,236,0.9)}
+.gap{position:absolute;display:flex;align-items:center;justify-content:center}
+.gp{display:flex;align-items:center;gap:10px;max-width:92%;padding:3px 10px;border-radius:999px;background:rgba(24,26,33,0.94);font-size:11px;color:rgba(240,238,232,0.72);white-space:nowrap;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.09)}
+.prow{display:grid;grid-template-columns:12px 6px minmax(0,1fr) 70px 36px;gap:9px;align-items:center;height:38px;padding:0 8px;border-radius:12px;cursor:grab;transition:background .15s,opacity .3s}
+.prow:hover{background:rgba(255,255,255,0.06)}
+.bub{position:absolute;border-radius:50%;cursor:grab}
+.eye{width:28px;height:24px;border-radius:8px;display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s}
+.eye:hover{background:rgba(255,255,255,0.08)}
+.merl{position:absolute;pointer-events:none;border-radius:50%}
+.blab{position:absolute;font-size:11.5px;font-weight:600;white-space:nowrap;pointer-events:none}
+.hit{position:absolute;cursor:ns-resize}
+.knob{position:absolute;border-radius:50%;cursor:ns-resize}
+.tip{position:absolute;padding:6px 10px;border-radius:10px;font-size:11.5px;font-weight:600;white-space:nowrap;pointer-events:none;z-index:40}
+.key{padding:1px 6px;border-radius:5px;background:rgba(255,255,255,0.12);margin-right:4px}
+.sbtn{height:38px;padding:0 14px 0 12px;border-radius:999px;display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;transition:background .35s,color .35s,box-shadow .35s}
+@keyframes ribA{from{opacity:0;transform:scale(.55,1)}to{opacity:1;transform:none}}
+@keyframes ribB{from{opacity:0;transform:scale(.55,1)}to{opacity:1;transform:none}}
+@keyframes fadeA{from{opacity:0}to{opacity:1}}
+@keyframes fadeB{from{opacity:0}to{opacity:1}}
+@keyframes drawA{from{stroke-dashoffset:100;opacity:0}to{stroke-dashoffset:0;opacity:1}}
+@keyframes drawB{from{stroke-dashoffset:100;opacity:0}to{stroke-dashoffset:0;opacity:1}}
+@keyframes popA{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}
+@keyframes popB{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes wob{0%,100%{border-radius:50%}33%{border-radius:47% 53% 52% 48%}66%{border-radius:53% 47% 48% 52%}}
+.clu{position:absolute;border-radius:50%;cursor:pointer;animation:wob 3.2s ease-in-out infinite}
+.cin{position:absolute;inset:0;border-radius:50%;animation:spin 9s linear infinite;filter:blur(3px)}
+.cbadge{position:absolute;right:-4px;top:-4px;min-width:20px;height:20px;padding:0 5px;box-sizing:border-box;border-radius:10px;background:#F3F1EC;color:#14161C;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px #0B0D12}
+.ecard{position:absolute;box-sizing:border-box;border-radius:26px;background:rgba(22,24,31,0.86);z-index:22;animation:epop .32s cubic-bezier(.34,1.56,.64,1)}
+@keyframes epop{from{opacity:0;transform:scale(.92) translateX(-20px)}to{opacity:1;transform:none}}
+.eh{position:absolute;z-index:24}
+.ebar{cursor:ns-resize;background:linear-gradient(transparent 4px,#F3F1EC 4px,#F3F1EC 8px,transparent 8px)}
+.eknob{width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#F3F1EC;box-shadow:0 0 0 1.5px #0B0D12;cursor:ns-resize}
+.elab{position:absolute;z-index:24;font-size:10.5px;font-weight:600;white-space:nowrap;padding:2px 7px;border-radius:7px;pointer-events:none}
+.rl{position:absolute;z-index:24;font-size:10px;color:rgba(240,238,232,0.45);transform:translateY(-50%);pointer-events:none}
+.sc{height:28px;padding:0 11px;border-radius:999px;font-size:11.5px;font-weight:600;color:rgba(240,238,232,0.8);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.14);white-space:nowrap;transition:background .2s,color .2s}
+</style>
+</helmet>
+<div ref="{{setRoot}}" tabIndex="0" onKeyDown="{{onKey}}" onMouseDown="{{onRootDown}}" onMouseMove="{{onMove}}" onMouseUp="{{onUp}}" onMouseLeave="{{onUp}}" style="position: relative; width: 1440px; height: 900px; overflow: hidden; outline: none; user-select: none; -webkit-user-select: none; font-family: Figtree, system-ui, sans-serif; color: #F0EEE8; background: radial-gradient(ellipse 40% 50% at 22% 50%, rgba(46,58,110,0.3), transparent 70%), radial-gradient(ellipse 22% 40% at 55% 50%, rgba(216,182,87,0.05), transparent 70%), #0B0D12">
+
+<header style="position: absolute; top: 20px; left: 28px; right: 28px; display: flex; align-items: center; justify-content: space-between; z-index: 30">
+<div style="display: flex; align-items: baseline; gap: 10px; font-size: 13px; width: 260px"><span style="font-weight: 600">TARMAC Ep. 2</span><span class="mut">Sc. 2 · Canteen</span><span class="tn" style="font-weight: 600; color: {{clockCol}}">{{clock}}</span></div>
+<nav class="glass" aria-label="Pages" style="display: flex; padding: 4px; border-radius: 999px; background: rgba(255,255,255,0.05)"><button class="tab">Options</button><button class="tab tabon">Arrange</button><button class="tab">Edit</button></nav>
+<div style="width: 260px; display: flex; justify-content: flex-end">
+<button class="sbtn" onClick="{{toggleSounds}}" aria-pressed="{{on}}" style="{{sBtn}}"><svg width="22" height="14" viewBox="0 0 22 14" aria-hidden="true"><circle cx="4" cy="9" r="3.5" fill="#D8B657"></circle><circle cx="11" cy="5" r="4" fill="#8EC5F0"></circle><circle cx="18" cy="9" r="3" fill="#E58FA6"></circle></svg>Sounds<span class="key" style="margin: 0 0 0 2px; font-size: 11px">S</span></button>
+</div>
+</header>
+
+<div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 450px; height: 1px; background: linear-gradient(90deg, transparent, rgba(240,238,232,0.25) 6%, rgba(240,238,232,0.25) 94%, transparent)"></div>
+
+<div style="position: absolute; inset: 0; -webkit-mask-image: linear-gradient(to bottom, transparent 76px, #000 140px, #000 790px, transparent 870px); mask-image: linear-gradient(to bottom, transparent 76px, #000 140px, #000 790px, transparent 870px)">
+<div style="position: absolute; left: 0; top: 0; width: 1440px; height: 0; transform: translateY({{off}}px)">
+
+<div style="position: absolute; left: 0; top: 0; width: 1440px; height: 0; transform: translateX({{dx}}px); transition: transform .85s cubic-bezier(.65,0,.35,1)">
+<sc-for list="{{items}}" as="it" hint-placeholder-count="16">
+<sc-if value="{{it.isLine}}" hint-placeholder-val="{{ true }}"><div class="snip glass" style="{{it.style}}"><div class="srow"><span class="nm" style="flex: none; width: 70px; color: {{it.nameCol}}">{{it.name}}</span><span class="script ellip" style="flex: 1; min-width: 0; font-size: 14px; color: rgba(240,238,232,0.86)">{{it.text}}</span><span class="mut tn" style="font-size: 11px">{{it.dur}}</span></div><div class="strip"><svg viewBox="0 0 200 40" preserveAspectRatio="none" style="position: absolute; inset: 0; width: 100%; height: 100%" aria-hidden="true"><path d="{{it.wave}}" fill="{{it.wfill}}"></path></svg><span class="ph" style="left: {{it.pp}}%; opacity: {{it.po}}"></span></div></div></sc-if>
+<sc-if value="{{it.isGap}}" hint-placeholder-val="{{ false }}"><div class="gap" style="{{it.style}}"><div class="gp"><span class="tn" style="font-weight: 600">{{it.label}}</span><span class="script ellip" style="max-width: 260px; color: rgba(240,238,232,0.55)">{{it.act}}</span></div></div></sc-if>
+</sc-for>
+<svg aria-hidden="true" width="1440" height="{{H}}" style="position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible">
+<line x1="{{sx}}" y1="-200" x2="{{sx}}" y2="{{Hx}}" stroke="rgba(240,238,232,0.18)" stroke-width="1"></line>
+<path d="{{sp0}}" fill="{{sf0}}"></path><path d="{{sp1}}" fill="{{sf1}}"></path><path d="{{sp2}}" fill="{{sf2}}"></path><path d="{{sp3}}" fill="{{sf3}}"></path>
+<g style="opacity: {{ribOp}}; transition: opacity .45s ease {{ribDelay}}s">
+<path d="{{thinFood}}" stroke="{{thinFoodC}}" stroke-width="2" stroke-linecap="round" fill="none"></path>
+<path d="{{thinRoom}}" stroke="{{thinRoomC}}" stroke-width="2" stroke-linecap="round" fill="none"></path>
+<path d="{{thinProps}}" stroke="{{thinPropsC}}" stroke-width="2" stroke-linecap="round" fill="none"></path>
+<g style="transform-box: view-box; {{fAnim}}">
+<path d="{{fBody}}" fill="{{fCol}}"></path>
+<path d="{{fFade}}" fill="{{fColA}}"></path>
+</g>
+<path d="{{fGhost}}" stroke="{{fCol}}" stroke-width="1.2" stroke-dasharray="2 3" fill="none" opacity="0.7"></path>
+<path d="{{snapHot}}" stroke="#F3F1EC" stroke-width="2.5" stroke-linecap="round" fill="none"></path>
+</g>
+</svg>
+<div style="position: absolute; left: 0; top: 0; pointer-events: {{ribPE}}">
+<sc-for list="{{hits}}" as="h" hint-placeholder-count="11"><div class="hit" onMouseEnter="{{h.enter}}" onMouseLeave="{{h.leave}}" onMouseDown="{{h.down}}" onDoubleClick="{{h.open}}" style="{{h.style}}"></div></sc-for>
+<sc-if value="{{hasFocus}}" hint-placeholder-val="{{ true }}">
+<div class="knob" title="Drag to move the start" onMouseDown="{{headDown}}" onMouseEnter="{{fEnter}}" onMouseLeave="{{fLeave}}" style="{{headStyle}}"></div>
+<div class="knob" title="Drag to trim, the fade follows" onMouseDown="{{tailDown}}" onMouseEnter="{{fEnter}}" onMouseLeave="{{fLeave}}" style="{{tailStyle}}"></div>
+</sc-if>
+</div>
+</div>
+
+<svg aria-hidden="true" width="1440" height="{{H}}" style="position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; opacity: {{ribOp}}; transition: opacity .4s ease {{ribDelay}}s">
+<path d="{{tethers}}" stroke="rgba(240,238,232,0.13)" stroke-width="1" fill="none"></path>
+<path d="{{fTether}}" stroke="{{fColA}}" stroke-width="1.5" fill="none"></path>
+</svg>
+<sc-for list="{{halos}}" as="h" hint-placeholder-count="1"><div onMouseEnter="{{h.enter}}" onMouseLeave="{{h.leave}}" style="position: absolute; {{h.style}}"></div></sc-for>
+<sc-for list="{{clus}}" as="c" hint-placeholder-count="2"><div class="clu" title="{{c.title}}" onMouseEnter="{{c.enter}}" onMouseLeave="{{c.leave}}" onMouseDown="{{c.down}}" style="{{c.style}}"><div class="cin" style="{{c.inner}}"></div><div style="position: absolute; inset: 0; border-radius: 50%; {{c.hl}}"></div><span class="cbadge tn">{{c.n}}</span></div><span class="blab" style="{{c.lab}}">{{c.name}}</span></sc-for>
+<sc-for list="{{bubs}}" as="b" hint-placeholder-count="11"><div class="bub" onMouseEnter="{{b.enter}}" onMouseLeave="{{b.leave}}" onMouseDown="{{b.down}}" onDoubleClick="{{b.open}}" style="{{b.style}}"></div><div class="merl" style="{{b.merStyle}}"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible"><path d="{{b.mer}}" stroke="{{b.merCol}}" stroke-width="{{b.merW}}" fill="none" stroke-linecap="round" vector-effect="non-scaling-stroke"></path></svg></div><span class="blab" style="{{b.lab}}">{{b.name}}</span></sc-for>
+<sc-if value="{{hasRing}}" hint-placeholder-val="{{ true }}">
+<svg aria-hidden="true" width="1440" height="{{H}}" style="position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; {{ringAnim}}">
+<path d="{{ringTrack}}" pathLength="100" stroke="rgba(240,238,232,0.18)" stroke-width="5" fill="none" style="stroke-dasharray: 100; {{ringDraw}}"></path>
+<path d="{{ringArc}}" pathLength="100" stroke="#F3F1EC" stroke-width="5" stroke-linecap="round" fill="none" style="stroke-dasharray: 100; {{ringDraw}}"></path>
+</svg>
+<div title="Turn to set loudness" onMouseDown="{{ringDown}}" style="position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #F3F1EC; box-shadow: 0 0 0 2px #0B0D12, 0 4px 12px rgba(0,0,0,0.5); cursor: grab; left: {{ringKX}}px; top: {{ringKY}}px; {{knobAnim}}"></div>
+<span class="tip tn" style="background: #F3F1EC; color: #14161C; left: {{ringTX}}px; top: {{ringTY}}px">{{ringText}}</span>
+</sc-if>
+</div>
+</div>
+
+<sc-if value="{{isOpen}}" hint-placeholder-val="{{ false }}">
+<svg aria-hidden="true" width="1440" height="900" style="position: absolute; left: 0; top: 0; pointer-events: none; z-index: 21">
+<path d="{{loupe}}" fill="{{loupeFill}}" stroke="{{loupeLine}}" stroke-width="1"></path>
+</svg>
+<section class="ecard glass" aria-label="Opened sound" onMouseDown="{{stopDown}}" style="{{eCard}}">
+<div style="position: absolute; left: 18px; right: 18px; top: 14px; display: flex; align-items: center; gap: 10px">
+<span style="width: 16px; height: 16px; border-radius: 50%; background: {{eDot}}"></span>
+<span style="font-size: 14px; font-weight: 600">{{eName}}</span><span class="mut tn" style="font-size: 11.5px">{{eLoud}}</span>
+<span style="flex: 1"></span>
+<button class="mut" onClick="{{closeEd}}" style="font-size: 11px"><span class="key">Esc</span>close</button>
+</div>
+<span class="nm mut" style="position: absolute; left: 22px; top: 46px; font-size: 9.5px">Dialogue</span>
+<span class="nm mut" style="position: absolute; left: 160px; top: 46px; font-size: 9.5px">Sound</span>
+<div class="tn mut" style="position: absolute; left: 18px; right: 18px; bottom: 58px; font-size: 11.5px">{{eRead}}</div>
+<div style="position: absolute; left: 18px; right: 18px; bottom: 18px; display: flex; flex-wrap: wrap; gap: 6px">
+<button class="sc" onClick="{{cEndLine}}" style="{{cEndLineS}}">End with line</button><button class="sc" onClick="{{cNext}}" style="{{cNextS}}">Until next line</button><button class="sc" onClick="{{cFull}}" style="{{cFullS}}">Full</button><button class="sc" onClick="{{cAuto}}" style="{{cAutoS}}">Auto fade</button>
+</div>
+</section>
+<svg aria-hidden="true" width="1440" height="900" style="position: absolute; left: 0; top: 0; pointer-events: none; z-index: 23">
+<path d="{{dg0}}" fill="{{dgf0}}"></path><path d="{{dg1}}" fill="{{dgf1}}"></path><path d="{{dg2}}" fill="{{dgf2}}"></path><path d="{{dg3}}" fill="{{dgf3}}"></path>
+<path d="{{srcWave}}" fill="rgba(240,238,232,0.15)"></path>
+<path d="{{useWave}}" fill="{{eCol}}"></path>
+<path d="{{dimTop}}" fill="rgba(10,11,15,0.55)"></path>
+<path d="{{dimBot}}" fill="rgba(10,11,15,0.55)"></path>
+<path d="{{fadeLines}}" stroke="#F3F1EC" stroke-width="1.5" fill="none"></path>
+<path d="{{ruler}}" stroke="rgba(240,238,232,0.3)" stroke-width="1" fill="none"></path>
+<path d="{{ePlay}}" stroke="#F3F1EC" stroke-width="1.5" fill="none" opacity="0.85"></path>
+<path d="{{eSnap}}" stroke="#F3F1EC" stroke-width="2.5" stroke-linecap="round" fill="none"></path>
+</svg>
+<sc-for list="{{rls}}" as="l" hint-placeholder-count="8"><span class="rl tn" style="{{l.style}}">{{l.t}}</span></sc-for>
+<div class="eh" title="Drag to move · ⌥ drag to slip the sound inside" onMouseDown="{{bodyDown}}" style="cursor: grab; {{bodyStyle}}"></div>
+<div class="eh ebar" title="Trim the start" onMouseDown="{{inDown}}" style="{{inStyle}}"></div>
+<div class="eh ebar" title="Trim the end" onMouseDown="{{outDown}}" style="{{outStyle}}"></div>
+<div class="eh eknob" title="Fade in" onMouseDown="{{fiDown}}" style="{{fiStyle}}"></div>
+<div class="eh eknob" title="Fade out" onMouseDown="{{foDown}}" style="{{foStyle}}"></div>
+<span class="elab tn" style="background: #F3F1EC; color: #14161C; {{inLab}}">In</span>
+<span class="elab tn" style="background: #F3F1EC; color: #14161C; {{outLab}}">{{outText}}</span>
+<span class="elab tn" style="color: #F3F1EC; background: rgba(20,22,29,0.9); box-shadow: inset 0 0 0 1px rgba(240,238,232,0.3); {{foLab}}">{{foText}}</span>
+</sc-if>
+
+<sc-if value="{{hasTip}}" hint-placeholder-val="{{ false }}"><div class="tip tn" style="background: rgba(20,22,29,0.95); box-shadow: inset 0 0 0 1px rgba(240,238,232,0.35); color: #F3F1EC; left: {{tipX}}px; top: {{tipY}}px">{{tipText}}</div></sc-if>
+<sc-if value="{{hasGhost}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; width: 36px; height: 36px; margin: -18px 0 0 -18px; border-radius: 50%; pointer-events: none; z-index: 31; left: {{gX}}px; top: {{gY}}px; background: {{gBg}}; box-shadow: 0 0 24px {{gGlow}}, 0 0 0 3px rgba(243,241,236,0.5)"></div>
+<div aria-hidden="true" style="position: absolute; height: 0; border-top: 1.5px dashed rgba(243,241,236,0.5); pointer-events: none; z-index: 30; left: {{gLineX}}px; width: {{gLineW}}px; top: {{gY}}px"></div>
+</sc-if>
+
+<div class="glass tn" style="position: absolute; left: 50%; transform: translateX(-50%); bottom: 18px; display: flex; gap: 16px; align-items: center; padding: 8px 14px; border-radius: 14px; background: rgba(20,22,29,0.9); font-size: 11.5px; color: rgba(240,238,232,0.78); z-index: 25; white-space: nowrap">
+<span><span class="key">Space</span>play</span><span><span class="key">Scroll</span>scrub</span><span><span class="key">S</span>sounds</span><span><b style="color: #F3F1EC">Ball</b> sideways is depth, up and down is time</span><span><span class="key">⌥</span>drag a ball to pan</span><span><b style="color: #F3F1EC">Ring</b> or <span class="key">⇧ scroll</span>loudness</span><span><span class="key">2×</span>open</span><span><span class="key">⌫</span>remove</span>
+</div>
+
+<aside class="glass" aria-label="Scene sounds" style="position: absolute; top: 76px; bottom: 16px; right: 16px; width: 360px; box-sizing: border-box; border-radius: 28px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; background: rgba(20,22,29,0.86); z-index: 15; {{panelStyle}}">
+<div style="display: flex; align-items: baseline; gap: 8px; padding: 0 4px 4px"><span style="font-size: 15px; font-weight: 600; flex: 1">Scene sounds</span><span class="mut" style="font-size: 11.5px">Drag beside a line</span></div>
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 4px 2px 8px"><span style="width: 8px; height: 8px; border-radius: 50%; transition: background .3s, box-shadow .3s; {{g.dotS}}"></span><span class="nm" style="font-size: 10px; flex: 1; transition: color .3s; color: {{g.nameCol}}">{{g.name}}</span><button class="eye" onClick="{{g.toggle}}" onMouseDown="{{g.stop}}" aria-pressed="{{g.visA}}" title="{{g.eyeTitle}}" style="{{g.eyeS}}"><sc-if value="{{g.vis}}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></sc-if><sc-if value="{{g.hid}}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"></path><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6"></path><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"></path></svg></sc-if></button></div>
+<sc-for list="{{g.rows}}" as="r" hint-placeholder-count="5">
+<div class="prow" onMouseDown="{{r.down}}" style="{{r.row}}"><svg width="10" height="14" viewBox="0 0 10 14" fill="rgba(240,238,232,0.45)" aria-hidden="true"><circle cx="3" cy="3" r="1.2"></circle><circle cx="7" cy="3" r="1.2"></circle><circle cx="3" cy="7" r="1.2"></circle><circle cx="7" cy="7" r="1.2"></circle><circle cx="3" cy="11" r="1.2"></circle><circle cx="7" cy="11" r="1.2"></circle></svg><span style="width: 6px; height: 22px; border-radius: 3px; background: {{r.bar}}"></span><span class="ellip" style="font-size: 12.5px; {{r.nameStyle}}">{{r.name}}</span><svg viewBox="0 0 200 40" preserveAspectRatio="none" style="width: 70px; height: 18px" aria-hidden="true"><path d="{{r.d}}" fill="{{r.fill}}"></path></svg><span class="mut tn" style="font-size: 11px; text-align: right">{{r.dur}}</span></div>
+</sc-for>
+</sc-for>
+</aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+function mkr(seed) { var a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function wave(seed) {
+  var r = mkr(seed), top = '', bot = [], env = 0.3;
+  for (var i = 0; i <= 100; i++) { env = env * 0.7 + r() * 0.45; var x = i / 100; var gate = Math.sin(x * Math.PI * (3 + seed % 4)) > -0.2 ? 1 : 0.15; var h = Math.max(0.6, env * gate * Math.min(1, x * 8) * Math.min(1, (1 - x) * 8) * 16); top += (i ? 'L' : 'M') + (i * 2) + ' ' + (20 - h).toFixed(1); bot.push('L' + (i * 2) + ' ' + (20 + h).toFixed(1)); }
+  return top + bot.reverse().join('') + 'Z';
+}
+function hwave(seed, pauses) {
+  var r = mkr(seed), top = '', bot = [], env = 0.3;
+  for (var i = 0; i <= 120; i++) { var x = i / 120; env = env * 0.6 + r() * 0.55; var q = pauses.some(function (p) { return x > p[0] && x < p[1]; }); var h = q ? 0.5 : Math.max(0.8, env * Math.min(1, x * 10) * Math.min(1, (1 - x) * 10) * 17); var px = (x * 200).toFixed(1); top += (i ? 'L' : 'M') + px + ' ' + (20 - h).toFixed(1); bot.push('L' + px + ' ' + (20 + h).toFixed(1)); }
+  return top + bot.reverse().join('') + 'Z';
+}
+function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function lighten(c, k) { return [Math.round(c[0] + (255 - c[0]) * k), Math.round(c[1] + (255 - c[1]) * k), Math.round(c[2] + (255 - c[2]) * k)]; }
+function circ(x, y, r) { return 'M' + (x - r).toFixed(1) + ' ' + y.toFixed(1) + ' a' + r + ' ' + r + ' 0 1 0 ' + (2 * r) + ' 0 a' + r + ' ' + r + ' 0 1 0 ' + (-2 * r) + ' 0 '; }
+var CH = { PAUL: [[224, 138, 90], '#EDAA82', 'Paul'], SARA: [[94, 184, 176], '#8FD3CC', 'Sara'], NORBERT: [[157, 180, 106], '#BFD192', 'Norbert'], COLONEL: [[160, 143, 208], '#C3B7E6', 'Colonel'] };
+var CHK = ['PAUL', 'SARA', 'NORBERT', 'COLONEL'];
+var BK = { food: { c: [216, 182, 87], n: 'Food and foil' }, room: { c: [142, 197, 240], n: 'Room' }, props: { c: [229, 143, 166], n: 'Props' } };
+var SEQ = [
+  ['gap', 1.8, 'Paul sets down a STEAMING, aluminum-wrapped BURRITO.'],
+  ['line', 'PAUL', 'I put this in the time spring two weeks ago.', 2.1, []],
+  ['gap', 1.0, 'Sara and Norbert are already in the booth…'],
+  ['line', 'NORBERT', '…you sure you wanna eat that?', 1.6, []],
+  ['gap', 0.4, ''],
+  ['line', 'PAUL', 'Two weeks elapsed for US, but for this burrito, the transfer was instant.', 4.4, [[0.52, 0.6]]],
+  ['gap', 0.3, ''],
+  ['line', 'PAUL', 'That’s just time slop. Non-toxic.', 2.6, [[0.5, 0.58]]],
+  ['gap', 1.4, 'Paul takes a bite. The others stare expectantly.'],
+  ['line', 'NORBERT', '…and?', 0.7, []],
+  ['gap', 0.9, 'Paul nods, thinking.'],
+  ['line', 'PAUL', 'Mh-hm… mh-hm. The first time burrito is EDIBLE!', 3.0, [[0.16, 0.24], [0.34, 0.42]]],
+  ['gap', 0.2, ''],
+  ['line', 'COLONEL', 'Ha!', 0.6, []],
+  ['gap', 1.2, 'The Colonel looks over at Norbert, who passes him five bucks.'],
+  ['line', 'SARA', 'Paul, this is huge. We can send things besides nuclear waste through time.', 3.8, [[0.3, 0.36]]]
+];
+var COLX = 92, COLW = 400, S = 76, SX = 524;
+var B = (function () {
+  var y = 0, t = 0;
+  return SEQ.map(function (s, i) {
+    var ln = s[0] === 'line', h = ln ? S : Math.round(18 + s[1] * 14), d = ln ? s[3] : s[1];
+    var it = { i: i, isLine: ln, isGap: !ln, top: y, h: h, t0: t, t1: t + d };
+    if (ln) { var c = CH[s[1]]; Object.assign(it, { ch: s[1], c: c[0], pauses: s[4], name: c[2], nameCol: c[1], text: s[2], dur: s[3].toFixed(1) + ' s', wave: hwave(i * 7 + 3, s[4]) }); }
+    else Object.assign(it, { label: '‖ ' + s[1].toFixed(1) + ' s', act: s[2] });
+    y += h + 6; t += d; return it;
+  });
+})();
+var LINES = B.filter(function (b) { return b.isLine; });
+var TOTAL = B[B.length - 1].t1, H = B[B.length - 1].top + B[B.length - 1].h;
+function yB(t) {
+  for (var i = 0; i < B.length; i++) { var it = B[i]; if (t < it.t0) return it.top; if (t <= it.t1) return it.top + (t - it.t0) / (it.t1 - it.t0) * it.h; }
+  var L = B[B.length - 1]; return L.top + L.h + (t - L.t1) * L.h / (L.t1 - L.t0);
+}
+function tB(y) {
+  for (var i = 0; i < B.length; i++) { var it = B[i]; if (y < it.top) return it.t0; if (y <= it.top + it.h) return it.t0 + (y - it.top) / it.h * (it.t1 - it.t0); }
+  var L = B[B.length - 1]; return L.t1 + (y - L.top - L.h) * (L.t1 - L.t0) / L.h;
+}
+function itemAt(t) { for (var i = 0; i < B.length; i++) if (t >= B[i].t0 && t < B[i].t1) return B[i]; return null; }
+var SPINE = (function () {
+  var by = {}, r = mkr(91), A = 12;
+  B.forEach(function (it) {
+    if (!it.isLine) return;
+    var N = 56, R = [], Lf = [];
+    for (var k = 0; k <= N; k++) {
+      var t = k / N, y = it.top + 4 + t * (it.h - 8);
+      var env = Math.min(1, t * 7) * Math.min(1, (1 - t) * 7), quiet = it.pauses.some(function (p) { return t > p[0] && t < p[1]; });
+      var a = quiet ? 0.4 : Math.max(0.6, env * A * (0.35 + 0.65 * r()));
+      R.push('L' + (SX + a).toFixed(1) + ' ' + y.toFixed(1)); Lf.push('L' + (SX - a).toFixed(1) + ' ' + y.toFixed(1));
+    }
+    by[it.ch] = (by[it.ch] || '') + 'M' + SX + ' ' + (it.top + 4).toFixed(1) + ' ' + R.join(' ') + ' ' + Lf.reverse().join(' ') + 'Z ';
+  });
+  var out = Object.keys(by).map(function (k) { return { d: by[k], fill: rgba(CH[k][0], 0.95) }; });
+  while (out.length < 4) out.push({ d: '', fill: 'none' });
+  return out;
+})();
+var SNAPS = (function () {
+  var out = [];
+  LINES.forEach(function (it) {
+    var w = it.text.replace(/[“”"]/g, '').split(/\s+/), n = w.length;
+    out.push({ t: it.t0, start: 'On “' + w.slice(0, 2).join(' ') + '”', end: 'Ends before “' + w.slice(0, 2).join(' ') + '”' });
+    out.push({ t: it.t1, start: 'After “' + w[n - 1] + '”', end: 'Ends with “' + w[n - 1] + '”' });
+    it.pauses.forEach(function (p) { var m = (p[0] + p[1]) / 2, wd = w[clamp(Math.round(p[0] * n) - 1, 0, n - 1)]; out.push({ t: it.t0 + m * (it.t1 - it.t0), start: 'In the pause after “' + wd + '”', end: 'Ends in the pause after “' + wd + '”' }); });
+  });
+  return out;
+})();
+function snapT(t, kind) { var y = yB(t), best = null, bd = 8; SNAPS.forEach(function (s) { var d = Math.abs(yB(s.t) - y); if (d < bd) { bd = d; best = s; } }); return best ? { t: best.t, label: kind === 'end' ? best.end : best.start } : { t: t, label: null }; }
+function snapE(t, kind, tol) { var best = null, bd = tol; SNAPS.forEach(function (s) { var d = Math.abs(s.t - t); if (d < bd) { bd = d; best = s; } }); return best ? { t: best.t, label: kind === 'end' ? best.end : best.start } : { t: t, label: null }; }
+var LIB = [
+  { b: 'food', rows: [['Foil crinkle', 1.8, true], ['Steam hiss', 3.2, true], ['Bite and chew', 2.6, true], ['Goo wipe', 1.2, true], ['Fork on tray', 0.6, true], ['Burrito steam', 3.2, false]] },
+  { b: 'room', rows: [['Canteen walla', 45, true], ['Coffee machine', 2.6, true], ['Fridge hum', 30, false], ['Morning birds', 20, false]] },
+  { b: 'props', rows: [['Tray clatter', 1.1, true], ['Chair creak', 0.8, true], ['Cash handover', 0.9, true], ['Door swing', 1.3, true]] }
+];
+LIB.forEach(function (g, gi) { g.rows.forEach(function (r, ri) { r.push(wave(gi * 31 + ri * 17 + 5)); }); });
+function autoFade(dur) { return dur > 8 ? 2 : Math.min(0.3, dur * 0.3); }
+function foOf(s) { return s.auto === false ? s.fo : autoFade(s.dur); }
+function db(g) { var v = Math.round(-24 + 30 * g); return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + ' dB'; }
+function panTxt(p) { var v = Math.round(Math.abs(p) * 100); return v < 3 ? 'Pan center' : 'Pan ' + (p < 0 ? 'L ' : 'R ') + v; }
+function zone(d) { return d < 0.3 ? 'Close' : d < 0.7 ? 'Room' : 'Far'; }
+var INIT = [
+  ['Tray clatter', 'props', 0, 0.9, 1.1, 1.1, 0, 0.8, -0.3], ['Foil crinkle', 'food', 1, 0.2, 1.8, 1.8, 0.15, 0.7], ['Door swing', 'props', 2, 0.2, 1.3, 1.3, 0.7, 0.6, -0.6],
+  ['Canteen walla', 'room', 2, 0.3, 40, 45, 0.95, 0.5], ['Coffee machine', 'room', 3, 0.25, 2.6, 2.6, 0.6, 0.6, 0.45], ['Steam hiss', 'food', 5, 0.53, 1.7, 3.2, 0.35, 0.75],
+  ['Goo wipe', 'food', 7, 0.15, 1.2, 1.2, 0, 0.85], ['Bite and chew', 'food', 8, 0.7, 1.4, 2.6, 0.2, 0.9], ['Fork on tray', 'food', 9, 0.3, 0.6, 0.6, 0.3, 0.6],
+  ['Chair creak', 'props', 11, 1.1, 0.8, 0.8, 0.5, 0.65, 0.35], ['Cash handover', 'props', 14, 0.6, 0.9, 0.9, 0.2, 0.7]
+];
+function snapOf(sfx) { var m = {}; sfx.forEach(function (s) { m[s.id] = { t0: s.t0, dur: s.dur, depth: s.depth }; }); return m; }
+function fmt(t) { var m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1); }
+function lx(l) { return 546 + l * 5; }
+var CX = 604, CY = 132, CW = 372, CHH = 690, EY = 200, EH = 470, DX = CX + 40, WX = CX + 196, WA = 62, RX = CX + 306;
+function vwave(cx, A, y0, y1, n, gainAt, seed, envAt) {
+  if (y1 - y0 < 1) return '';
+  var r = mkr(seed), R = [], L = [];
+  for (var k = 0; k <= n; k++) { var f = k / n, y = y0 + f * (y1 - y0); var a = Math.max(0.5, A * envAt(f) * (0.45 + 0.55 * r()) * gainAt(y)); R.push((k ? 'L' : 'M') + (cx + a).toFixed(1) + ' ' + y.toFixed(1)); L.push('L' + (cx - a).toFixed(1) + ' ' + y.toFixed(1)); }
+  return R.join(' ') + ' ' + L.reverse().join(' ') + ' Z';
+}
+function dialogStrip(W0, Lw) {
+  var by = {}, n = 150, seg = null;
+  function flush() { if (seg && seg.R.length > 1) by[seg.ch] = (by[seg.ch] || '') + seg.R.join(' ') + ' ' + seg.L.reverse().join(' ') + ' Z '; seg = null; }
+  for (var k = 0; k <= n; k++) {
+    var f = k / n, t = W0 + f * Lw, y = EY + f * EH, it = itemAt(t);
+    if (!it || !it.isLine) { flush(); continue; }
+    var rel = (t - it.t0) / (it.t1 - it.t0), q = it.pauses.some(function (p) { return rel > p[0] && rel < p[1]; });
+    var env = Math.min(1, rel * 12) * Math.min(1, (1 - rel) * 12), a = q ? 0.5 : Math.max(0.6, 10 * env * (0.35 + 0.65 * Math.abs(Math.sin(t * 23.7) * Math.cos(t * 7.3 + 1))));
+    if (!seg || seg.ch !== it.ch) { flush(); seg = { ch: it.ch, R: [], L: [] }; }
+    seg.R.push((seg.R.length ? 'L' : 'M') + (DX + a).toFixed(1) + ' ' + y.toFixed(1)); seg.L.push('L' + (DX - a).toFixed(1) + ' ' + y.toFixed(1));
+  }
+  flush();
+  return CHK.map(function (k) { return { d: by[k] || '', fill: rgba(CH[k][0], 0.9) }; });
+}
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    var n = 0;
+    var sfx = INIT.map(function (a) { n++; return { id: 's' + n, name: a[0], b: a[1], t0: B[a[2]].t0 + a[3], dur: a[4], full: a[5], depth: a[6], gain: a[7], srcIn: 0, fi: 0.02, fo: autoFade(a[4]), auto: true, pan: a[8] || 0 }; });
+    this.nid = n;
+    this.state = { hide: {}, settled: snapOf(sfx), on: true, stagger: false, sfx: sfx, hover: null, sel: 's6', T: B[5].t0 + 0.2, playing: false, tip: null, ghost: null, dragId: null, open: null, ew: null, eSnapT: null };
+    this.drag = null;
+    this.toggleB = (b, solo) => {
+      var h = Object.assign({}, this.state.hide || {}), keys = Object.keys(BK);
+      if (solo) { var only = keys.every(function (k) { return k === b ? !h[k] : h[k]; }); keys.forEach(function (k) { h[k] = only ? false : k !== b; }); }
+      else h[b] = !h[b];
+      var sel = this.state.sel && this.find(this.state.sel);
+      this.setState({ hide: h, sel: sel && h[sel.b] ? null : this.state.sel, hover: null, open: this.state.open && h[(this.find(this.state.open) || {}).b] ? null : this.state.open });
+      this.focusRoot();
+    };
+    this.settle = () => { this.setState({ settled: snapOf(this.state.sfx) }); };
+    this.settleSoon = () => { clearTimeout(this.sT); this.sT = setTimeout(this.settle, 500); };
+    this.setRoot = (el) => { if (this.root === el) return; if (this.root) this.root.removeEventListener('wheel', this.onWheel); this.root = el; if (el) el.addEventListener('wheel', this.onWheel, { passive: false }); };
+    this.onWheel = (e) => {
+      e.preventDefault();
+      if (e.shiftKey && this.state.on) {
+        var p = this.pt(e), yb = p.y - this.off(), hit = null, D = this.disp || {};
+        Object.keys(D).forEach(function (k) { var b = D[k]; if (!b.hidden && Math.hypot(p.x - b.x, yb - b.y) <= b.r + 4) hit = k; });
+        if (hit) {
+          var s = this.find(hit), dl = e.deltaY || e.deltaX, g = clamp((s.gain == null ? 0.8 : s.gain) - dl * 0.0025, 0, 1);
+          this.upd(hit, { gain: g });
+          this.setState({ tip: { x: p.x + 22, y: p.y - 36, text: s.name + ' · Loudness ' + db(g) } });
+          clearTimeout(this.wT); this.wT = setTimeout(() => { if (!this.drag) this.setState({ tip: null }); }, 800);
+          return;
+        }
+      }
+      this.setState({ T: clamp(this.state.T + e.deltaY * 0.008, 0, TOTAL) });
+    };
+    this.focusRoot = () => { if (this.root) { try { this.root.focus({ preventScroll: true }); } catch (e) {} } };
+    this.pt = (e) => { var r = this.root.getBoundingClientRect(), k = r.width / 1440 || 1; return { x: (e.clientX - r.left) / k, y: (e.clientY - r.top) / k }; };
+    this.off = () => 450 - yB(this.state.T);
+    this.upd = (id, patch) => { this.setState({ sfx: this.state.sfx.map(function (s) { return s.id === id ? Object.assign({}, s, patch) : s; }) }); };
+    this.find = (id) => this.state.sfx.filter(function (s) { return s.id === id; })[0];
+    this.tick = () => {
+      var s = this.state, now = performance.now(), dt = (now - this.last) / 1000; this.last = now;
+      if (!s.playing) return;
+      var T = s.T + dt; if (T >= TOTAL) this.setState({ T: TOTAL, playing: false }); else this.setState({ T: T });
+    };
+    this.toggleSounds = () => {
+      clearTimeout(this.stT);
+      this.setState({ on: !this.state.on, stagger: true, hover: null, tip: null, open: null });
+      this.stT = setTimeout(() => this.setState({ stagger: false }), 1700);
+      this.focusRoot();
+    };
+    this.openEd = (id) => {
+      var s = this.find(id); if (!s) return;
+      var src0 = s.t0 - s.srcIn, W0, Lw;
+      if (s.full <= 8) { W0 = src0 - 0.25; Lw = s.full + 0.5; } else { W0 = s.t0 - 1; Lw = Math.min(s.dur, 10) + 2; }
+      this.drag = null;
+      this.setState({ open: id, sel: id, ew: { W0: W0, L: Lw }, dragId: null, tip: null, T: this.state.playing ? this.state.T : clamp(s.t0 + Math.min(s.dur, 6) / 2, 0, TOTAL) });
+      this.focusRoot();
+    };
+    this.closeEd = () => { this.setState({ open: null, ew: null, eSnapT: null }); this.focusRoot(); };
+    this.stopDown = (e) => { e.stopPropagation(); this.focusRoot(); };
+    this.onRootDown = (e) => { this.focusRoot(); if (this.state.open) { this.closeEd(); return; } if (this.state.sel) this.setState({ sel: null }); };
+    this.startDrag = (e, d) => { e.preventDefault(); e.stopPropagation(); this.focusRoot(); this.drag = d; this.setState({ dragId: d.id || null, sel: d.id || this.state.sel }); };
+    this.eT = (y) => { var w = this.state.ew; return w.W0 + (y - EY) / EH * w.L; };
+    this.onMove = (e) => {
+      var d = this.drag; if (!d) return;
+      var p = this.pt(e), off = this.off(), s = this.find(d.id);
+      if (d.type === 'bubble') { if (Math.abs(p.y - d.y0) < 4 && Math.abs(p.x - d.x0) < 4) return; d.type = 'ball'; }
+      if (d.type === 'ball' && s) {
+        var dep = clamp(d.d0 + (p.x - d.x0) / 300, 0, 0.98), dy = p.y - d.y0, patch = { depth: dep }, lab = null;
+        if (d.freeY || Math.abs(dy) > 12) { d.freeY = true; var sn0 = snapT(clamp(tB(p.y - off - d.grab), 0, TOTAL - 0.2), 'start'); patch.t0 = sn0.t; lab = sn0.label || 'at ' + fmt(sn0.t); this.setState({ snapY: sn0.label ? yB(sn0.t) : null }); }
+        this.upd(s.id, patch);
+        this.setState({ tip: { x: p.x + 30, y: p.y - 40, text: zone(dep) + ' · ' + Math.round(dep * 100) + '%' + (lab ? ' · ' + lab : '') } });
+      } else if (d.type === 'move' && s) {
+        var sn = snapT(clamp(tB(p.y - off - d.grab), 0, TOTAL - 0.2), 'start');
+        this.upd(s.id, { t0: sn.t });
+        this.setState({ tip: { x: 600, y: p.y - 14, text: (sn.label || 'Starts at ' + fmt(sn.t)) }, snapY: sn.label ? yB(sn.t) : null });
+      } else if (d.type === 'trim' && s) {
+        var sn2 = snapT(tB(p.y - off), 'end'), dur = clamp(sn2.t - s.t0, 0.2, s.full - s.srcIn);
+        var lab2 = Math.abs(dur - (s.full - s.srcIn)) < 0.01 ? 'Full length' : (Math.abs(s.t0 + dur - sn2.t) < 0.001 && sn2.label ? sn2.label : null);
+        this.upd(s.id, { dur: dur });
+        this.setState({ tip: { x: 600, y: p.y + 10, text: (lab2 ? lab2 + ' · ' : '') + dur.toFixed(1) + ' of ' + s.full.toFixed(1) + ' s · fades out ' + foOf(Object.assign({}, s, { dur: dur })).toFixed(1) + ' s' }, snapY: lab2 && lab2 !== 'Full length' ? yB(s.t0 + dur) : null });
+      } else if (d.type === 'pan' && s) {
+        var pn = clamp(d.p0 + (p.x - d.x0) / (d.r * 3 + 30), -1, 1); if (Math.abs(pn) < 0.05) pn = 0;
+        this.upd(s.id, { pan: pn });
+        this.setState({ tip: { x: p.x + 22, y: p.y - 36, text: panTxt(pn) } });
+      } else if (d.type === 'ring' && s) {
+        var a = Math.atan2(p.y - d.cy, p.x - d.cx) + Math.PI / 2; if (a < 0) a += Math.PI * 2;
+        var g = a / (Math.PI * 2); if (Math.abs(g - d.last) > 0.5) g = d.last > 0.5 ? 1 : 0;
+        g = clamp(g, 0, 1); d.last = g; this.upd(s.id, { gain: g });
+      } else if (d.type === 'new') {
+        var inside = p.x < 1040 && p.x > 540, gt = null;
+        if (inside) gt = snapT(clamp(tB(p.y - off), 0, TOTAL - 0.2), 'start');
+        this.setState({ ghost: { x: p.x, y: p.y, b: d.b }, tip: inside ? { x: p.x + 26, y: p.y - 12, text: d.name + ' · ' + (gt.label || 'at ' + fmt(gt.t)) } : null });
+      } else if (s && this.state.ew) {
+        var t = this.eT(p.y), tol = 10 / EH * this.state.ew.L, tOut = s.t0 + s.dur, src0 = s.t0 - s.srcIn;
+        if (d.type === 'eIn') { var si = snapE(t, 'start', tol), tn = clamp(si.t, src0, tOut - 0.2); this.upd(s.id, { t0: tn, srcIn: tn - src0, dur: tOut - tn }); this.setState({ eSnapT: si.label ? si.t : null, tip: si.label ? { x: WX + WA + 16, y: p.y - 30, text: si.label } : null }); }
+        else if (d.type === 'eOut') { var so = snapE(t, 'end', tol), du = clamp(so.t - s.t0, 0.2, s.full - s.srcIn); this.upd(s.id, { dur: du }); this.setState({ eSnapT: so.label ? so.t : null, tip: so.label ? { x: WX + WA + 16, y: p.y + 14, text: so.label } : null }); }
+        else if (d.type === 'eFi') { this.upd(s.id, { fi: clamp(t - s.t0, 0, s.dur * 0.9) }); }
+        else if (d.type === 'eFo') { this.upd(s.id, { fo: clamp(tOut - t, 0, s.dur * 0.9), auto: false }); }
+        else if (d.type === 'eBody') {
+          var dt = (p.y - d.py) / EH * this.state.ew.L;
+          if (e.altKey) { this.upd(s.id, { srcIn: clamp(d.src0 - dt, 0, s.full - s.dur), t0: d.t00 }); this.setState({ tip: { x: WX + WA + 16, y: p.y - 12, text: 'Slipping the sound inside' }, eSnapT: null }); }
+          else { var sb = snapE(d.t00 + dt, 'start', tol); this.upd(s.id, { t0: clamp(sb.t, 0, TOTAL - 0.2), srcIn: d.src0 }); this.setState({ eSnapT: sb.label ? sb.t : null, tip: { x: WX + WA + 16, y: p.y - 12, text: sb.label || 'Starts at ' + fmt(sb.t) } }); }
+        }
+      }
+    };
+    this.onUp = (e) => {
+      var d = this.drag; if (!d) return;
+      this.drag = null;
+      if (d.type === 'new' && e && e.clientX != null) {
+        var p = this.pt(e), off = this.off();
+        if (p.x < 1040 && p.x > 540 && this.state.on) {
+          var sn = snapT(clamp(tB(p.y - off), 0, TOTAL - 0.2), 'start'), dur = d.full > 8 ? 20 : Math.min(d.full, 3), id = 's' + (++this.nid);
+          var ns = { id: id, name: d.name, b: d.b, t0: sn.t, dur: dur, full: d.full, depth: clamp((p.x - 650) / 300, 0, 0.95), gain: 0.8, pan: 0, srcIn: 0, fi: 0.02, fo: autoFade(dur), auto: true, fresh: true };
+          this.setState({ sfx: this.state.sfx.concat([ns]), sel: id });
+          setTimeout(() => this.upd(id, { fresh: false, pop: true }), 40);
+          setTimeout(() => this.upd(id, { pop: false }), 1000);
+        }
+      }
+      this.setState({ dragId: null, tip: null, ghost: null, snapY: null, eSnapT: null });
+      this.settleSoon();
+    };
+    this.onKey = (e) => {
+      var s = this.state, k = e.key;
+      if (k === ' ') { e.preventDefault(); this.last = performance.now(); this.setState({ playing: !s.playing, T: s.T >= TOTAL - 0.01 ? 0 : s.T }); }
+      else if (k === 's' || k === 'S') this.toggleSounds();
+      else if (k === 'Escape') { if (s.open) this.closeEd(); else this.setState({ sel: null }); }
+      else if (k === 'Enter' && s.sel && !s.open) this.openEd(s.sel);
+      else if ((k === 'Backspace' || k === 'Delete') && s.sel) { e.preventDefault(); var left = s.sfx.filter(function (x) { return x.id !== s.sel; }); this.setState({ sfx: left, settled: snapOf(left), sel: null, hover: null, open: null }); }
+      else if (k === 'ArrowDown' || k === 'ArrowUp') {
+        e.preventDefault(); var T = s.T, nt = T;
+        if (k === 'ArrowDown') { var nx = LINES.filter(function (b) { return b.t0 > T + 0.01; })[0]; if (nx) nt = nx.t0; }
+        else { var pv = LINES.filter(function (b) { return b.t0 < T - 0.3; }); nt = pv.length ? pv[pv.length - 1].t0 : 0; }
+        this.setState({ T: nt });
+      }
+    };
+    this.headDown = (e) => { var s = this.find(this.focusId()); if (!s) return; this.startDrag(e, { type: 'move', id: s.id, grab: 0 }); };
+    this.tailDown = (e) => { var s = this.find(this.focusId()); if (!s) return; this.startDrag(e, { type: 'trim', id: s.id }); };
+    this.ringDown = (e) => { var s = this.find(this.state.sel); if (!s) return; var g = (this.disp && this.disp[s.id]) || { x: this.geo(s).bx, y: this.geo(s).y0 }; this.startDrag(e, { type: 'ring', id: s.id, cx: g.x, cy: g.y + this.off(), last: s.gain }); };
+    this.edDown = (type) => (e) => { var s = this.find(this.state.open); if (!s) return; var p = this.pt(e); this.startDrag(e, { type: type, id: s.id, py: p.y, t00: s.t0, src0: s.srcIn }); };
+    this.inDown = this.edDown('eIn'); this.outDown = this.edDown('eOut'); this.fiDown = this.edDown('eFi'); this.foDown = this.edDown('eFo'); this.bodyDown = this.edDown('eBody');
+    this.chip = (kind) => () => {
+      var s = this.find(this.state.open); if (!s) return; var max = s.full - s.srcIn, end;
+      if (kind === 'line') { var l = LINES.filter(function (b) { return b.t1 > s.t0 + 0.05; })[0]; end = l ? l.t1 : s.t0 + max; this.upd(s.id, { dur: clamp(end - s.t0, 0.2, max) }); }
+      else if (kind === 'next') { var n2 = LINES.filter(function (b) { return b.t0 > s.t0 + 0.05; })[0]; end = n2 ? n2.t0 : s.t0 + max; this.upd(s.id, { dur: clamp(end - s.t0, 0.2, max) }); }
+      else if (kind === 'full') this.upd(s.id, { dur: max });
+      else if (kind === 'auto') this.upd(s.id, s.auto === false ? { auto: true } : { auto: false, fo: foOf(s) });
+      this.settleSoon(); this.focusRoot();
+    };
+    this.cEndLine = this.chip('line'); this.cNext = this.chip('next'); this.cFull = this.chip('full'); this.cAuto = this.chip('auto');
+    this.cKeep = (key) => { clearTimeout(this.cT); if (key && this.state.cOpen !== key) this.setState({ cOpen: key }); };
+    this.cLeave = () => { clearTimeout(this.cT); this.cT = setTimeout(() => { if (!this.drag && this.state.cOpen) this.setState({ cOpen: null }); }, 420); };
+    this.hoverIn = (id) => { clearTimeout(this.hT); var k = this.clusterOf && this.clusterOf[id]; if (k) this.cKeep(k); if (!this.drag && this.state.hover !== id) this.setState({ hover: id }); };
+    this.hoverOut = (id) => { clearTimeout(this.hT); if (this.clusterOf && this.clusterOf[id]) this.cLeave(); this.hT = setTimeout(() => { if (!this.drag && this.state.hover === id) this.setState({ hover: null }); }, 90); };
+    this.fEnter = () => { clearTimeout(this.hT); };
+    this.fLeave = () => { if (this.state.hover) this.hoverOut(this.state.hover); };
+  }
+  componentDidMount() { this.last = performance.now(); this.timer = setInterval(this.tick, 33); this.focusRoot(); }
+  componentWillUnmount() { clearTimeout(this.sT); clearInterval(this.timer); clearTimeout(this.stT); clearTimeout(this.hT); clearTimeout(this.cT); }
+  focusId() { var s = this.state; return s.open || s.dragId || s.hover || s.sel; }
+  geo(s) { var r = Math.min(44, 14 + s.dur * 6) * (1 - 0.3 * s.depth); return { r: r, bx: 650 + s.depth * 300 + r, y0: yB(s.t0) }; }
+  editor(out, s, laneX, off) {
+    var w = this.state.ew, c = BK[s.b].c, T = this.state.T;
+    function yE(t) { return EY + (t - w.W0) / w.L * EH; }
+    var tIn = s.t0, tOut = s.t0 + s.dur, fi = Math.min(s.fi, s.dur * 0.9), fo = foOf(s), src0 = s.t0 - s.srcIn, src1 = src0 + s.full;
+    var yIn = yE(tIn), yOut = yE(tOut), yFi = yE(tIn + fi), yFo = yE(tOut - fo), yS0 = clamp(yE(src0), EY, EY + EH), yS1 = clamp(yE(src1), EY, EY + EH);
+    var seed = s.name.length * 13 + s.name.charCodeAt(0);
+    var env = function (f) { return f < 0.02 ? f / 0.02 : Math.max(0.2, 1 - f * 0.5); };
+    var gA = WA * (0.35 + 0.65 * s.gain);
+    var sf = function (y) { return (y - yE(src0)) / Math.max(1, yE(src1) - yE(src0)); };
+    out.srcWave = vwave(WX, gA, yS0, yS1, 140, function () { return 1; }, seed, function (f) { return env(sf(yS0 + f * (yS1 - yS0))); });
+    var u0 = clamp(yIn, EY, EY + EH), u1 = clamp(yOut, EY, EY + EH);
+    out.useWave = vwave(WX, gA, u0, u1, 90, function (y) { if (y < yFi) return clamp((y - yIn) / Math.max(1, yFi - yIn), 0, 1); if (y > yFo) return clamp((yOut - y) / Math.max(1, yOut - yFo), 0, 1); return 1; }, seed + 7, function (f) { return env(sf(u0 + f * (u1 - u0))); });
+    var xl = WX - WA - 8, xr = WX + WA + 8;
+    out.dimTop = u0 > yS0 ? 'M' + xl + ' ' + yS0.toFixed(1) + ' H' + xr + ' V' + u0.toFixed(1) + ' H' + xl + ' Z' : '';
+    out.dimBot = yS1 > u1 ? 'M' + xl + ' ' + u1.toFixed(1) + ' H' + xr + ' V' + yS1.toFixed(1) + ' H' + xl + ' Z' : '';
+    out.fadeLines = 'M' + xl + ' ' + yFo.toFixed(1) + ' Q' + (xl + 22) + ' ' + (yOut - 6).toFixed(1) + ' ' + WX + ' ' + yOut.toFixed(1) + ' Q' + (xr - 22) + ' ' + (yOut - 6).toFixed(1) + ' ' + xr + ' ' + yFo.toFixed(1) + ' M' + xl + ' ' + yFi.toFixed(1) + ' L' + WX + ' ' + yIn.toFixed(1) + ' L' + xr + ' ' + yFi.toFixed(1);
+    var ruler = '', rls = [], step = w.L > 6 ? 2 : 0.5;
+    for (var k = -20; k <= 40; k++) { var tt = tIn + k * step, yy = yE(tt); if (yy < EY || yy > EY + EH) continue; ruler += 'M' + RX + ' ' + yy.toFixed(1) + ' h8 '; rls.push({ t: (k * step).toFixed(1) + ' s', style: 'left: ' + (RX + 13) + 'px; top: ' + yy.toFixed(1) + 'px' }); }
+    out.ruler = ruler; out.rls = rls;
+    var dg = dialogStrip(w.W0, w.L); out.dg0 = dg[0].d; out.dgf0 = dg[0].fill; out.dg1 = dg[1].d; out.dgf1 = dg[1].fill; out.dg2 = dg[2].d; out.dgf2 = dg[2].fill; out.dg3 = dg[3].d; out.dgf3 = dg[3].fill;
+    var yT = yE(T); out.ePlay = yT >= EY && yT <= EY + EH ? 'M' + (CX + 16) + ' ' + yT.toFixed(1) + ' H' + (CX + CW - 16) : '';
+    var es = this.state.eSnapT; out.eSnap = es != null ? 'M' + (DX - 14) + ' ' + yE(es).toFixed(1) + ' H' + (xr + 4) : '';
+    out.eCol = rgba(c, 1); out.eDot = 'radial-gradient(circle at 34% 30%, ' + rgba(lighten(c, 0.5), 1) + ', ' + rgba(c, 1) + ' 60%)';
+    out.eName = s.name; out.eLoud = BK[s.b].n + ' · ' + db(s.gain) + ' · ' + zone(s.depth) + ' · ' + panTxt(s.pan || 0);
+    out.eRead = s.dur.toFixed(1) + ' of ' + s.full.toFixed(1) + ' s · fade in ' + fi.toFixed(2) + ' · fade out ' + fo.toFixed(1) + (s.auto === false ? '' : ' auto') + ' · ⌥ drag slips';
+    out.eCard = 'left: ' + CX + 'px; top: ' + CY + 'px; width: ' + CW + 'px; height: ' + CHH + 'px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), inset 0 0 0 1px ' + rgba(c, 0.35) + ', 0 30px 80px rgba(0,0,0,0.55)';
+    var ly0 = yB(s.t0) + off, ly1 = Math.max(yB(tOut), yB(s.t0) + 4) + off, lx0 = laneX + 4;
+    out.loupe = 'M' + lx0 + ' ' + ly0.toFixed(1) + ' L' + CX + ' ' + u0.toFixed(1) + ' L' + CX + ' ' + u1.toFixed(1) + ' L' + lx0 + ' ' + ly1.toFixed(1) + ' Z';
+    out.loupeFill = rgba(c, 0.08); out.loupeLine = rgba(c, 0.45);
+    out.bodyStyle = 'left: ' + xl + 'px; top: ' + (u0 + 8).toFixed(1) + 'px; width: ' + (xr - xl) + 'px; height: ' + Math.max(0, u1 - u0 - 16).toFixed(1) + 'px';
+    out.inStyle = 'left: ' + xl + 'px; top: ' + (yIn - 6).toFixed(1) + 'px; width: ' + (xr - xl) + 'px; height: 12px';
+    out.outStyle = 'left: ' + xl + 'px; top: ' + (yOut - 6).toFixed(1) + 'px; width: ' + (xr - xl) + 'px; height: 12px';
+    out.fiStyle = 'left: ' + xr + 'px; top: ' + Math.max(yFi, yIn + 10).toFixed(1) + 'px; width: 12px; height: 12px';
+    out.foStyle = 'left: ' + xr + 'px; top: ' + Math.min(yFo, yOut - 10).toFixed(1) + 'px';
+    out.inLab = 'left: ' + (xr + 12) + 'px; top: ' + (yIn - 22).toFixed(1) + 'px';
+    out.outLab = 'left: ' + (xr + 12) + 'px; top: ' + (yOut + 6).toFixed(1) + 'px'; out.outText = 'Out · ' + s.dur.toFixed(1) + ' s';
+    out.foLab = 'left: ' + (xr + 14) + 'px; top: ' + (Math.min(yFo, yOut - 10) - 9).toFixed(1) + 'px'; out.foText = 'Fade ' + fo.toFixed(1) + ' s';
+    var max = s.full - s.srcIn, end = s.t0 + s.dur, l1 = LINES.filter(function (b) { return b.t1 > s.t0 + 0.05; })[0], n2 = LINES.filter(function (b) { return b.t0 > s.t0 + 0.05; })[0];
+    var on = 'background: ' + rgba(c, 1) + '; color: #15110A; box-shadow: none';
+    out.cEndLineS = l1 && Math.abs(end - l1.t1) < 0.02 ? on : ''; out.cNextS = n2 && Math.abs(end - n2.t0) < 0.02 ? on : ''; out.cFullS = Math.abs(s.dur - max) < 0.02 ? on : ''; out.cAutoS = s.auto === false ? '' : on;
+  }
+  renderVals() {
+    var self = this, st = this.state, off = 450 - yB(st.T), on = st.on, T = st.T, focus = this.focusId();
+    var items = B.map(function (it) {
+      var cur = T >= it.t0 && T < it.t1, base = 'left: ' + COLX + 'px; top: ' + it.top + 'px; width: ' + COLW + 'px; height: ' + it.h + 'px';
+      if (!it.isLine) return Object.assign({}, it, { style: base + (cur ? '; opacity: 1' : '; opacity: 0.8') });
+      var c = it.c;
+      return Object.assign({}, it, { wfill: rgba(c, cur ? 0.95 : 0.7), pp: cur ? ((T - it.t0) / (it.t1 - it.t0) * 100).toFixed(2) : 0, po: cur ? 1 : 0,
+        style: base + '; background: linear-gradient(90deg, ' + rgba(c, cur ? 0.42 : 0.24) + ', ' + rgba(c, 0.07) + ' 70%, rgba(255,255,255,0.03)); box-shadow: inset 0 0 0 ' + (cur ? 1.5 : 1) + 'px ' + rgba(c, cur ? 0.7 : 0.18) + (cur ? ', 0 16px 50px ' + rgba(c, 0.22) : '') });
+    });
+    var SET = st.settled || {}, HB = st.hide || {};
+    function sv(s) { var z = SET[s.id]; return z ? { t0: z.t0, dur: z.dur, depth: z.depth } : { t0: s.t0, dur: s.dur, depth: s.depth }; }
+    var sorted = st.sfx.slice().sort(function (a, b) { return sv(a).t0 - sv(b).t0; }), laneEnd = [-1, -1, -1, -1, -1], n = sorted.length;
+    var thin = { food: '', room: '', props: '' }, tethers = '', bubs = [], hits = [], F = null, laneOf = {}, recs = [], disp = {};
+    var drag = this.drag, dragId = (drag && drag.id && drag.type !== 'bubble') ? drag.id : null;
+    // sticky lanes: unchanged sounds keep their lane, only new or moved ones look for a free one
+    var LM = this.laneMap || {}, PS = this.prevSet || {}, occ = [[], [], [], [], []], LN = {};
+    function changed(s) { var a1 = SET[s.id], b1 = PS[s.id]; return !a1 || !b1 || a1.t0 !== b1.t0 || a1.dur !== b1.dur || LM[s.id] == null; }
+    sorted.slice().sort(function (a1, b1) { return (changed(a1) ? 1 : 0) - (changed(b1) ? 1 : 0) || sv(a1).t0 - sv(b1).t0; }).forEach(function (s) {
+      var z = sv(s); if (z.dur > 8) { LN[s.id] = 5; return; }
+      function free(l) { return occ[l].every(function (iv) { return z.t0 + z.dur + 0.05 <= iv[0] || z.t0 >= iv[1] + 0.05; }); }
+      var l = LM[s.id]; if (l == null || l > 4 || !free(l)) { l = 4; for (var k = 0; k < 5; k++) if (free(k)) { l = k; break; } }
+      occ[l].push([z.t0, z.t0 + z.dur]); LN[s.id] = l;
+    });
+    this.laneMap = LN; this.prevSet = SET;
+    sorted.forEach(function (s, i) {
+      var z = sv(s), lane = LN[s.id];
+      var x = lx(lane), g = self.geo(s), gs = self.geo(Object.assign({}, s, z));
+      laneOf[s.id] = x;
+      recs.push({ s: s, i: i, x: x, g: g, gs: gs, z: z, us: !SET[s.id] });
+      disp[s.id] = { x: g.bx, y: g.y0, r: g.r, delay: 0 };
+    });
+    // merge only balls that truly overlap at about the same depth, using settled positions
+    var par = {}; function fnd(a) { while (par[a] !== a) a = par[a] = par[par[a]]; return a; }
+    recs.forEach(function (r) { par[r.s.id] = r.s.id; });
+    for (var a = 0; a < recs.length; a++) for (var b2 = a + 1; b2 < recs.length; b2++) {
+      var ga = recs[a].gs, gb = recs[b2].gs;
+      if (!recs[a].us && !recs[b2].us && !HB[recs[a].s.b] && !HB[recs[b2].s.b] && Math.abs(recs[a].z.depth - recs[b2].z.depth) < 0.12 && Math.hypot(ga.bx - gb.bx, ga.y0 - gb.y0) < (ga.r + gb.r) * 0.85) par[fnd(recs[a].s.id)] = fnd(recs[b2].s.id);
+    }
+    var grp = {}; recs.forEach(function (r) { var k = fnd(r.s.id); (grp[k] = grp[k] || []).push(r); });
+    var clusterOf = {}, clus = [], halos = [], EASE = 'cubic-bezier(.25,.8,.25,1)';
+    Object.keys(grp).forEach(function (k) {
+      var ms = grp[k]; if (ms.length < 2) return;
+      ms.sort(function (p, q) { return p.z.t0 - q.z.t0; });
+      var key = ms.map(function (m) { return m.s.id; }).join('-'), w = 0, cx = 0, cy = 0, rs = 0, dep = 0;
+      ms.forEach(function (m) { var ww = m.gs.r * m.gs.r; w += ww; cx += m.gs.bx * ww; cy += m.gs.y0 * ww; rs += ww; dep += m.z.depth; clusterOf[m.s.id] = key; });
+      cx /= w; cy /= w; dep /= ms.length;
+      var rc = Math.max(Math.sqrt(rs) * 0.82, Math.max.apply(null, ms.map(function (m) { return m.gs.r; })) + 5);
+      var exp = key === st.cOpen || ms.some(function (m) { return m.s.id === st.sel || m.s.id === st.open || m.s.id === st.hover || m.s.id === dragId; });
+      if (exp) {
+        var tot = ms.reduce(function (acc, m) { return acc + 2 * m.g.r; }, 0) + 14 * (ms.length - 1), yy = cy - tot / 2, x0 = 1e9, x1 = -1e9, y0 = yy, y1 = cy + tot / 2;
+        ms.forEach(function (m, j) { var r = m.g.r, fx = Math.max(640 + r, cx + (j % 2 ? 22 : -22)), fy = yy + r; yy += 2 * r + 14; disp[m.s.id] = { x: fx, y: fy, r: r, delay: j * 0.03 }; x0 = Math.min(x0, fx - r); x1 = Math.max(x1, fx + r); });
+        halos.push({ style: 'left: ' + (x0 - 22).toFixed(0) + 'px; top: ' + (y0 - 22).toFixed(0) + 'px; width: ' + (x1 - x0 + 44).toFixed(0) + 'px; height: ' + (y1 - y0 + 60).toFixed(0) + 'px; z-index: 0', enter: function () { self.cKeep(key); }, leave: function () { self.cLeave(); } });
+      } else ms.forEach(function (m) { disp[m.s.id] = { x: cx, y: cy, r: m.g.r, hidden: true, delay: 0 }; });
+      var cols = ms.map(function (m) { return rgba(BK[m.s.b].c, 1); });
+      var c0 = BK[ms[0].s.b].c, vis = on;
+      clus.push({ n: ms.length, title: ms.map(function (m) { return m.s.name; }).join(', '), name: ms[0].s.name + ' +' + (ms.length - 1),
+        style: 'left: ' + (cx - rc).toFixed(0) + 'px; top: ' + (cy - rc).toFixed(0) + 'px; width: ' + (2 * rc).toFixed(0) + 'px; height: ' + (2 * rc).toFixed(0) + 'px; z-index: 1; box-shadow: 0 0 34px ' + rgba(c0, 0.45) + '; opacity: ' + (vis && !exp ? (1 - 0.45 * dep) : 0).toFixed(2) + '; filter: blur(' + (4 * dep).toFixed(1) + 'px); transform: scale(' + (vis && !exp ? 1 : 0.6) + '); transition: transform .6s ' + EASE + ', opacity .45s ease, left .6s ' + EASE + ', top .6s ' + EASE + ', width .6s ' + EASE + ', height .6s ' + EASE + '; pointer-events: ' + (vis && !exp ? 'auto' : 'none'),
+        inner: 'background: conic-gradient(' + cols.concat([cols[0]]).join(', ') + ')',
+        hl: 'background: radial-gradient(circle at 34% 30%, rgba(255,255,255,0.6), rgba(255,255,255,0.08) 42%, transparent 60%)',
+        lab: 'left: ' + (cx - 80).toFixed(0) + 'px; width: 160px; text-align: center; top: ' + (cy + rc + 5).toFixed(0) + 'px; color: rgba(240,238,232,' + (vis && !exp ? 0.75 : 0) + '); transition: color .4s ease',
+        enter: function () { self.cKeep(key); }, leave: function () { self.cLeave(); }, down: function (e) { e.stopPropagation(); e.preventDefault(); self.cKeep(key); } });
+    });
+    if (dragId && disp[dragId]) { var gd = self.geo(self.find(dragId)); disp[dragId] = { x: gd.bx, y: gd.y0, r: gd.r, delay: 0, dragged: true }; }
+    this.clusterOf = clusterOf; this.disp = disp;
+    recs.forEach(function (rc0) {
+      var s = rc0.s, i = rc0.i, x = rc0.x, g = rc0.g, D = disp[s.id];
+      var y0 = g.y0, y1 = Math.max(yB(s.t0 + s.dur), y0 + 4), fade = foOf(s), yf = clamp(yB(s.t0 + s.dur - fade), y0 + 2, y1), c = BK[s.b].c;
+      var hb = !!HB[s.b], isF = s.id === focus && !hb, active = T >= s.t0 && T < s.t0 + s.dur, d = s.depth;
+      if (isF) F = { s: s, x: x, y0: y0, y1: y1, yf: yf, c: c, D: D };
+      thin[s.b] += 'M' + x + ' ' + y0.toFixed(1) + ' V' + y1.toFixed(1) + ' ';
+      tethers += (isF || hb) ? '' : 'M' + (x + 3) + ' ' + y0.toFixed(1) + ' L' + (D.x - D.r * (D.hidden ? 0.5 : 1)).toFixed(1) + ' ' + D.y.toFixed(1) + ' ';
+      var id = s.id;
+      if (!hb) hits.push({ style: 'left: ' + (x - 4) + 'px; top: ' + (y0 - 3).toFixed(1) + 'px; width: 8px; height: ' + (y1 - y0 + 6).toFixed(1) + 'px',
+        enter: function () { self.hoverIn(id); }, leave: function () { self.hoverOut(id); }, open: function () { self.openEd(id); },
+        down: function (e) { var p = self.pt(e), yb = p.y - self.off(), sx = self.find(id); var nearTail = yb > yB(sx.t0 + sx.dur) - 8 && yB(sx.t0 + sx.dur) - yB(sx.t0) > 14; self.startDrag(e, nearTail ? { type: 'trim', id: id } : { type: 'move', id: id, grab: yb - yB(sx.t0) }); } });
+      var hi = lighten(c, 0.5);
+      var vis = on && !s.fresh && !D.hidden, sc = vis ? (active ? 1.06 : 1) : (D.hidden && on ? 0.6 : 0.05), tx = (on || D.hidden) ? 0 : (x + 400 - D.x);
+      var dl = D.delay || 0, tr;
+      if (st.stagger) { var sd = on ? 0.12 + i * 0.05 : (n - 1 - i) * 0.025; tr = on ? 'transform .75s cubic-bezier(.34,1.56,.64,1) ' + sd + 's, opacity .5s ease ' + sd + 's, filter .3s' : 'transform .55s cubic-bezier(.55,0,.8,.3) ' + sd + 's, opacity .45s ease ' + sd + 's, filter .3s'; dl = sd; }
+      else if (D.dragged) tr = 'left .12s ease-out, top .12s ease-out, transform .25s ease, opacity .3s ease, filter .3s, box-shadow .3s, width .3s, height .3s';
+      else tr = 'left .6s ' + EASE + ' ' + dl + 's, top .6s ' + EASE + ' ' + dl + 's, width .4s ease, height .4s ease, transform .5s ' + EASE + ' ' + dl + 's, opacity .4s ease ' + dl + 's, filter .3s, box-shadow .3s';
+      if (s.fresh || s.pop) tr = 'transform .75s cubic-bezier(.34,1.56,.64,1), opacity .5s ease, filter .3s';
+      var glow = (active ? 30 : 10) + 34 * s.gain, r = D.r, pn = s.pan || 0, th = pn * 1.25, bulge = 50 * Math.sin(th) + (Math.abs(pn) < 0.02 ? 9 : 0);
+      var mer = 'M50 3 Q' + (50 + 2 * bulge).toFixed(1) + ' 50 50 97', merOn = isF || st.sel === id;
+      var op = vis ? (1 - 0.55 * d) * (hb ? 0.12 : 1) : 0;
+      var box = 'left: ' + (D.x - r).toFixed(0) + 'px; top: ' + (D.y - r).toFixed(0) + 'px; width: ' + (2 * r).toFixed(0) + 'px; height: ' + (2 * r).toFixed(0) + 'px; transform: translateX(' + tx.toFixed(0) + 'px) scale(' + sc + '); transition: ' + tr;
+      bubs.push({ name: s.name, mer: mer, merCol: merOn ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.55)', merW: merOn ? 2 : 1.4,
+        merStyle: box + '; opacity: ' + (vis ? (hb ? 0.1 : Math.max(0.55, op)).toFixed(2) : 0) + '; z-index: ' + (isF ? 5 : 3),
+        style: box + '; background: radial-gradient(circle at ' + (34 + pn * 30).toFixed(0) + '% 30%, ' + rgba(hi, 1) + ', ' + rgba(c, 1) + ' 55%, ' + rgba(c, 0.7) + '); box-shadow: inset ' + (-pn * r * 0.45).toFixed(1) + 'px ' + (-r * 0.12).toFixed(1) + 'px ' + (r * 0.55).toFixed(1) + 'px rgba(10,8,20,0.3), 0 0 ' + glow.toFixed(0) + 'px ' + rgba(c, (active ? 0.5 : 0.15) + 0.45 * s.gain) + (st.sel === id ? ', 0 0 0 3px #0B0D12' : '') + '; opacity: ' + op.toFixed(2) + '; filter: blur(' + (5 * d + (hb ? 3 : 0)).toFixed(1) + 'px) saturate(' + (hb ? 0.3 : 1 - 0.5 * d + 0.25 * Math.abs(pn)).toFixed(2) + ') hue-rotate(' + (pn * 30).toFixed(0) + 'deg); pointer-events: ' + (vis && !hb ? 'auto' : 'none') + '; z-index: ' + (isF ? 4 : 2),
+        lab: 'left: ' + (D.x - 80).toFixed(0) + 'px; width: 160px; text-align: center; top: ' + (D.y + r + 4).toFixed(0) + 'px; z-index: 2; color: ' + rgba(lighten(c, 0.3), (vis && !hb ? (1 - 0.6 * d) : 0).toFixed(2)) + '; transition: left .6s ' + EASE + ' ' + dl + 's, top .6s ' + EASE + ' ' + dl + 's, color .4s ease ' + dl + 's',
+        enter: function () { self.hoverIn(id); }, leave: function () { self.hoverOut(id); }, open: function () { self.openEd(id); },
+        down: function (e) { var p = self.pt(e), sx = self.find(id); if (e.altKey) { self.startDrag(e, { type: 'pan', id: id, x0: p.x, p0: sx.pan || 0, r: self.geo(sx).r }); return; } self.startDrag(e, { type: 'bubble', id: id, x0: p.x, y0: p.y, d0: sx.depth, grab: (p.y - self.off()) - yB(sx.t0) }); } });
+    });
+    if (focus !== this.lastF) { this.lastF = focus; this.flipF = !this.flipF; }
+    if (st.sel !== this.lastS) { this.lastS = st.sel; this.flipS = !this.flipS; }
+    var thinA = 0.55;
+    var out = { setRoot: this.setRoot, onKey: this.onKey, onRootDown: this.onRootDown, onMove: this.onMove, onUp: this.onUp, toggleSounds: this.toggleSounds,
+      headDown: this.headDown, tailDown: this.tailDown, ringDown: this.ringDown, fEnter: this.fEnter, fLeave: this.fLeave,
+      stopDown: this.stopDown, closeEd: this.closeEd, inDown: this.inDown, outDown: this.outDown, fiDown: this.fiDown, foDown: this.foDown, bodyDown: this.bodyDown,
+      cEndLine: this.cEndLine, cNext: this.cNext, cFull: this.cFull, cAuto: this.cAuto,
+      items: items, sx: SX, H: H, Hx: H + 400, off: off.toFixed(1), dx: on ? 0 : 400,
+      sp0: SPINE[0].d, sf0: SPINE[0].fill, sp1: SPINE[1].d, sf1: SPINE[1].fill, sp2: SPINE[2].d, sf2: SPINE[2].fill, sp3: SPINE[3].d, sf3: SPINE[3].fill,
+      thinFood: thin.food, thinRoom: thin.room, thinProps: thin.props, thinFoodC: rgba(BK.food.c, HB.food ? 0.1 : thinA), thinRoomC: rgba(BK.room.c, HB.room ? 0.1 : thinA), thinPropsC: rgba(BK.props.c, HB.props ? 0.1 : thinA),
+      ribOp: on ? 1 : 0, ribDelay: on && st.stagger ? 0.35 : 0, ribPE: on ? 'auto' : 'none', tethers: tethers, bubs: bubs, hits: hits,
+      hasFocus: !!F && on && !st.open, fAnim: '', halos: halos, clus: clus, ringAnim: '', ringDraw: '', knobAnim: '', fBody: '', fFade: '', fCol: 'none', fColA: 'none', fTether: '', fGhost: '', headStyle: '', tailStyle: '',
+      snapHot: st.snapY != null ? 'M' + (SX - 16) + ' ' + st.snapY.toFixed(1) + ' H' + (SX + 56) : '',
+      hasRing: false, ringTrack: '', ringArc: '', ringKX: 0, ringKY: 0, ringTX: 0, ringTY: 0, ringText: '',
+      isOpen: false, rls: [],
+      clock: fmt(T), clockCol: st.playing ? '#F3F1EC' : 'rgba(240,238,232,0.55)',
+      on: on ? 'true' : 'false', sBtn: on ? 'background: #D8B657; color: #15110A; box-shadow: 0 8px 26px rgba(216,182,87,0.35)' : 'background: rgba(255,255,255,0.06); color: rgba(240,238,232,0.8); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14)',
+      panelStyle: 'transform: translateX(' + (on ? 0 : 420) + 'px); opacity: ' + (on ? (st.open ? 0.5 : 1) : 0) + '; transition: transform .7s cubic-bezier(.2,.8,.2,1) ' + (on ? 0.1 : 0) + 's, opacity .5s ease ' + (on ? 0.1 : 0) + 's; pointer-events: ' + (on ? 'auto' : 'none'),
+      hasTip: !!st.tip, tipX: st.tip ? st.tip.x : 0, tipY: st.tip ? st.tip.y : 0, tipText: st.tip ? st.tip.text : '',
+      hasGhost: !!st.ghost, gX: 0, gY: 0, gBg: 'none', gGlow: 'none', gLineX: 0, gLineW: 0 };
+    if (F) {
+      var x = F.x, c = F.c, y0 = F.y0, y1 = F.y1, yf = F.yf;
+      out.fBody = 'M' + (x - 3) + ' ' + (y0 + 3).toFixed(1) + ' Q' + (x - 3) + ' ' + y0.toFixed(1) + ' ' + x + ' ' + y0.toFixed(1) + ' Q' + (x + 3) + ' ' + y0.toFixed(1) + ' ' + (x + 3) + ' ' + (y0 + 3).toFixed(1) + ' V' + yf.toFixed(1) + ' H' + (x - 3) + ' Z';
+      out.fFade = 'M' + (x - 3) + ' ' + yf.toFixed(1) + ' H' + (x + 3) + ' L' + x + ' ' + y1.toFixed(1) + ' Z';
+      out.fCol = rgba(c, 1); out.fColA = rgba(c, 0.55);
+      out.fTether = 'M' + (x + 4) + ' ' + y0.toFixed(1) + ' L' + (F.D.x - F.D.r * (F.D.hidden ? 0.5 : 1)).toFixed(1) + ' ' + F.D.y.toFixed(1);
+      out.fAnim = 'transform-origin: ' + x + 'px ' + y0.toFixed(1) + 'px; animation: ' + (this.flipF ? 'ribA' : 'ribB') + ' .3s cubic-bezier(.25,.8,.25,1)';
+      var yF = yB(F.s.t0 - F.s.srcIn + F.s.full);
+      out.fGhost = yF - y1 > 2 ? 'M' + (x - 3) + ' ' + (y1 + 2).toFixed(1) + ' V' + yF.toFixed(1) + ' H' + (x + 3) + ' V' + (y1 + 2).toFixed(1) : '';
+      out.headStyle = 'left: ' + (x - 6) + 'px; top: ' + (y0 - 6).toFixed(1) + 'px; width: 12px; height: 12px; background: ' + rgba(c, 1) + '; box-shadow: 0 0 0 2px #0B0D12, 0 0 0 4px ' + rgba(c, 0.35) + '; cursor: grab; animation: ' + (this.flipF ? 'fadeA' : 'fadeB') + ' .3s ease';
+      out.tailStyle = 'left: ' + (x - 8) + 'px; top: ' + (y1 - 3).toFixed(1) + 'px; width: 16px; height: 6px; border-radius: 3px; background: #F3F1EC; box-shadow: 0 0 0 1.5px #0B0D12; animation: ' + (this.flipF ? 'fadeA' : 'fadeB') + ' .3s ease .08s both';
+    }
+    var sel = st.sel && on && !st.open ? this.find(st.sel) : null; if (sel && HB[sel.b]) sel = null;
+    if (sel) {
+      var g0 = this.geo(sel), Dd = disp[sel.id], g = { bx: Dd.x, y0: Dd.y, r: g0.r }, R = g.r + 13;
+      var _r = R, a0 = -Math.PI / 2, a1 = a0 + sel.gain * Math.PI * 2 * 0.999;
+      var p0 = [g.bx + R * Math.cos(a0), g.y0 + R * Math.sin(a0)], p1 = [g.bx + R * Math.cos(a1), g.y0 + R * Math.sin(a1)];
+      out.hasRing = true; out.ringTrack = circ(g.bx, g.y0, R);
+      out.ringArc = sel.gain > 0.005 ? 'M' + p0[0].toFixed(1) + ' ' + p0[1].toFixed(1) + ' A' + R + ' ' + R + ' 0 ' + (sel.gain > 0.5 ? 1 : 0) + ' 1 ' + p1[0].toFixed(1) + ' ' + p1[1].toFixed(1) : '';
+      out.ringKX = p1[0].toFixed(1); out.ringKY = p1[1].toFixed(1); out.ringTX = (g.bx + R + 14).toFixed(0); out.ringTY = (g.y0 - 13).toFixed(0); out.ringText = 'Loudness ' + db(sel.gain);
+      out.ringDraw = 'animation: ' + (this.flipS ? 'drawA' : 'drawB') + ' .7s cubic-bezier(.25,.8,.25,1) both';
+      out.knobAnim = 'animation: ' + (this.flipS ? 'fadeA' : 'fadeB') + ' .35s ease .45s both';
+    }
+    var op = st.open && on && st.ew ? this.find(st.open) : null;
+    if (op) { out.isOpen = true; this.editor(out, op, laneOf[op.id], off); }
+    if (st.ghost) { var gc = BK[st.ghost.b].c; out.gX = st.ghost.x; out.gY = st.ghost.y; out.gBg = 'radial-gradient(circle at 34% 30%, ' + rgba(lighten(gc, 0.5), 1) + ', ' + rgba(gc, 1) + ' 60%)'; out.gGlow = rgba(gc, 0.6); out.gLineX = SX + 20; out.gLineW = Math.max(0, st.ghost.x - SX - 40); }
+    var used = {}; st.sfx.forEach(function (s) { used[s.name] = true; });
+    out.groups = LIB.map(function (g) {
+      var c = BK[g.b].c;
+      var gv = !HB[g.b];
+      return { name: BK[g.b].n, dot: rgba(c, 1), vis: gv, hid: !gv, visA: gv ? 'true' : 'false',
+        dotS: gv ? 'background: ' + rgba(c, 1) : 'background: transparent; box-shadow: inset 0 0 0 1.5px ' + rgba(c, 0.6),
+        nameCol: gv ? 'rgba(240,238,232,0.64)' : 'rgba(240,238,232,0.32)',
+        eyeS: gv ? 'color: rgba(240,238,232,0.75)' : 'color: rgba(240,238,232,0.35)',
+        eyeTitle: (gv ? 'Fade ' : 'Show ') + BK[g.b].n + ' · ⌥ click to show only this bucket',
+        toggle: function (e) { self.toggleB(g.b, e && e.altKey); }, stop: function (e) { e.stopPropagation(); },
+        rows: g.rows.map(function (r) {
+        var dl = r[2];
+        return { name: r[0], d: r[3], dur: r[1] >= 10 ? Math.round(r[1]) + ' s' : r[1].toFixed(1) + ' s', fill: dl ? rgba(c, 1) : 'rgba(240,238,232,0.3)', bar: dl ? rgba(c, 1) : 'transparent; box-shadow: inset 0 0 0 1.5px ' + rgba(c, 0.7), nameStyle: dl ? 'font-weight: 600' : 'color: rgba(240,238,232,0.6)', row: (gv ? '' : 'opacity: 0.35; ') + (used[r[0]] && gv ? 'opacity: 0.45' : ''),
+          down: function (e) { self.startDrag(e, { type: 'new', b: g.b, name: r[0], full: r[1] }); var p = self.pt(e); self.setState({ ghost: { x: p.x, y: p.y, b: g.b } }); } };
+      }) };
+    });
+    return out;
+  }
+}
+</script>
+</body>
+</html>
