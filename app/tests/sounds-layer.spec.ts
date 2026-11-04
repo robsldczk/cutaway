@@ -329,6 +329,44 @@ test('the Sounds toggle eases: nothing in the layer overshoots', async ({ page }
   }
 });
 
+test('play: ⇧ Space plays from the start of the selected sound, the first of several', async ({ page }) => {
+  const a = await place(2.5, 0.2);
+  const b = await place(1.2, 0.7);
+  await open(page);
+  const head = () => rpc<{ position_s: number; playing: boolean }>('playhead');
+  const play = page.getByRole('button', { name: 'Play or stop (Space)' });
+
+  await ballOf(page, a).click();
+  await page.keyboard.press('Shift+Space');
+  await expect(play).toHaveAttribute('data-playing', 'true');
+  let h = await head();
+  expect(h.playing).toBe(true);
+  expect(h.position_s).toBeGreaterThanOrEqual(2.5);
+  expect(h.position_s).toBeLessThan(3.5);
+
+  // again while it plays: back to the start of the sound
+  await page.waitForTimeout(500);
+  await page.keyboard.press('Shift+Space');
+  await expect.poll(async () => (await head()).position_s).toBeLessThan(3);
+  await page.keyboard.press('Space');
+  await expect(play).toHaveAttribute('data-playing', 'false');
+
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.press('Shift+Space');
+  await expect(play).toHaveAttribute('data-playing', 'true');
+  h = await head();
+  expect(h.position_s).toBeGreaterThanOrEqual(1.2);
+  expect(h.position_s).toBeLessThan(2.2);
+  await page.keyboard.press('Space');
+
+  // with nothing selected it's the locator's again
+  await page.keyboard.press('Escape');
+  await expect(ballOf(page, b)).not.toHaveClass(/sel/);
+  await page.keyboard.press('Shift+Space');
+  await expect(play).toHaveAttribute('data-playing', 'true');
+  await rpc('stop');
+});
+
 test('depth: sideways is depth, and small vertical motion leaves the timing alone', async ({ page }) => {
   const a = await place(1, 0.1);
   await open(page);

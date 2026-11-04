@@ -40,6 +40,7 @@
     ['Loudness', ['ring', '⇧ scroll', '⇧↑', '⇧↓']],
     ['Move 100 ms / 10 ms earlier or later', [',', '.', '⇧,', '⇧.']],
     ['Remove / clear the selection', ['⌫', 'Esc']],
+    ['Play from the selected sound', ['⇧', 'Space']],
     ['Fade a bucket / show only it', ['eye', '⌥ eye']],
   ];
   const edit: [string, string[]][] = [

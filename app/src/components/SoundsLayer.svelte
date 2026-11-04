@@ -614,6 +614,16 @@
     return el?.dataset.sound ?? null;
   }
 
+  /** ⇧ Space with sounds selected: the timeline from the first of them, not the locator. */
+  function playFromSound(ids: string[]) {
+    const starts = ids.flatMap((id) => byId.get(id)?.start_s ?? []);
+    if (!starts.length) return false;
+    const t = Math.min(...starts);
+    app.scrubTo(t);
+    void app.play(t);
+    return true;
+  }
+
   function onKey(e: KeyboardEvent): boolean {
     // undo waits for what is on its way, so what is still in a burst goes first
     if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
@@ -626,8 +636,9 @@
       cancelGesture();
       return true;
     }
-    if (panel?.key(e)) return true;
     const at = focusedBall();
+    if (e.key === ' ' && e.shiftKey) return playFromSound(sel.length ? sel : at ? [at] : []);
+    if (panel?.key(e)) return true;
     if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
       app.soundSel = inTimeOrder.filter((id) => !hiddenOf(id));
       return true;
