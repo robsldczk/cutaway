@@ -199,7 +199,7 @@ pub struct Scene {
     /// What the writers know about the scene (Throughline beat, Fountain synopsis).
     #[serde(default)]
     pub story: SceneStory,
-    /// The room the scene's sounds share (each scene has its own, D75).
+    /// The room the scene's sounds share (each scene has its own, D76).
     #[serde(default)]
     pub room: SceneRoom,
 }
@@ -958,7 +958,7 @@ impl Placement {
     }
 
     /// Whether the sound plays in the scene's room. Music is outside the story's space and
-    /// vocal sounds belong with the dialogue, so depth means nothing for them (D75).
+    /// vocal sounds belong with the dialogue, so depth means nothing for them (D76).
     pub fn in_room(&self) -> bool {
         matches!(self.lane, Lane::Sfx | Lane::Ambience)
     }

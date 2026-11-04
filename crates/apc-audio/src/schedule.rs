@@ -6,6 +6,20 @@ use serde::{Deserialize, Serialize};
 use apc_core::timeline::{layout_scene, placement_start, Pacing, SceneLayout};
 use apc_core::{Document, Lane, Scene};
 
+use crate::depth::depth_mix;
+use crate::room::RoomShape;
+
+/// Where a clip sits in the scene's room (from its depth).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct ClipSpace {
+    /// Level of the direct sound (linear).
+    pub dry_gain: f64,
+    /// Level sent to the room (linear).
+    pub send_gain: f64,
+    /// Roll-off of the clip (dry and send alike).
+    pub lowpass_hz: f64,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ScheduledClip {
     /// Source id (`src_…`) or library asset (`asset:<id>`).
@@ -29,9 +43,17 @@ pub struct ScheduledClip {
     pub linear_fade: bool,
     /// Line or placement this clip belongs to.
     pub owner: String,
+    /// In the scene's room; `None` plays dry (dialogue, music, room tone).
+    #[serde(default)]
+    pub space: Option<ClipSpace>,
 }
 
 impl ScheduledClip {
+    /// The clip feeds the room bus.
+    pub fn has_send(&self) -> bool {
+        self.space.map(|m| m.send_gain > 0.0).unwrap_or(false)
+    }
+
     pub fn len(&self) -> f64 {
         self.loop_len_s
             .unwrap_or(self.src_out - self.src_in)
@@ -70,6 +92,12 @@ impl Default for MixSettings {
 pub struct PlaySchedule {
     pub clips: Vec<ScheduledClip>,
     pub duration_s: f64,
+    /// The scene's room, when something is sent to it and it is heard.
+    #[serde(default)]
+    pub room: Option<RoomShape>,
+    /// How long the room rings on after `duration_s`.
+    #[serde(default)]
+    pub tail_s: f64,
 }
 
 /// Lane key of a clip as the Edit page names lanes (`PAUL`, `sfx1`, `ambience`, …).
@@ -88,7 +116,8 @@ pub fn apply_lane_mix(doc: &Document, clips: &mut Vec<ScheduledClip>) {
     for c in clips.iter_mut() {
         if let Some(m) = doc.lane_mix.get(lane_key(c)) {
             c.gain_db += m.volume_db;
-            c.pan = m.pan;
+            // the lane's pan moves the clips in it; a sound keeps its own place on top
+            c.pan = (c.pan + m.pan).clamp(-1.0, 1.0);
         }
     }
 }
@@ -139,6 +168,7 @@ impl PlaySchedule {
                     pan: 0.0,
                     linear_fade: false,
                     owner: item.item_id.clone(),
+                    space: None,
                 });
             }
         }
@@ -154,6 +184,14 @@ impl PlaySchedule {
                 .filter(|p| p.scene_id == scene.id && !p.muted)
             {
                 let start = placement_start(layout, p);
+                let space = p.in_room().then(|| {
+                    let m = depth_mix(p.depth);
+                    ClipSpace {
+                        dry_gain: m.dry_gain,
+                        send_gain: m.send_gain,
+                        lowpass_hz: m.lowpass_hz,
+                    }
+                });
                 clips.push(ScheduledClip {
                     source_id: format!("asset:{}", p.asset_id),
                     src_in: p.in_s,
@@ -169,9 +207,10 @@ impl PlaySchedule {
                         Lane::Dialogue => p.character.clone().unwrap_or_else(|| "dialogue".into()),
                     },
                     loop_len_s: None,
-                    pan: 0.0,
+                    pan: p.pan,
                     linear_fade: false,
                     owner: p.id.clone(),
+                    space,
                 });
                 if let Some(last) = clips.last_mut() {
                     last.linear_fade = p.fade_curve == apc_core::FadeCurve::Linear;
@@ -203,6 +242,7 @@ impl PlaySchedule {
                             pan: 0.0,
                             linear_fade: false,
                             owner: loc,
+                            space: None,
                         });
                     }
                 }
@@ -210,10 +250,30 @@ impl PlaySchedule {
         }
         apply_lane_mix(doc, &mut clips);
         clips.sort_by(|a, b| a.start_s.total_cmp(&b.start_s));
+        // after the lane mix: a muted lane sends nothing and leaves no tail
+        let shape = RoomShape::new(scene.room.size, scene.room.damping, scene.room.wet);
+        let last_send = clips
+            .iter()
+            .filter(|c| c.has_send())
+            .map(ScheduledClip::end_s)
+            .fold(None, |a: Option<f64>, b| Some(a.map_or(b, |a| a.max(b))));
+        let (room, tail_s) = match last_send {
+            Some(end) if shape.wet > 0.0 => {
+                (Some(shape), (end + shape.tail_s() - duration).max(0.0))
+            }
+            _ => (None, 0.0),
+        };
         PlaySchedule {
             clips,
             duration_s: duration,
+            room,
+            tail_s,
         }
+    }
+
+    /// When the last sound has rung out: the end of the bounce and of playback.
+    pub fn end_s(&self) -> f64 {
+        self.duration_s + self.tail_s
     }
 
     /// Clips that sound between `t0` and `t1`.

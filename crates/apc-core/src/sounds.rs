@@ -13,7 +13,7 @@ use crate::error::{CoreError, Result};
 use crate::model::*;
 use crate::timeline::{layout_scene, placement_start, resolve_anchor, Pacing};
 
-/// Loudness range of a sound. The Edit page's gain tool reaches further (D76).
+/// Loudness range of a sound. The Edit page's gain tool reaches further (D77).
 pub const SOUND_GAIN_MIN_DB: f64 = -24.0;
 pub const SOUND_GAIN_MAX_DB: f64 = 6.0;
 /// Shortest sound the length rules leave.

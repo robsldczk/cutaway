@@ -119,10 +119,12 @@ pub fn play_take(svc: &mut Service, take_id: &str, from_s: f64) -> Result<Value>
         pan: 0.0,
         linear_fade: false,
         owner: t.line_id.clone(),
+        space: None,
     };
     let sched = PlaySchedule {
         clips: vec![clip],
         duration_s: t.duration(),
+        ..Default::default()
     };
     let r = start(
         svc,
@@ -159,10 +161,12 @@ pub fn play_source(svc: &mut Service, source_id: &str, t0: f64, t1: f64) -> Resu
         pan: 0.0,
         linear_fade: false,
         owner: source_id.to_string(),
+        space: None,
     };
     let sched = PlaySchedule {
         clips: vec![clip],
         duration_s: t1 - t0,
+        ..Default::default()
     };
     let scene = svc.player.scene_id.clone().unwrap_or_default();
     let r = start(svc, sched, &scene, 0.0, None, vec![])?;
@@ -211,10 +215,12 @@ pub fn play_file(
         pan: 0.0,
         linear_fade: false,
         owner: label.to_string(),
+        space: None,
     };
     let sched = PlaySchedule {
         clips: vec![clip],
         duration_s: duration,
+        ..Default::default()
     };
     let scene = svc.player.scene_id.clone().unwrap_or_default();
     let r = start(
@@ -238,7 +244,8 @@ fn start(
     until_s: Option<f64>,
     extra: Vec<(String, std::path::PathBuf)>,
 ) -> Result<Value> {
-    let duration = sched.duration_s;
+    // the room rings on past the last clip, as it does in the bounce
+    let duration = sched.end_s();
     let use_device = std::env::var("CUTAWAY_NO_AUDIO").is_err();
     if !svc.player.tried && use_device {
         svc.player.tried = true;

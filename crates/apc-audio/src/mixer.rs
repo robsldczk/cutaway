@@ -1,5 +1,9 @@
 //! The mixer: renders a play schedule into stereo frames. Used by the real-time engine and
 //! the offline bounce, so both hear exactly the same thing.
+//!
+//! Sounds meet on the room bus: `Mixer::mix` fills a dry and a send bus and holds no state, the
+//! `Renderer` runs the send through the scene's room. The room has a memory, so a `Renderer`
+//! that jumps to a new position first plays the room what it would have heard.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -8,10 +12,13 @@ use std::sync::{Arc, Mutex};
 use apc_media::decode::to_mono;
 use apc_media::AudioReader;
 
+use crate::depth::LOWPASS_OPEN_HZ;
 use crate::error::{AudioError, Result};
+use crate::room::Room;
 use crate::schedule::{PlaySchedule, ScheduledClip};
 
-type ClipKey = (String, u64, u64);
+/// Source, in and out point, and the roll-off (0 = none).
+type ClipKey = (String, u64, u64, u32);
 
 /// Decoded clip audio (mono, at the mix rate), cached per source range.
 pub struct SourceSet {
@@ -39,6 +46,20 @@ fn resample_linear(x: &[f32], from: u32, to: u32) -> Vec<f32> {
         .collect()
 }
 
+/// The gentle roll-off of a far sound: one pole, run over the whole clip from its first sample,
+/// so it sounds the same wherever playback starts.
+fn lowpass(x: &[f32], hz: f64, rate: u32) -> Vec<f32> {
+    let a = 1.0 - (-std::f64::consts::TAU * hz / f64::from(rate.max(1))).exp();
+    let a = a as f32;
+    let mut y = 0.0f32;
+    x.iter()
+        .map(|v| {
+            y += a * (v - y);
+            y
+        })
+        .collect()
+}
+
 impl SourceSet {
     pub fn new(rate: u32) -> Self {
         SourceSet {
@@ -57,12 +78,17 @@ impl SourceSet {
         self.paths.insert(id.into(), path);
     }
 
-    /// Mono samples of `[src_in, src_out)` at the mix rate.
+    /// Mono samples of `[src_in, src_out)` at the mix rate, with the clip's roll-off.
     pub fn clip(&self, c: &ScheduledClip) -> Result<Arc<Vec<f32>>> {
+        let hz = c
+            .space
+            .map(|s| s.lowpass_hz)
+            .filter(|hz| *hz < LOWPASS_OPEN_HZ);
         let key = (
             c.source_id.clone(),
             (c.src_in * 1e4) as u64,
             (c.src_out * 1e4) as u64,
+            hz.map(|h| h.round() as u32).unwrap_or(0),
         );
         if let Some(v) = self
             .cache
@@ -72,6 +98,21 @@ impl SourceSet {
         {
             return Ok(v.clone());
         }
+        let raw = self.decode(c)?;
+        let v = Arc::new(match hz {
+            Some(hz) => lowpass(&raw, hz, self.rate),
+            None => raw,
+        });
+        if let Ok(mut cache) = self.cache.lock() {
+            if cache.len() > 512 {
+                cache.clear();
+            }
+            cache.insert(key, v.clone());
+        }
+        Ok(v)
+    }
+
+    fn decode(&self, c: &ScheduledClip) -> Result<Vec<f32>> {
         let path = self
             .paths
             .get(&c.source_id)
@@ -88,16 +129,11 @@ impl SourceSet {
             .ok_or_else(|| AudioError::UnknownSource(c.source_id.clone()))?;
         let info = r.info();
         let raw = r.read_range(c.src_in.max(0.0), c.src_out.max(c.src_in))?;
-        let mono = resample_linear(&to_mono(&raw, info.channels), info.sample_rate, self.rate);
-        let v = Arc::new(mono);
-        drop(readers);
-        if let Ok(mut cache) = self.cache.lock() {
-            if cache.len() > 512 {
-                cache.clear();
-            }
-            cache.insert(key, v.clone());
-        }
-        Ok(v)
+        Ok(resample_linear(
+            &to_mono(&raw, info.channels),
+            info.sample_rate,
+            self.rate,
+        ))
     }
 
     /// Decodes every clip of a schedule ahead of time (offline render, pre-roll).
@@ -139,14 +175,28 @@ pub fn pan_gains(pan: f64) -> (f32, f32) {
 pub struct Mixer;
 
 impl Mixer {
-    /// Adds the schedule's audio for frames `[start_frame, start_frame + frames)` into
-    /// `out` (stereo interleaved, `frames * 2` samples). Missing sources are skipped.
-    pub fn render(s: &PlaySchedule, sources: &SourceSet, start_frame: u64, out: &mut [f32]) {
+    /// Adds the schedule's audio for `frames` frames from `start_frame` into the dry bus and
+    /// the room's send bus (stereo interleaved, `frames * 2` samples; leave either out). Holds
+    /// no state, so any stretch can be rendered. Missing sources are skipped.
+    fn mix(
+        s: &PlaySchedule,
+        sources: &SourceSet,
+        start_frame: u64,
+        frames: usize,
+        mut dry: Option<&mut [f32]>,
+        mut send: Option<&mut [f32]>,
+    ) {
         let rate = sources.rate() as f64;
-        let frames = out.len() / 2;
         let t0 = start_frame as f64 / rate;
         let t1 = (start_frame + frames as u64) as f64 / rate;
         for c in s.active(t0, t1) {
+            let (dry_gain, send_gain) = c
+                .space
+                .map(|m| (m.dry_gain as f32, m.send_gain as f32))
+                .unwrap_or((1.0, 0.0));
+            if dry.is_none() && send_gain == 0.0 {
+                continue;
+            }
             let Ok(buf) = sources.clip(c) else { continue };
             if buf.is_empty() {
                 continue;
@@ -174,10 +224,103 @@ impl Mixer {
                 let v = buf[idx]
                     * gain
                     * fade_gain(local, len, c.fade_in_s, c.fade_out_s, c.linear_fade);
-                out[2 * n] += v * gl;
-                out[2 * n + 1] += v * gr;
+                if let Some(out) = dry.as_deref_mut() {
+                    let d = v * dry_gain;
+                    out[2 * n] += d * gl;
+                    out[2 * n + 1] += d * gr;
+                }
+                if send_gain > 0.0 {
+                    if let Some(bus) = send.as_deref_mut() {
+                        let w = v * send_gain;
+                        bus[2 * n] += w * gl;
+                        bus[2 * n + 1] += w * gr;
+                    }
+                }
             }
         }
+    }
+}
+
+/// Frames the room is warmed up in at a time.
+const WARMUP_BLOCK: usize = 4096;
+
+/// Renders one schedule from any position, room included. One per loaded schedule: the
+/// bounce runs it from frame 0, the engine from wherever playback starts.
+pub struct Renderer {
+    room: Option<Room>,
+    /// The frame the room has heard up to.
+    next_frame: Option<u64>,
+    send: Vec<f32>,
+}
+
+impl Renderer {
+    pub fn new(s: &PlaySchedule, rate: u32) -> Self {
+        Renderer {
+            room: s.room.map(|shape| Room::new(rate, shape)),
+            next_frame: None,
+            send: Vec::new(),
+        }
+    }
+
+    /// Adds the schedule's audio for frames `[start_frame, start_frame + frames)` into `out`
+    /// (stereo interleaved, `frames * 2` samples). Rendering on from where the last call
+    /// stopped sounds the same however the frames are cut into blocks; a jump warms the room.
+    pub fn render(
+        &mut self,
+        s: &PlaySchedule,
+        sources: &SourceSet,
+        start_frame: u64,
+        out: &mut [f32],
+    ) {
+        let frames = out.len() / 2;
+        let Some(room) = self.room.as_mut() else {
+            Mixer::mix(s, sources, start_frame, frames, Some(out), None);
+            return;
+        };
+        if self.next_frame != Some(start_frame) {
+            warm_up(room, s, sources, start_frame, &mut self.send);
+        }
+        self.send.clear();
+        self.send.resize(out.len(), 0.0);
+        Mixer::mix(
+            s,
+            sources,
+            start_frame,
+            frames,
+            Some(out),
+            Some(&mut self.send),
+        );
+        room.process(&self.send, out);
+        self.next_frame = Some(start_frame + frames as u64);
+    }
+}
+
+/// Plays the room what it would have heard before `frame`, so a sound that rang out before
+/// the playhead still rings. `RoomShape::warmup_s` back is out of hearing.
+fn warm_up(
+    room: &mut Room,
+    s: &PlaySchedule,
+    sources: &SourceSet,
+    frame: u64,
+    send: &mut Vec<f32>,
+) {
+    let rate = sources.rate() as f64;
+    let warm = (room.shape().warmup_s() * rate).ceil() as u64;
+    let from = frame.saturating_sub(warm);
+    let (t0, t1) = (from as f64 / rate, frame as f64 / rate);
+    if !s.active(t0, t1).any(|c| c.has_send()) {
+        room.reset(frame);
+        return;
+    }
+    room.reset(from);
+    let mut f = from;
+    while f < frame {
+        let n = (frame - f).min(WARMUP_BLOCK as u64) as usize;
+        send.clear();
+        send.resize(n * 2, 0.0);
+        Mixer::mix(s, sources, f, n, None, Some(send));
+        room.absorb(send);
+        f += n as u64;
     }
 }
 
