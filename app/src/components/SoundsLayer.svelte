@@ -88,7 +88,7 @@
   const field = $derived<Field>({ x0: spineX + 126, width: Math.max(120, rightEdge - spineX - 214), y: (t) => map.y(t) });
   const laneX = (l: number) => spineX + 22 + l * 5;
   const targets = $derived(snapTargets(lines));
-  const spine = $derived([...spinePaths(lines, map, spineX)].map(([who, d]) => ({ d, fill: rgba(charColor(app.view, who).rgb, 0.95) })));
+  const spine = $derived([...spinePaths(lines, map, spineX)].map(([who, d]) => ({ who, d, fill: rgba(charColor(app.view, who).rgb, 0.95) })));
   const sceneEnd = $derived(app.view?.duration_s ?? 0);
 
   // ---- settling: lanes and groups read a snapshot, not the live values ----
@@ -189,13 +189,13 @@
 
   /** One path per bucket, and one for all the connecting lines. */
   const drawn = $derived.by(() => {
-    const by: Record<string, { tone: string; faded: boolean; d: string }> = {};
+    const by: Record<string, { bucket: string; tone: string; faded: boolean; d: string }> = {};
     let tethers = '';
     for (const s of sounds) {
       const x = laneX(liveLanes.get(s.id) ?? 0);
       const y0 = map.y(s.start_s);
       const faded = isHidden(s);
-      by[s.bucket] ??= { tone: s.tone, faded, d: '' };
+      by[s.bucket] ??= { bucket: s.bucket, tone: s.tone, faded, d: '' };
       by[s.bucket].d += linePath(x, y0, lineEnd(s));
       if (faded || s.id === focusId) continue;
       const b = shown(s.id);
@@ -310,7 +310,9 @@
     try {
       if (c) await app.cmd(c);
     } finally {
-      clearPreview(ids);
+      // a gesture or burst that began meanwhile still owns its preview
+      const busy = new Set([...(gesture?.base ?? []), ...(burst?.base ?? [])].map((b) => b.id));
+      clearPreview(ids.filter((id) => !busy.has(id)));
       settler.soon();
     }
   }
@@ -742,9 +744,9 @@
 
   <div class="world" bind:this={world} style={stageStyle} role="group" aria-label="Sounds of the scene">
     <svg class="art" aria-hidden="true">
-      {#each spine as s (s.fill)}<path d={s.d} fill={s.fill} />{/each}
+      {#each spine as s (s.who)}<path d={s.d} fill={s.fill} />{/each}
       <g class="ribs">
-        {#each drawn.lines as l (l.tone)}<path d={l.d} class="thin" class:faded={l.faded} style="stroke: rgb(var({l.tone}) / {l.faded ? 0.1 : 0.55})" />{/each}
+        {#each drawn.lines as l (l.bucket)}<path d={l.d} class="thin" class:faded={l.faded} style="stroke: rgb(var({l.tone}) / {l.faded ? 0.1 : 0.55})" />{/each}
         {#if focus}
           {#key focus.s.id}
             <g class="grow" style="transform-origin: {focus.x}px {focus.y0.toFixed(1)}px">

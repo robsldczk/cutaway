@@ -488,3 +488,64 @@ test('the header stays on one row beside the sounds', async ({ page }) => {
   const button = (await page.getByTestId('sounds-toggle').boundingBox())!;
   expect(Math.abs(nav.y + nav.height / 2 - (button.y + button.height / 2))).toBeLessThan(4);
 });
+
+/** Fails the test on any error the page throws: a broken render can leave the rest looking fine. */
+function watchErrors(page: Page) {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+  return errors;
+}
+
+test('colours repeat: seven and more buckets with sounds still draw a line each', async ({ page }) => {
+  const errors = watchErrors(page);
+  const dir = mkdtempSync(join(tmpdir(), 'tones-'));
+  const sc = await rpc<{ id: string }[]>('list_scenes');
+  const made: string[] = [];
+  const ids: string[] = [];
+  for (let i = 0; i < 8; i++) {
+    const file = join(dir, `Tone_${i}.wav`);
+    wav(file, 0.5);
+    const { assets } = await rpc<{ assets: { id: string }[] }>('import_sounds', { paths: [file] });
+    const { bucket_id } = await rpc<{ bucket_id: string }>('create_bucket', { name: `Layer test tone ${i}`, keywords: ['tone'], scenes: [sc[0].id] });
+    made.push(bucket_id);
+    await rpc('bucket_keep', { bucket_id, asset_id: assets[0].id });
+    ids.push((await rpc<{ id: string }>('place_from_bucket', { scene: '1', asset_id: assets[0].id, bucket_id, at_s: i * 0.6, depth: 0.1 * i })).id);
+  }
+  try {
+    await open(page);
+    await expect(page.getByTestId('sound-ball')).toHaveCount(8);
+    // a path per bucket, even where two buckets share a colour
+    await expect(page.locator('path.thin')).toHaveCount(8);
+    // and they follow the document: not stuck on their first render
+    const before = await page.locator('path.thin').evaluateAll((els) => els.map((e) => e.getAttribute('d')));
+    await rpc('move_sound', { placement_id: ids[7], at_s: 4.9 });
+    await expect.poll(() => page.locator('path.thin').evaluateAll((els) => els.map((e) => e.getAttribute('d')))).not.toEqual(before);
+    expect(errors).toEqual([]);
+  } finally {
+    for (const id of made) await rpc('delete_bucket', { bucket_id: id, confirm: true });
+  }
+});
+
+test('colours repeat: two characters seven colours apart still show Arrange', async ({ page }) => {
+  const errors = watchErrors(page);
+  // the demo has two characters: give them colours that wrap onto the same one
+  await page.route(`${bridge}/rpc`, async (route) => {
+    const method = route.request().postDataJSON()?.method;
+    if (method !== 'scene_view') return route.continue();
+    const res = await route.fetch();
+    const body = await res.json();
+    (body.result.characters as { color_index: number }[]).forEach((c, i) => (c.color_index = i * 7));
+    await route.fulfill({ response: res, json: body });
+  });
+  await open(page);
+  await expect(page.getByTestId('arrange-row').first()).toBeVisible();
+  await expect(page.getByTestId('sounds-field')).toBeVisible();
+  // one spine path per character, in the same colour
+  const fills = await page.locator('svg.art > path[fill]').evaluateAll((els) => els.map((e) => e.getAttribute('fill')));
+  expect(fills).toHaveLength(2);
+  expect(fills[0]).toBe(fills[1]);
+  expect(errors).toEqual([]);
+});

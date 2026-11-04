@@ -530,7 +530,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 ### D78 The sounds layer on Arrange (2026-11-04)
 - **Spec:** `tasks/Bokeh · live prototype-html/audioplay-cutter-handover-arrange-sounds.md`, card B. The prototype's behaviour and timings are ported; where it conflicts with the app, the app won.
 - **Which sounds show:** the `sfx` and `ambience` lanes, the ones in the room (D76), so depth always means something on a ball. Music and vocal sounds stay on the Edit page. Vocal buckets are left out of the panel; a music file dropped here is placed on its lane, and a toast says it is on the Edit page. For Rob to confirm.
-- **Bucket of a sound:** the first bucket of the scene that keeps its asset. Colours come from six `--bucket-n-rgb` tokens (light and dark), by the bucket's place in the scene's list, so seven or more buckets repeat a colour. Sounds in no bucket are grey and gather under **Other sounds**, with their own eye.
+- **Bucket of a sound:** the first bucket of the scene that keeps its asset. Colours come from six `--bucket-n-rgb` tokens (light and dark), by the bucket's place in the scene's list, so seven or more buckets repeat a colour. Colours repeat for characters too (seven, wrapping), so nothing on the page may be identified or keyed by its colour: paths belong to a bucket or a character. Sounds in no bucket are grey and gather under **Other sounds**, with their own eye.
 - **Ties in a group:** ids are random, so nothing recorded which of two sounds came first. `Placement::added` is a new counter, set when a sound is placed or split. Older sounds read 0 and fall back to their id, a stable order. No schema change: the field is read with a default.
 - **Keyboard (chosen to fit the existing map):**
 
