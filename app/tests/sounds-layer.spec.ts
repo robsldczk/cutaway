@@ -50,7 +50,7 @@ test.beforeAll(async () => {
   const sc = await rpc<{ id: string }[]>('list_scenes');
   // a failed test restarts the worker, and this runs again
   const have = await rpc<{ buckets: { id: string; name: string }[] }>('buckets', {});
-  bucket = have.buckets.find((b) => b.name === 'Food and foil')?.id ?? (await rpc<{ bucket_id: string }>('create_bucket', { name: 'Food and foil', keywords: ['foil'], scenes: [sc[0].id] })).bucket_id;
+  bucket = have.buckets.find((b) => b.name === 'Layer test sounds')?.id ?? (await rpc<{ bucket_id: string }>('create_bucket', { name: 'Layer test sounds', keywords: ['foil'], scenes: [sc[0].id] })).bucket_id;
   await rpc('bucket_keep', { bucket_id: bucket, asset_id: asset });
 });
 
@@ -71,13 +71,13 @@ async function open(page: Page) {
 }
 
 /** The demo session is shared by every spec: other buckets may come first. */
-const foil = (page: Page) => page.getByRole('region', { name: 'Food and foil' });
+const foil = (page: Page) => page.getByRole('region', { name: 'Layer test sounds' });
 
 async function bucketRow(page: Page) {
   const sec = foil(page);
   await expect(sec).toBeVisible();
   const row = sec.getByTestId('bucket-sound');
-  if (!(await row.count())) await sec.getByRole('button', { name: /Food and foil/ }).click();
+  if (!(await row.count())) await sec.locator('button[aria-expanded]').click();
   await expect(row.first()).toBeVisible();
   return row.first();
 }
@@ -319,7 +319,7 @@ test('keys: every ball can be reached and announces itself', async ({ page }) =>
   await open(page);
   const ball = page.getByTestId('sound-ball').first();
   await ball.focus();
-  await expect(ball).toHaveAttribute('aria-label', /Foil_crackle, Food and foil, starts .*, 2\.5 seconds, loudness 0 dB, Pan center, depth Room 50 percent/);
+  await expect(ball).toHaveAttribute('aria-label', /Foil_crackle, Layer test sounds, starts .*, 2\.5 seconds, loudness 0 dB, Pan center, depth Room 50 percent/);
   await page.keyboard.press('Enter');
   await expect(ball).toHaveAttribute('aria-pressed', 'true');
 });
@@ -458,10 +458,10 @@ test('a new sound moves no other length line', async ({ page }) => {
 });
 
 test('buckets: ⌥ on an eye shows only that bucket, again shows all', async ({ page }) => {
-  const b2 = await rpc<{ bucket_id: string }>('create_bucket', { name: 'Props', keywords: ['tray'], scenes: [(await rpc<{ id: string }[]>('list_scenes'))[0].id] });
+  const b2 = await rpc<{ bucket_id: string }>('create_bucket', { name: 'Layer test others', keywords: ['tray'], scenes: [(await rpc<{ id: string }[]>('list_scenes'))[0].id] });
   await open(page);
   const mine = foil(page).getByTestId('bucket-eye');
-  const other = page.getByRole('region', { name: 'Props' }).getByTestId('bucket-eye');
+  const other = page.getByRole('region', { name: 'Layer test others' }).getByTestId('bucket-eye');
   await mine.click({ modifiers: ['Alt'] });
   await expect(mine).toHaveAttribute('aria-pressed', 'true');
   await expect(other).toHaveAttribute('aria-pressed', 'false');
@@ -479,4 +479,12 @@ test('reduced motion: no swirl, no wobble, no overshoot', async ({ page }) => {
   await expect(group).toHaveCount(1);
   await expect(group).toHaveCSS('animation-name', 'none');
   await expect(group.locator('.swirl')).toHaveCSS('animation-name', 'none');
+});
+
+test('the header stays on one row beside the sounds', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await open(page);
+  const nav = (await page.getByRole('navigation', { name: 'Pages' }).boundingBox())!;
+  const button = (await page.getByTestId('sounds-toggle').boundingBox())!;
+  expect(Math.abs(nav.y + nav.height / 2 - (button.y + button.height / 2))).toBeLessThan(4);
 });
