@@ -19,6 +19,7 @@ pub fn prompt(task: AiTask) -> Prompt {
         AiTask::SoundTag => (1, include_str!("../prompts/sound_tag.v1.md")),
         AiTask::NameMatch => (2, include_str!("../prompts/name_match.v2.md")),
         AiTask::TakeRescue => (1, include_str!("../prompts/take_rescue.v1.md")),
+        AiTask::SoundSort => (1, include_str!("../prompts/sound_sort.v1.md")),
     };
     Prompt {
         task,

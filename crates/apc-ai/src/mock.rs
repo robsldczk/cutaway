@@ -416,6 +416,36 @@ fn sound_tag(input: &SoundTagInput) -> SoundTagOutput {
     }
 }
 
+/// A sound goes to the first folder whose name is a word of its file name.
+fn sound_sort(input: &SoundSortInput) -> SoundSortOutput {
+    let moves = input
+        .sounds
+        .iter()
+        .map(|s| {
+            let low = s.name.to_lowercase();
+            let folder = input
+                .folders
+                .iter()
+                .find(|f| {
+                    let name = f.folder.rsplit('/').next().unwrap_or(&f.folder);
+                    low.contains(name.trim_end_matches('s'))
+                })
+                .map(|f| f.folder.clone());
+            let reason = if folder.is_some() {
+                "its name says so"
+            } else {
+                "no folder fits"
+            };
+            SortMove {
+                file: s.file.clone(),
+                folder,
+                reason: reason.into(),
+            }
+        })
+        .collect();
+    SoundSortOutput { moves }
+}
+
 fn name_match(input: &NameMatchInput) -> NameMatchOutput {
     let room = ["room", "director", "regie", "talkback", "tb"];
     let assignments = input
@@ -708,6 +738,7 @@ impl AiProvider for MockProvider {
             AiTask::SoundTag => serde_json::to_value(sound_tag(&parse(&req.input)?))?,
             AiTask::NameMatch => serde_json::to_value(name_match(&parse(&req.input)?))?,
             AiTask::TakeRescue => serde_json::to_value(take_rescue(&parse(&req.input)?))?,
+            AiTask::SoundSort => serde_json::to_value(sound_sort(&parse(&req.input)?))?,
         };
         Ok(v)
     }

@@ -15,6 +15,7 @@ pub enum AiTask {
     SoundTag,
     NameMatch,
     TakeRescue,
+    SoundSort,
 }
 
 impl AiTask {
@@ -28,6 +29,7 @@ impl AiTask {
             AiTask::SoundTag => "sound_tag",
             AiTask::NameMatch => "name_match",
             AiTask::TakeRescue => "take_rescue",
+            AiTask::SoundSort => "sound_sort",
         }
     }
 }
@@ -450,6 +452,62 @@ impl Validate for NameMatchOutput {
 impl AiTaskIo for NameMatchInput {
     const TASK: AiTask = AiTask::NameMatch;
     type Output = NameMatchOutput;
+}
+
+// ---- sound_sort ----
+/// A loose sound effect of the show's library.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct SortSound {
+    /// Its path under `Sound/`: the id to answer with.
+    pub file: String,
+    pub name: String,
+    pub duration_s: f64,
+}
+
+/// A folder a sound can go to: one on disk, or the folder a spotted bucket would make.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct SortFolder {
+    pub folder: String,
+    pub exists: bool,
+    /// Names of sounds already in it.
+    pub examples: Vec<String>,
+    /// What the episode's cues in this folder's bucket ask for.
+    pub cues: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct SoundSortInput {
+    pub sounds: Vec<SortSound>,
+    pub folders: Vec<SortFolder>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SortMove {
+    pub file: String,
+    /// A listed folder, a new folder's name, or null to leave the sound where it is.
+    pub folder: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SoundSortOutput {
+    pub moves: Vec<SortMove>,
+}
+
+impl Validate for SoundSortOutput {
+    fn validate(&self) -> Result<(), String> {
+        match self.moves.iter().find(|m| m.file.trim().is_empty()) {
+            Some(_) => Err("a move has no file".into()),
+            None => Ok(()),
+        }
+    }
+}
+
+impl AiTaskIo for SoundSortInput {
+    const TASK: AiTask = AiTask::SoundSort;
+    type Output = SoundSortOutput;
 }
 
 // ---- take_rescue ----
