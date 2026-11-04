@@ -54,6 +54,11 @@ pub fn settle(doc: &Document, p: &mut Placement) {
     p.fade_in_s = p.fade_in_s.clamp(0.0, p.len_s - p.fade_out_s);
 }
 
+/// The next value of `Placement::added`.
+pub(crate) fn next_added(doc: &Document) -> u64 {
+    doc.placements.values().map(|p| p.added).max().unwrap_or(0) + 1
+}
+
 /// Checks a sound about to be placed and puts it inside the rules.
 pub(crate) fn check_new(doc: &Document, p: &mut Placement) -> Result<()> {
     for (name, x) in [
@@ -70,6 +75,7 @@ pub(crate) fn check_new(doc: &Document, p: &mut Placement) -> Result<()> {
         finite(name, x)?;
     }
     p.gain_db = p.gain_db.clamp(SOUND_GAIN_MIN_DB, SOUND_GAIN_MAX_DB);
+    p.added = next_added(doc);
     settle(doc, p);
     Ok(())
 }
@@ -293,6 +299,7 @@ mod tests {
             pan: 0.0,
             depth: 0.0,
             auto_fade: true,
+            added: 0,
         }
     }
 
@@ -784,6 +791,52 @@ mod tests {
         assert!(!bus.doc().placements.contains_key("new"));
         bus.redo().unwrap();
         assert_eq!(bus.doc().placements["new"].depth, 0.6);
+    }
+
+    #[test]
+    fn sounds_remember_the_order_they_were_added_in() {
+        let (_d, mut bus) = setup();
+        for id in ["first", "second"] {
+            bus.execute(&Command::PlaceSound {
+                placement: sound(id, "door", 9.0),
+            })
+            .unwrap();
+        }
+        let added = |bus: &CommandBus, id: &str| bus.doc().placements[id].added;
+        assert_eq!(added(&bus, "second"), added(&bus, "first") + 1);
+        // a value sent with the sound doesn't count, and undo gives the number back
+        let mut p = sound("third", "door", 9.0);
+        p.added = 1;
+        let n = added(&bus, "second");
+        bus.execute(&Command::PlaceSound { placement: p }).unwrap();
+        assert_eq!(added(&bus, "third"), n + 1);
+        bus.undo().unwrap();
+        bus.execute(&Command::PlaceSound {
+            placement: sound("again", "door", 9.0),
+        })
+        .unwrap();
+        assert_eq!(added(&bus, "again"), n + 1);
+    }
+
+    #[test]
+    fn the_tail_of_a_split_counts_as_added_after_the_head() {
+        let (_d, mut bus) = setup();
+        bus.execute(&Command::PlaceSound {
+            placement: sound("s", "door", 9.0),
+        })
+        .unwrap();
+        let r = bus
+            .execute(&Command::SplitPlacement {
+                placement_id: "s".into(),
+                at_s: 9.5,
+            })
+            .unwrap();
+        let ids = r.result["ids"].as_array().unwrap();
+        let (a, b) = (
+            bus.doc().placements[ids[0].as_str().unwrap()].added,
+            bus.doc().placements[ids[1].as_str().unwrap()].added,
+        );
+        assert!(b > a, "{a} {b}");
     }
 
     #[test]

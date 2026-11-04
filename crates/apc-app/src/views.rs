@@ -668,6 +668,8 @@ pub struct PlacementView {
     /// 0 close … 1 far.
     pub depth: f64,
     pub auto_fade: bool,
+    /// Order the sounds were added in (0 for sounds from before it was kept).
+    pub added: u64,
     /// Asset in point and the asset's length (trim limits).
     pub in_s: f64,
     pub asset_len_s: f64,
@@ -753,6 +755,7 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
             pan: p.pan,
             depth: p.depth,
             auto_fade: p.auto_fade,
+            added: p.added,
             in_s: p.in_s,
             asset_len_s: doc
                 .assets

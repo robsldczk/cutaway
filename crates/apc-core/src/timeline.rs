@@ -1281,6 +1281,7 @@ pub(crate) mod tests {
             pan: 0.0,
             depth: 0.0,
             auto_fade: false,
+            added: 0,
         };
         let before = placement_start(&layout_scene(&d, &sc, &p), &pl);
         d.boxes.get_mut("b").unwrap().gap_s = Some(2.0);
