@@ -772,4 +772,5 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Re-running the analysis:** Marked takes stay, and so do the takes of adlib lines, which the matcher doesn't look at. Those used to be deleted by a full run. What stays is numbered after the run's takes.
 - **Older builds:** a project with a Marked take needs this build or later. An older one can't read the origin.
 - **On Episode 2 (a copy):** a 50-minute mic is 2058 words, 247 kB, no noticeable wait. A sentence search takes a few ms, and finds a line with two words wrong unless that's over 30 % of it. A take made from real audio came out exact (743.11 to 746.23), with its own loudness, and undo gave back the 11 takes before it. Not listened to.
+- **In the real webview:** on a demo, with in-page events and no sound: 28 checks of the editor, the plus and the question, on WKWebView. Keys, wheel, drags, focus and undo work. A real mouse and hover, real typing and the sound on a real device wait for Rob.
 

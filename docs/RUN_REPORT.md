@@ -23,6 +23,20 @@ Details: `docs/design/round2-screens.md` (the spec files are read-only in this c
 - Import › Files on TARMAC: drop the fixture folder, check the cards, switch a file's type, link a room file by hand, Redo match, Start analysis.
 - Edit: drag a preview onto SFX 1 near an action line and watch it download and snap; try Split, Fade and Gain on a clip; mute and solo lanes while playing; set a cycle range by dragging in the ruler and press C.
 
+## The mapping editor (D104, 2026-11-05)
+
+**Built:** M on Options opens the current line's mic on its take: the waveform with the heard words on it, in and out marks, the whole file on a strip, and a sentence search. Create take makes a new take, exact to the marks, and picks it. A plus on hover between two lines opens the same editor for a new line. An × on hover deletes a line or direction, after asking. ⌘Z undoes each. Marked takes, added lines and deletions survive a re-run of the analysis, and deletions a new script version. On the CLI and MCP as `recording`, `add_take`, `add_line` and `delete_line`.
+
+**Verified:** `check.sh` green, Playwright 124 of 124. On a copy of Episode 2: a 50-minute mic opens without a wait, sentence searches find the take, a take from real audio came out exact and undid cleanly. 28 checks in the real webview on a demo, with in-page events and no sound. Not listened to, and no real mouse or typing.
+
+**Rob, by ear and by hand:**
+- Restart the app first: a running `tauri dev` has the old backend, and M would fail with an unknown method.
+- Fix a line you know is wrong: M, search for it, mark it, Create take. Does it play with the marks exactly where you set them? Marked takes have no handles, so a tight mark can sound abrupt. If so, the fix is a small handle that stops at the next word.
+- Hover between two lines: does the plus come up easily, and stay out of the way otherwise?
+- Add a line, then look at it on Arrange and Edit, and in an FCPXML export.
+- Delete a line with sounds hanging on it: they go to the start of the next line. Is that where you want them?
+- A line you delete stays deleted when a new script version comes in, even if the version changed its text. Undo is the only way back for now: there's no list of deleted lines.
+
 ## Studio mode (M14, 2026-11-02)
 
 **Built** (D64–D68):
