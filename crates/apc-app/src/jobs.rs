@@ -46,6 +46,17 @@ impl Jobs {
             + Send
             + 'static,
     {
+        self.spawn_free(kind, move |progress| {
+            let mut svc = crate::service::Service::open(&file, "pipeline")?;
+            work(&mut svc, progress)
+        })
+    }
+
+    /// Runs `work` on a worker thread, with no episode of its own (a show export opens several).
+    pub fn spawn_free<F>(&self, kind: &str, work: F) -> String
+    where
+        F: FnOnce(&dyn Fn(f64, &str)) -> crate::Result<Value> + Send + 'static,
+    {
         let id = apc_core::ids::new_id("job");
         if let Ok(mut m) = self.0.lock() {
             m.insert(
@@ -66,7 +77,6 @@ impl Jobs {
         std::thread::spawn(move || {
             let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
                 || -> crate::Result<Value> {
-                    let mut svc = crate::service::Service::open(&file, "pipeline")?;
                     let j2 = jobs.clone();
                     let jid2 = jid.clone();
                     let progress = move |f: f64, msg: &str| {
@@ -75,7 +85,7 @@ impl Jobs {
                             j.message = msg.to_string();
                         })
                     };
-                    work(&mut svc, &progress)
+                    work(&progress)
                 },
             ));
             jobs.update(&jid, |j| match run {

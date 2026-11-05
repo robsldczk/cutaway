@@ -557,6 +557,17 @@ impl Service {
         progress: &dyn Fn(apc_analysis::Progress),
     ) -> Result<MatchReport> {
         self.bus.refresh()?;
+        // it would only be refused at the end, after the long part
+        if scope.characters.is_empty() && scope.line_ids.is_empty() && scope.marks.is_empty() {
+            if let Some(refusal) = self
+                .doc()
+                .scenes_in_order()
+                .iter()
+                .find_map(|s| s.lock_refusal())
+            {
+                return Err(apc_core::CoreError::SceneLocked(refusal).into());
+            }
+        }
         self.prepare_asr(progress)?;
         let (ai, warn) = self.ai_runner();
         let asr = self.asr_provider();

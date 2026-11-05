@@ -30,3 +30,5 @@ base64.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+hound.workspace = true
+roxmltree.workspace = true

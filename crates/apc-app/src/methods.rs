@@ -9,6 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use apc_core::backup::BackupManager;
+use apc_core::config::ExportSettings;
 use apc_core::ids::new_id;
 use apc_core::*;
 use apc_export::{bounce, cutlist, fcpxml, srt, EpisodeTimeline, ExportScope};
@@ -236,6 +237,67 @@ pub struct ExportMixP {
     pub format: Option<String>,
     #[serde(default)]
     pub confirm: bool,
+}
+
+#[derive(Deserialize, JsonSchema, Default)]
+pub struct ExportRunP {
+    /// The scenes to export (number or id); the whole episode when omitted.
+    #[serde(default)]
+    pub scenes: Option<Vec<String>>,
+    /// Page settings; each field falls back on the page's default.
+    #[serde(default)]
+    pub settings: Option<ExportSettings>,
+    /// A saved preset by name, instead of `settings`.
+    #[serde(default)]
+    pub preset: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct ExportEpisodeP {
+    /// Episode folder of the show ("Episode 2").
+    pub episode: String,
+    /// Its scenes; all of them when omitted.
+    #[serde(default)]
+    pub scenes: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct ExportShowP {
+    pub episodes: Vec<ExportEpisodeP>,
+    #[serde(default)]
+    pub settings: Option<ExportSettings>,
+    #[serde(default)]
+    pub preset: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct LockSceneP {
+    pub scene: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct UnlockSceneP {
+    pub scene: String,
+    /// Needed: the exported files won't match anymore.
+    #[serde(default)]
+    pub confirm: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct PresetP {
+    pub name: String,
+    pub settings: ExportSettings,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct PresetNameP {
+    pub name: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct RevealP {
+    /// A version folder from the export history.
+    pub folder: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -942,6 +1004,20 @@ registry! {
     "export_srt", ExportP, Write, true, "Export SRT subtitles from the final word timings.";
     "export_cut_list", ExportP, Write, true, "Export the as-cut transcript / cut list (format csv or md).";
     "export_mix", ExportMixP, Write, true, "Bounce a scene to WAV or MP3.";
+    "export_status", NoParams, Read, true, "The Export page: every scene with its length, lock, export history and whether it changed since, the pipeline folder, presets and the page's defaults.";
+    "export_plan", ExportRunP, Read, true, "What an export will write: each scene's next version, its files and their size, and which scenes are unchanged. Nothing is written.";
+    "export_scenes", ExportRunP, Write, true, "Export scenes, or the whole episode, as versioned folders: aligned stems (every file exactly as long as the scene, from 0:00, silent ones too), individual clips, mix only or FCPXML only. Never overwrites: each scene counts up on its own. Locks the scenes after it unless lock_after is off.";
+    "start_export", ExportRunP, Write, false, "export_scenes in the background (the UI polls job_status).";
+    "lock_scene", LockSceneP, Write, true, "Lock a scene's timing. Undoable. Takes, trims, gaps, order and moving, trimming, adding or removing sounds are refused until it's unlocked; gain, pan, depth, fades and notes stay free.";
+    "unlock_scene", UnlockSceneP, Destructive, true, "Unlock a scene. The files already exported won't match it anymore, and the next export gets the next version. Undoable.";
+    "save_export_preset", PresetP, Write, true, "Save export settings under a name; the same name replaces them.";
+    "delete_export_preset", PresetNameP, Write, true, "Remove a saved export preset.";
+    "reveal_export", RevealP, Read, false, "Open a version folder of the export history in the Finder.";
+    "pipeline_folder", NoParams, Read, true, "The show's confirmed folder for deliverables, and a proposal when it has none. The proposal is never written to.";
+    "set_pipeline_folder", PathP, Write, true, "Confirm the show's folder for deliverables and store it in the show file. Show exports go nowhere else.";
+    "show_export_status", NoParams, Read, true, "The show's episodes and their scenes with length, lock and export history, for a show export.";
+    "export_show", ExportShowP, Write, true, "The deliverable: export scenes of the show's episodes to its confirmed pipeline folder. Same folders and versions as an episode export.";
+    "start_show_export", ExportShowP, Write, false, "export_show in the background (the UI polls job_status).";
     "play", PlayP, Read, false, "Play the scene from a time (audio device, or a virtual clock without one).";
     "play_take", PlayTakeP, Read, false, "Audition one take alone (loudness-matched) from a time within it.";
     "stop", NoParams, Read, false, "Stop playback, the preview player included.";
@@ -1541,6 +1617,36 @@ impl Service {
                 let (file, len) = bounce::bounce_scene(self.doc(), &self.paths, &p.scene, fmt, &self.paths.exports)?;
                 Ok(json!({ "path": file.to_string_lossy(), "duration_s": len }))
             }
+            "export_status" => crate::exports::status(self),
+            "export_plan" => crate::exports::plan(self, &parse(params)?),
+            "export_scenes" => crate::exports::run(self, &parse(params)?, &|_, _| {}),
+            "start_export" => {
+                let p: ExportRunP = parse(params)?;
+                // refused here rather than in the job, where only a failed state would show it
+                crate::exports::resolve(self, &p)?;
+                let id = self.jobs.spawn("export", self.paths.file.clone(), move |svc, progress| {
+                    crate::exports::run(svc, &p, progress)
+                });
+                Ok(json!({ "job_id": id }))
+            }
+            "lock_scene" => {
+                let p: LockSceneP = parse(params)?;
+                crate::exports::lock(self, &p.scene)
+            }
+            "unlock_scene" => {
+                let p: UnlockSceneP = parse(params)?;
+                need_confirm("unlock_scene", p.confirm)?;
+                let id = scene_id(self, Some(&p.scene))?;
+                Ok(self.exec(&Command::UnlockScene { scene_id: id })?.result)
+            }
+            "save_export_preset" => {
+                let p: PresetP = parse(params)?;
+                crate::exports::save_preset(self, p)
+            }
+            "delete_export_preset" => {
+                let p: PresetNameP = parse(params)?;
+                crate::exports::delete_preset(self, &p.name)
+            }
             "play" => {
                 let p: PlayP = parse(params)?;
                 let sid = scene_id(self, p.scene.as_deref())?;
@@ -1830,7 +1936,7 @@ impl Service {
                 "episode": s.episode_folder_of(&self.paths.root),
                 "colors": s.data.theme.colors,
             })),
-            "warnings": self.warnings,
+            "warnings": crate::exports::with_lock_notice(&self.warnings, doc),
             "script_version": doc.current_script_version().map(|v| v.number),
             "scenes": doc.scenes.len(),
             "lines": dialogue.len(),
@@ -1867,6 +1973,8 @@ pub struct Session {
     /// The open show (studio mode): set by `open_show`, or by opening one of its episodes.
     pub show: Option<apc_core::show::Show>,
     pub client: String,
+    /// Jobs of the show, which outlive any one episode.
+    show_jobs: crate::jobs::Jobs,
 }
 
 impl Session {
@@ -1875,6 +1983,7 @@ impl Session {
             service: None,
             show: None,
             client: client.to_string(),
+            show_jobs: Default::default(),
         }
     }
 
@@ -2073,6 +2182,45 @@ impl Session {
                 let r = svc.close()?;
                 self.service = None;
                 Ok(r)
+            }
+            "job_status" => {
+                let mut jobs = self.show_jobs.list();
+                if let Some(svc) = &self.service {
+                    jobs.extend(svc.jobs.list());
+                }
+                Ok(serde_json::to_value(jobs)?)
+            }
+            "pipeline_folder" => crate::exports::pipeline_view(self.need_show()?),
+            "set_pipeline_folder" => {
+                let p: PathP = parse(params)?;
+                let show = self
+                    .show
+                    .as_mut()
+                    .ok_or_else(|| AppError::Params("no show is open (open_show)".into()))?;
+                show.set_pipeline_folder(Path::new(&p.path))?;
+                if let Some(svc) = self.service.as_mut() {
+                    svc.paths.show = Some(show.clone());
+                }
+                crate::exports::pipeline_view(show)
+            }
+            "show_export_status" => crate::exports::show_status(self.need_show()?),
+            "export_show" => {
+                let p: ExportShowP = parse(params)?;
+                let show = self.need_show()?.clone();
+                crate::exports::run_show(&show, &p, &|_, _| {})
+            }
+            "start_show_export" => {
+                let p: ExportShowP = parse(params)?;
+                let show = self.need_show()?.clone();
+                crate::exports::check_show_export(&show, &p)?;
+                let id = self.show_jobs.spawn_free("export", move |progress| {
+                    crate::exports::run_show(&show, &p, progress)
+                });
+                Ok(json!({ "job_id": id }))
+            }
+            "reveal_export" => {
+                let p: RevealP = parse(params)?;
+                crate::exports::reveal(self.service.as_ref(), self.show.as_ref(), &p.folder)
             }
             "rescan_library" if self.service.is_none() => {
                 let show = self.need_show()?;

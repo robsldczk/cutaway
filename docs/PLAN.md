@@ -672,10 +672,10 @@ Branch `export-tab` (worktree `../cutaway-export-tab`, because another session w
 Bottom up, each step green before the next:
 
 - [x] **Scene locks in the core.** `Scene.lock`, `lock_scene`, `unlock_scene`. The bus compares each locked scene's timing before and after a command and rolls back on a difference, so every command is covered, present and future, without a list to keep up. A new script version is the one exception: it keeps the lock and flags the scene.
-- [ ] **Stems in the engine.** One render path split into dry and wet parts, so dry stems + room returns + ambience + music null against the mix. Every stem the same length to the sample.
-- [ ] **Audio formats.** WAV 16/24/32-float, FLAC, MP3; sample rate; loudness on the mix only.
-- [ ] **Packages in `apc-export`.** Version folders, manifests, timeline hash, unchanged scenes, individual clips, FCPXML options (room lanes, stems as source, exported clips as source). Written to a hidden folder and renamed, so a failed export leaves nothing.
-- [ ] **Service methods.** Status, plan, export (blocking and as a job), history, presets, pipeline folder, show export. All reachable from MCP.
+- [x] **Stems in the engine.** One render path split into dry and wet parts, so dry stems + room returns + ambience + music null against the mix. Every stem the same length to the sample.
+- [x] **Audio formats.** WAV 16/24/32-float, FLAC, MP3; sample rate; loudness on the mix only.
+- [x] **Packages in `apc-export`.** Version folders, manifests, timeline hash, unchanged scenes, individual clips, FCPXML options (room lanes, stems as source, exported clips as source). Written to a hidden folder and renamed, so a failed export leaves nothing.
+- [x] **Service methods.** Status, plan, export (blocking and as a job), history, presets, pipeline folder, show export. All reachable from MCP.
 - [ ] **CLI.** Every option of the page, plus lock, unlock, pipeline folder and history.
 - [ ] **Export page.** Fourth page, per the mockup; replaces the export sheet. Show export from the show home.
 - [ ] **Locks in the UI.** Banner, lock icons, hidden handles, inline refusal, unlock question, notice on opening.

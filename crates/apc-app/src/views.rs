@@ -161,6 +161,8 @@ pub struct SceneSummary {
     pub title: String,
     pub act: String,
     pub synopsis: String,
+    /// Delivered: its timing holds still.
+    pub lock: Option<SceneLock>,
 }
 
 #[derive(Serialize)]
@@ -255,6 +257,7 @@ pub fn scene_summaries(doc: &Document) -> Vec<SceneSummary> {
                 title: s.story.title.clone(),
                 act: s.story.act.clone(),
                 synopsis: s.story.synopsis.clone(),
+                lock: s.lock.clone(),
             }
         })
         .collect()

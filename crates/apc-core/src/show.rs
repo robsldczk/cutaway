@@ -71,6 +71,10 @@ pub struct ShowFile {
     /// File-name aliases of characters, shared by every episode (alias → character id).
     #[serde(default)]
     pub aliases: BTreeMap<String, String>,
+    /// Where deliverables go, confirmed by the editor: relative to the root when inside the
+    /// show, so it holds on the other machines of a sync share. Unset means never exported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pipeline_folder: Option<String>,
 }
 
 /// An open show: its root folder, file and contents.
@@ -107,6 +111,25 @@ pub fn ignored_name(name: &str) -> bool {
         || name.ends_with(".tmp")
         || name == "Thumbs.db"
         || name == "desktop.ini"
+}
+
+/// What a sound folder of a production pipeline is called.
+const SOUND_FOLDERS: &[&str] = &["sound", "sounds", "audio", "ton"];
+/// Folders looked into at most when guessing the pipeline folder: it runs on a click, and the
+/// production folders above a show can be large.
+const PIPELINE_SEARCH_DIRS: usize = 4000;
+
+/// A folder that holds a production: a show or pipeline file, or an episodes folder.
+fn looks_like_pipeline(dir: &Path) -> bool {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    rd.filter_map(|e| e.ok()).any(|e| {
+        let name = e.file_name().to_string_lossy().to_lowercase();
+        name.ends_with(&format!(".{}", brand::SHOW_EXT))
+            || name.ends_with(".jetplane.json")
+            || name == "episodes"
+    })
 }
 
 /// Is this a Syncthing (or similar) conflict copy?
@@ -191,6 +214,7 @@ impl Show {
                 layout: ShowLayout::default(),
                 theme: ShowTheme::default(),
                 aliases: BTreeMap::new(),
+                pipeline_folder: None,
             },
         };
         std::fs::create_dir_all(show.episodes_dir())?;
@@ -284,6 +308,81 @@ impl Show {
 
     pub fn music_dir(&self) -> PathBuf {
         self.sound_dir().join(&self.data.layout.music)
+    }
+
+    /// The confirmed folder for deliverables. Nothing else is ever written to.
+    pub fn pipeline_dir(&self) -> Option<PathBuf> {
+        let stored = self.data.pipeline_folder.as_ref()?;
+        let p = Path::new(stored);
+        Some(if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            self.root.join(p)
+        })
+    }
+
+    /// Stores the folder the editor confirmed.
+    pub fn set_pipeline_folder(&mut self, folder: &Path) -> Result<()> {
+        if !folder.is_dir() {
+            return Err(CoreError::invalid(format!(
+                "{} isn't a folder",
+                folder.display()
+            )));
+        }
+        let stored = folder
+            .strip_prefix(&self.root)
+            .map(|r| r.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|_| folder.to_string_lossy().into_owned());
+        self.update(|d| d.pipeline_folder = Some(stored))
+    }
+
+    /// The best guess at the pipeline's sound folder, in the show and the production folders above
+    /// it. Only a proposal: nothing is written there until the editor confirms it (D112).
+    pub fn propose_pipeline_folder(&self) -> Option<PathBuf> {
+        let mut found: Vec<(i32, PathBuf)> = Vec::new();
+        let mut budget = PIPELINE_SEARCH_DIRS;
+        for (above, top) in self.root.ancestors().take(3).enumerate() {
+            let depth = if above == 0 { 3 } else { 2 };
+            self.sound_folders(top, depth, &mut budget, &mut found, above as i32);
+        }
+        found.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+        found.into_iter().next().map(|(_, p)| p)
+    }
+
+    fn sound_folders(
+        &self,
+        dir: &Path,
+        depth: u32,
+        budget: &mut usize,
+        found: &mut Vec<(i32, PathBuf)>,
+        above: i32,
+    ) {
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
+        let mut subs: Vec<PathBuf> = rd
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.is_dir())
+            .collect();
+        subs.sort();
+        let pipeline = looks_like_pipeline(dir);
+        for p in subs {
+            let name = p
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            // an episode's Sound folder is Cutaway's own project, not the pipeline's
+            if *budget == 0 || ignored_name(&name) || p == self.episodes_dir() {
+                continue;
+            }
+            *budget -= 1;
+            if SOUND_FOLDERS.contains(&name.to_lowercase().as_str()) {
+                let score = depth as i32 * 2 + if pipeline { 10 } else { 0 } - above * 3;
+                found.push((score, p));
+            } else if depth > 1 {
+                self.sound_folders(&p, depth - 1, budget, found, above);
+            }
+        }
     }
 
     /// Cutaway's own files in the library (backdrop, library metadata, trash).

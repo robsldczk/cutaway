@@ -47,6 +47,7 @@ impl AppError {
             AppError::NoProject => "no_project",
             AppError::Core(apc_core::CoreError::NotFound { .. }) => "not_found",
             AppError::Core(apc_core::CoreError::Invalid(_)) => "invalid",
+            AppError::Core(apc_core::CoreError::SceneLocked(_)) => "scene_locked",
             _ => "error",
         }
     }
