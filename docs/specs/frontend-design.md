@@ -277,6 +277,8 @@ A glass sheet in three steps:
 - **Formats:** FCPXML, WAV, MP3, SRT, as-cut transcript (cut list).
 - **Settings:** handles, naming, loudness normalization, room tone track on or off.
 
+*Changed in implementation (D108, D109):* Export is the fourth page (`4`; ⌘E goes there, and on it exports), one sheet with Range, Export as, Tracks, Format, Also export and Save to. It replaces this panel and the header's Export button. An exported scene locks: a quiet banner on Options, Arrange and Edit, a lock in the scene list, no trim handles, and a refused edit says why at the pointer. From the show home, Export for the show saves to the confirmed pipeline folder.
+
 ## Views: one timeline, three pages
 
 Like the Cut and Edit pages in DaVinci Resolve, every page is a different display of the same timeline. There is one source of truth: the episode's timeline in the core document. A change in any page updates all the others immediately.

@@ -788,3 +788,57 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **A re-run doesn't undo either.** `BoxState::dismissed` remembers a deleted take by id and stretch, and more than half of the same stretch on the same mic counts as the same performance. An edited take keeps its id, so the matcher finding it again changes nothing.
 - **The pop-up:** one, from the card's × and the editor's Delete…: Delete take N, with the focus, or Delete line. Rob's earlier "just deletes" would have been no question at all; he then asked for the question. A line without takes and a direction only offer themselves.
 
+
+### D108 Exported scenes lock their timing (Rob's handover, 2026-11-05)
+- **Brief:** `tasks/export-tab`. After delivery a stray take swap would silently break everything downstream, so an exported scene refuses timing edits until it's unlocked.
+- **Where the rule lives:** in the bus, not in the commands. It takes a print of each locked scene's timing before a command and after it, and rolls back on a difference. The handover lists what a lock blocks and ends with "anything else that changes the scene's length or moves something inside it", and a check on the result covers exactly that, including commands that don't exist yet, `set_config` on pacing, `execute_fn`, and a batch with one bad edit in it. The other option was a list of commands to refuse, which every new command would have to remember.
+- **What the print holds:** each item's place, each piece's source and in, out and start points, each sound's asset, place, length, in point and loop. Gain, pan, depth, fades, mutes, notes and favorites aren't in it, so they stay free. A favorite that would change the default take does move something, and is refused for that reason.
+- **The one exception:** a new script version keeps the lock, sets `script_changed` on scenes whose lines it touched, and lists them in the change summary, as the handover asks.
+- **A whole re-analysis** is refused at its start: the bus would refuse it anyway, but only after the long part. Scoped re-analysis goes through and is refused only if it moves something.
+- **Undo:** `lock_scene` is undoable, as the handover asks, so ⌘Z or `undo` removes a lock without the question that `unlock_scene` asks. Undo is linear, so a timing edit from before a lock can't be undone past it, and a lock ends the redo. **Known gaps, left as they are:** undoing a lock doesn't ask, and reverting to a backup restores whatever locks that backup had.
+- **Open question 2 (locks and non-timing changes):** gain and pan flag the scene *changed since v003*, as proposed, and aren't blocked.
+- **Open question 4 (default of the checkbox):** on, as proposed.
+
+### D109 The Export page (Rob's handover, 2026-11-05)
+- **Fourth page, key 4,** replacing the export sheet and the header's Export button. ⌘E goes to the page, and on it exports. The single-format exports (`export_fcpxml` and friends) stay for the CLI and MCP.
+- **Conflict with the handover:** "the scenes picked on the other pages": the app has no scene selection, so Range starts on the current scene.
+- **Conflict:** the show file is `.cutawayshow`, not `.apcshow`.
+- **The popups are the system's,** invisible `<select>`s over a label, as the header's scene picker already does. So Format is one list of useful combinations rather than three controls: it's what the mockup draws.
+- **Blocked edits** say so at the pointer, or under the header when the edit came from the keyboard. The handover's "where the edit was attempted"; the toast would have been at the bottom of the screen.
+- **Presets** are named settings in the project config (`export.presets`), so they travel with the episode. A preset menu appears beside the title once there is one.
+- **Lock by hand:** the scene rail on Options and Arrange, and a button beside the scene picker on Edit, whose list is a native popup that can't hold one.
+- **Muted and soloed lanes** shape exports, as they always have (bounces go through the same schedule). The page says so, because a solo left on empties a delivery.
+
+### D110 Stems come from the one render path (Rob's handover, 2026-11-05)
+- **How:** `Renderer` takes a `Part`: whole, dry (before the room send), or wet (the room's 100 % return). A stem is one part of some of the clips. The room is linear and its modulation depends only on the frame, so separate returns add up. Measured better than −100 dB on a scene with something on every lane, and the test fails at −22 dB when one return is misrouted.
+- **Scene length is where the last sound has rung out,** not where the last line ends. Otherwise every stem would cut the reverb tail off. All the files of a scene share it, to the sample.
+- **The groups:** a character's lane and adlibs are dialogue. **Room tone goes on Ambience:** the handover names no stem for it, and it has to land on one for the sum to hold.
+- **An ambience in the room rings on Room · effects:** "Room · effects carries only the room reverb of the effects" can't quite hold, because ambience takes a send and the sum must come out whole. Depth applies as it does in the mix: a far effect's dry stem is quieter.
+- **Loudness:** the mix alone, never past −1 dBFS. When the target would clip, it stops short and the manifest and the page say so. The manifest keeps the gain, so the null can still be checked against a loudness-matched mix.
+- **Individual clips** are what was recorded with their handles: no gain, no fades, the source's rate and channels. Those stay on the clip in the FCPXML. Room tone isn't a clip. Ticked room tracks and the mix still render whole beside them.
+
+### D111 Audio formats (Rob's handover, 2026-11-05)
+- **Open question 5 (MP3 and FLAC):** FLAC anywhere, MP3 only for Mix only. MP3 pads its start and end, so it can't hold rule 1, every file exactly the scene's length. The page leaves it out, and the service refuses it.
+- **FLAC and MP3 go through ffmpeg,** as the MP3 bounce already did: no new dependency, and FLAC stems were read back and are sample-exact. Without ffmpeg the page offers WAV only.
+- **32-bit is float, WAV only.** No dither at 16 bits: a silent stem has to stay digital silence, and stems have to sum. Rob may want dither on a 16-bit mix one day.
+- **Other rates** resample through the mixer's linear resampler, like everything else today. Fine when sessions are at 48 kHz, as Rob's are. An export at another rate deserves a better one.
+
+### D112 Versions live on disk (Rob's handover, 2026-11-05)
+- **The history is the manifests,** not a table in the document. A version can't then disagree with what's on disk, and undo or revert can't lose it or reuse a number. The other option, recording each export through the bus, would have put exports in the undo list.
+- **Counters run across both destinations,** so v003 means one thing wherever its files landed.
+- **Written hidden, then renamed,** so a failed export leaves no version, and a sync tool never picks up half of one. When a later scene of an export fails, the finished ones stay and are locked, and the error names them.
+- **Timeline hash:** what's heard plus what the timeline files say (the schedule and the scene's timeline), so a note or a gain counts as a change. blake3 throughout, as elsewhere in the app.
+- **A whole-episode export** writes every scene's version as usual, then `Ep02/Episode/v002 …/` with the episode's own FCPXML, SRT and cut list, and a manifest of which scene versions it holds. Those files point at the original recordings.
+- **Open question 3 (show-level delivery number):** not built. Versions per scene and per episode, as the handover specifies.
+
+### D113 FCPXML in an export (Rob's handover, 2026-11-05)
+- **Room lanes need rendered room tracks.** "One lane per character plus two lanes for the room tracks" and "FCPXML only writes without rendering audio" can't both hold: FCPXML only has nothing to point at. So the room lanes appear when the room tracks are in the same export.
+- **Rendered stems as the source** replace the clips with one full-length clip per stem, leaving out the mix, which would double everything. The scene and note markers stay.
+- **Exported clips as the source** point each clip at its file, starting after its handle.
+- **In the existing writer:** `write_with` takes the files behind a timeline's clips and where its markers come from. `write` is unchanged.
+
+### D114 The pipeline folder (Rob's handover, 2026-11-05)
+- **Stored in the show file** (`pipelineFolder`), relative to the root when it's inside, so it holds on the other machines of the Syncthing share.
+- **The search** looks in the show and the two folders above it for `Sound`, `Sounds`, `Audio` or `Ton`, ranking folders in a pipeline (a show file, `*.jetplane.json`, `Episodes`) first, within a budget of folders, and skipping `Episodes` so an episode's own `Sound` isn't taken for it. On tm-2610 it proposes `tm-2610/Sound`, the show's library, and exports would land in `Sound/Exports`, beside `sfx` and `music`. **Rob should check that's the right place** (open question 1).
+- **Never to a guessed path:** nothing writes there until the path is stored, and `set_pipeline_folder` needs `confirm: true`, because an agent could otherwise confirm its own proposal.
+- **A show export** opens each episode in turn, as background jobs do. The Range reads episodes straight from their files, read-only, so looking changes nothing.

@@ -268,7 +268,7 @@ The app includes an MCP server, so Claude (desktop app or Claude Code) or any ot
 | Analysis | `run_transcription`, `run_alignment`, `run_notes`, `job_status` |
 | Editing | `list_lines`, `list_takes`, `select_take`, `apply_take_to_passage`, `set_gap`, `trim_line`, `undo` |
 | Sound | `spot_sound_effects`, `list_bucket`, `add_cue`, `attach_sound`, `search_sounds`, `generate_sound`, `place_sound` |
-| Export | `export_fcpxml`, `export_mix`, `export_srt`, `export_cut_list` |
+| Export | `export_fcpxml`, `export_mix`, `export_srt`, `export_cut_list`, `export_status`, `export_plan`, `export_scenes`, `lock_scene`, `unlock_scene`, `save_export_preset`, `delete_export_preset`, `pipeline_folder`, `set_pipeline_folder`, `show_export_status`, `export_show` |
 
 **Resources** are read-only views of the project: script versions, the current cut list, the scene bucket, the match report.
 
@@ -301,6 +301,11 @@ cutaway sfx batch '[{"op":"gain",…},…]'        several edits as one undo ste
 cutaway sfx rooms                              each scene's room
 cutaway sfx room S2 --size 0.8 --wet 0.3       set a scene's room
 cutaway export fcpxml --scene S1               export a rough cut
+cutaway deliver --scene 2 --as stems            export as the Export page does (--dry-run first)
+cutaway deliver --episode "Episode 2" --to pipeline   a show export
+cutaway lock 2                                  lock a scene's timing (unlock 2 --yes)
+cutaway exports                                 locks and export history
+cutaway pipeline --set <folder> --yes           confirm the show's pipeline folder
 cutaway status                                 progress, match rate, flagged items
 cutaway mcp                                    run as MCP server (stdio)
 ```

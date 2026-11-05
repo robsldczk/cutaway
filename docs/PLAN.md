@@ -665,7 +665,7 @@ Decisions: D102.
 - [x] Arrange: vocal buckets in the panel, adlibs as balls. Edit: an Adlibs lane.
 - [x] Tests, docs, RUN notes.
 
-### Export page (Rob, 2026-11-05; `tasks/export-tab`, D106 onwards)
+### Export page (Rob, 2026-11-05; `tasks/export-tab`, D108 onwards)
 
 Branch `export-tab` (worktree `../cutaway-export-tab`, because another session works in the main folder on `dev`). The handover and mockup are the brief; where they meet the app, the app wins and the conflict goes in DECISIONS.
 
@@ -676,9 +676,9 @@ Bottom up, each step green before the next:
 - [x] **Audio formats.** WAV 16/24/32-float, FLAC, MP3; sample rate; loudness on the mix only.
 - [x] **Packages in `apc-export`.** Version folders, manifests, timeline hash, unchanged scenes, individual clips, FCPXML options (room lanes, stems as source, exported clips as source). Written to a hidden folder and renamed, so a failed export leaves nothing.
 - [x] **Service methods.** Status, plan, export (blocking and as a job), history, presets, pipeline folder, show export. All reachable from MCP.
-- [ ] **CLI.** Every option of the page, plus lock, unlock, pipeline folder and history.
-- [ ] **Export page.** Fourth page, per the mockup; replaces the export sheet. Show export from the show home.
-- [ ] **Locks in the UI.** Banner, lock icons, hidden handles, inline refusal, unlock question, notice on opening.
+- [x] **CLI.** Every option of the page, plus lock, unlock, pipeline folder and history.
+- [x] **Export page.** Fourth page, per the mockup; replaces the export sheet. Show export from the show home.
+- [x] **Locks in the UI.** Banner, lock icons, hidden handles, inline refusal, unlock question, notice on opening.
 - [ ] **Docs and merge.** Specs, DECISIONS, RUN_REPORT; merge to `dev` when the main folder allows it.
 
 Risks: the reverb must be linear for the null to hold (it is: one Room per return, same start frame); MP3 can't hold a stem to the sample (mix only); a show export writes into a Syncthing share, so it never goes to a guessed path and tests only ever touch temp copies.
