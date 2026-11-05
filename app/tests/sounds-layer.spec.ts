@@ -573,6 +573,74 @@ test('finder: a chip picks the bucket, typing narrows the chips, and Esc leaves 
   await expect.poll(async () => (await list()).length).toBe(1);
 });
 
+test('finder: the arrows walk the chips and Enter takes the one lit', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'finder-'));
+  const file = join(dir, 'Unheard of.wav');
+  wav(file, 1);
+  await open(page);
+  await bucketRow(page);
+  const c = await centre(page.getByTestId('sounds-field'));
+  await fileDrag(page, 'drop', [file], c.x, c.y);
+  const name = page.getByTestId('file-bucket');
+  await expect(name).toHaveValue('Unheard of');
+  const lit = page.locator('.chip.lit');
+  await expect(lit).toHaveCount(0);
+
+  await page.keyboard.press('ArrowDown');
+  await expect(lit).toHaveText('Ambience');
+  await expect(page.getByTestId('file-say')).toContainText('Loops under');
+  await page.keyboard.press('ArrowRight');
+  await expect(lit).not.toHaveText('Ambience');
+  await page.keyboard.press('ArrowUp');
+  await expect(lit).toHaveText('Ambience');
+  // round the end
+  await page.keyboard.press('ArrowLeft');
+  await expect(lit).toHaveText((await page.getByTestId('file-chip').last().textContent())!);
+  await expect(name).toHaveValue('Unheard of');
+
+  // typing lets go of the chip: a new name still goes through with Enter
+  await name.pressSequentially('!');
+  await expect(lit).toHaveCount(0);
+
+  await name.fill('layer te');
+  await expect(page.getByTestId('file-chip')).toHaveCount(1);
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByTestId('file-say')).toContainText('Into Layer test sounds');
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await list()).length).toBe(1);
+  const v = await rpc<{ buckets: { id: string; kept: { name: string }[] }[] }>('buckets', {});
+  expect(JSON.stringify(v.buckets.find((b) => b.id === bucket)?.kept)).toContain('Unheard of');
+});
+
+test('finder: Shift alone completes the name, Shift with a letter is a capital', async ({ page }) => {
+  const dir = mkdtempSync(join(tmpdir(), 'finder-'));
+  const file = join(dir, 'Unheard of.wav');
+  wav(file, 1);
+  await open(page);
+  await bucketRow(page);
+  const c = await centre(page.getByTestId('sounds-field'));
+  await fileDrag(page, 'drop', [file], c.x, c.y);
+  const name = page.getByTestId('file-bucket');
+  await expect(name).toHaveValue('Unheard of');
+
+  await name.fill('layer');
+  await name.press('Shift+T');
+  await expect(name).toHaveValue('layerT');
+
+  await name.fill('layer te');
+  await page.keyboard.press('Shift');
+  await expect(name).toHaveValue('Layer test sounds');
+  await expect(page.getByTestId('file-say')).toContainText('Into this bucket');
+
+  // with a chip lit it's that one
+  await name.fill('a');
+  await page.keyboard.press('ArrowDown');
+  const want = await page.locator('.chip.lit').textContent();
+  await page.keyboard.press('Shift');
+  await expect(name).toHaveValue(want!);
+  await page.keyboard.press('Escape');
+});
+
 test('finder: the Ambience chip gives the sound to the room, and nothing to the timeline', async ({ page }) => {
   const dir = mkdtempSync(join(tmpdir(), 'finder-'));
   const file = join(dir, 'Ambience, Empty Hall.wav');
@@ -863,6 +931,67 @@ test('multi-select: the band selects, Esc and a click on empty space clear', asy
   await expect(page.locator('.ball.sel')).toHaveCount(1);
   await page.mouse.click(pb.x + 100, pb.y + 120);
   await expect(page.locator('.ball.sel')).toHaveCount(0);
+});
+
+test('⌘D: a copy lands right after the sound, is selected, and goes on with ⌘D', async ({ page }) => {
+  const a = await place(5, 0.3);
+  await open(page);
+  await ballOf(page, a).click();
+  const base = await sound(a);
+  await page.keyboard.press('ControlOrMeta+d');
+  await expect.poll(async () => (await list()).length).toBe(2);
+  const copy = (await list()).find((s) => s.id !== a)!;
+  expect(copy.start_s).toBeCloseTo(base.start_s + base.len_s, 2);
+  expect(copy.depth).toBe(base.depth);
+  await expect(ballOf(page, copy.id)).toHaveClass(/\bsel\b/);
+  await expect(ballOf(page, a)).not.toHaveClass(/\bsel\b/);
+
+  await page.keyboard.press('ControlOrMeta+d');
+  await expect.poll(async () => (await list()).length).toBe(3);
+  const last = (await list()).find((s) => s.id !== a && s.id !== copy.id)!;
+  expect(last.start_s).toBeCloseTo(copy.start_s + copy.len_s, 2);
+});
+
+test('⌘D: several sounds keep their spacing, in one undo step', async ({ page }) => {
+  const a = await place(0.5, 0.3);
+  const b = await place(3.5, 0.3);
+  await open(page);
+  await ballOf(page, a).click();
+  await ballOf(page, b).click({ modifiers: ['Shift'] });
+  const [sa, sb] = [await sound(a), await sound(b)];
+  const after = await oneStep(page, async () => {
+    await page.keyboard.press('ControlOrMeta+d');
+  });
+  const made = after.filter((s) => s.id !== a && s.id !== b).sort((x, y) => x.start_s - y.start_s);
+  expect(made).toHaveLength(2);
+  expect(made[1].start_s - made[0].start_s).toBeCloseTo(sb.start_s - sa.start_s, 2);
+  expect(made[0].start_s).toBeCloseTo(sb.start_s + sb.len_s, 2);
+});
+
+test('⌘D: on the Edit page too, and a dialogue clip stays as it is', async ({ page }) => {
+  const a = await place(5, 0.3);
+  await open(page);
+  await page.keyboard.press('3');
+  await expect(page.getByTestId('dialogue-clip').first()).toBeVisible();
+
+  await page.getByTestId('dialogue-clip').first().click();
+  await page.keyboard.press('ControlOrMeta+d');
+  await page.waitForTimeout(200);
+  expect(await list()).toHaveLength(1);
+
+  const clips = page.locator('.clip').filter({ hasText: 'Foil_crackle' });
+  await clips.first().click();
+  await page.keyboard.press('ControlOrMeta+d');
+  await expect.poll(async () => (await list()).length).toBe(2);
+  const base = await sound(a);
+  const copy = (await list()).find((s) => s.id !== a)!;
+  expect(copy.start_s).toBeCloseTo(base.start_s + base.len_s, 2);
+  // the copy is the one selected: it's the later clip
+  await expect(clips).toHaveCount(2);
+  const boxes = await Promise.all([0, 1].map(async (i) => ({ x: (await clips.nth(i).boundingBox())!.x, sel: /\bsel\b/.test((await clips.nth(i).getAttribute('class')) ?? '') })));
+  expect(boxes.sort((p, q) => p.x - q.x).map((b) => b.sel)).toEqual([false, true]);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect.poll(async () => (await list()).length).toBe(1);
 });
 
 test('multi-select: delete, loudness and keys act on all in one step', async ({ page }) => {

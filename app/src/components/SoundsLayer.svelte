@@ -676,6 +676,10 @@
     }
     const ids = sel.length ? sel : at ? [at] : [];
     if (!ids.length) return false;
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'd' || e.key === 'D')) {
+      void duplicate(ids);
+      return true;
+    }
     const a = soundKey(e);
     if (!a) return false;
     if (a.kind === 'clear') app.soundSel = [];
@@ -686,6 +690,17 @@
       void commit(removeCommands(ids), []);
     } else nudge(a.kind, a.delta, ids);
     return true;
+  }
+
+  /** ⌘D: copies right after the sounds. The selection moves on to them, so ⌘D again goes on. */
+  async function duplicate(ids: string[]) {
+    flushBurst();
+    const r = await app.cmd({ cmd: 'duplicate_sounds', placement_ids: ids });
+    await app.loadEdit();
+    const made = (r as { result?: { ids: string[] } } | undefined)?.result?.ids;
+    if (!made) return;
+    app.soundSel = made;
+    speak(made.length > 1 ? `${made.length} sounds duplicated` : 'Sound duplicated');
   }
 
   // ---- reaching the balls: one Tab stop for the layer, then Tab goes through them in time ----
@@ -1065,7 +1080,7 @@
 
     {#if tip}<div class="tip tn" style="left: {tip.x}px; top: {tip.y}px" data-testid="sound-tip">{tip.text}</div>{/if}
   </div>
-  <p class="sr" id="sound-keys">Left and right arrows set depth, Option with them pan, Shift up and down loudness, comma and period move it, Enter opens it, Shift Enter adds it to the selection, Tab goes to the next sound.</p>
+  <p class="sr" id="sound-keys">Command D duplicates. Left and right arrows set depth, Option with them pan, Shift up and down loudness, comma and period move it, Enter opens it, Shift Enter adds it to the selection, Tab goes to the next sound.</p>
   <p class="sr" role="status" aria-live="polite" data-testid="sounds-said">{spoken}</p>
 </div>
 
