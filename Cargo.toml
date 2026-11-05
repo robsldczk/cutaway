@@ -58,8 +58,14 @@ flate2 = "1"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 base64 = "0.22"
 
+# Debug info is what makes target/ huge on macOS (D103). Our crates keep file and line
+# in backtraces; dependencies keep none.
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.dev.package."*"]
 opt-level = 2
+debug = false
 
 [profile.dev.package.apc-analysis]
 opt-level = 3

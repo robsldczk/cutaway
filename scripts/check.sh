@@ -5,6 +5,9 @@ cd "$(dirname "$0")/.."
 
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
+step "build output: keep target/ under its limit"
+scripts/clean-target.sh || true
+
 step "brand"
 node scripts/rebrand.mjs --check
 
