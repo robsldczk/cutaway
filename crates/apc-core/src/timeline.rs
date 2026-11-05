@@ -9,7 +9,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    Anchor, BoxState, CompSegment, Document, Edge, LineKind, Placement, Scene, Take, TakeWord,
+    Anchor, BoxState, CompSegment, Document, Edge, LineKind, Placement, Scene, Take, TakeOrigin,
+    TakeWord,
 };
 
 /// Pacing parameters (from the project config).
@@ -764,7 +765,8 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
 /// source and its last ends up to `handle_out_s` later, so a line doesn't start or stop
 /// hard on its first or last sound. A handle stops short of any other word on the same
 /// source (a trimmed word stays out, a neighbouring take's speech doesn't leak in), at the
-/// file's edges and at the scene start.
+/// file's edges and at the scene start. An edge marked by hand has no handle: it's heard as
+/// it was marked.
 fn add_handles(doc: &Document, items: &mut [LayoutItem], pacing: &Pacing) {
     // words never come within this of a handle's end
     const CLEAR: f64 = 0.04;
@@ -785,7 +787,16 @@ fn add_handles(doc: &Document, items: &mut [LayoutItem], pacing: &Pacing) {
     for it in items.iter_mut() {
         let mut audio = it.pieces.clone();
         let n = audio.len();
+        let marked = |p: &ClipPiece| {
+            doc.takes
+                .get(&p.take_id)
+                .is_some_and(|t| t.origin == TakeOrigin::Marked)
+        };
         if n > 0 && (hin > 0.0 || hout > 0.0) {
+            let (hin, hout) = (
+                if marked(&audio[0]) { 0.0 } else { hin },
+                if marked(&audio[n - 1]) { 0.0 } else { hout },
+            );
             let first = &mut audio[0];
             let words = used.get(&first.source_id).map(Vec::as_slice).unwrap_or(&[]);
             // the last word end before the edge, or the edge itself when a word straddles it
@@ -921,6 +932,7 @@ pub(crate) mod tests {
             changed: false,
             forced: false,
             adlib: false,
+            removed: false,
         }
     }
 

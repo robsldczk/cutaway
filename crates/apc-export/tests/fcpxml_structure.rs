@@ -123,6 +123,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
         changed: false,
         forced: false,
         adlib: false,
+        removed: false,
     };
     d.lines
         .insert("l1".into(), line("l1", 1, "PAUL", "Hello there friend"));

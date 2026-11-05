@@ -427,6 +427,10 @@ pub fn apply_version(
             changed,
             forced: u.forced,
             adlib: false,
+            // a deleted line stays deleted, whatever the new version says
+            removed: new_to_old
+                .get(&n)
+                .is_some_and(|(o, _)| old_lines[*o].removed),
         };
         let entry = LineChange {
             line_id: id.clone(),
@@ -474,8 +478,11 @@ pub fn apply_version(
                 }
             }
         }
+        let in_cut = !line.removed;
         tx.put(&line)?;
-        orders[*si].push(id);
+        if in_cut {
+            orders[*si].push(id);
+        }
     }
 
     // Deleted lines: their takes go to the unmatched bin.
@@ -547,11 +554,9 @@ pub fn apply_version(
         if !scene_ids.contains(&s.id) {
             summary.scenes_removed.push(s.heading.clone());
             // ad-libs of a removed scene go back to the bin
-            for item in &s.order {
-                if doc.lines.get(item).map(|l| l.adlib).unwrap_or(false) {
-                    tx.delete::<ScriptLine>(item)?;
-                    tx.delete::<BoxState>(item)?;
-                }
+            for l in doc.lines.values().filter(|l| l.adlib && l.scene_id == s.id) {
+                tx.delete::<ScriptLine>(&l.id)?;
+                tx.delete::<BoxState>(&l.id)?;
             }
             tx.delete::<Scene>(&s.id)?;
         }
@@ -695,6 +700,22 @@ mod tests {
         assert_eq!(um.len(), 1);
         assert_eq!(um[0].origin, "deleted_line");
         assert_eq!(um[0].text, "heard text");
+    }
+
+    #[test]
+    fn a_new_version_leaves_a_deleted_line_deleted() {
+        let (_d, mut bus) = bus();
+        import(&mut bus, 1, V1);
+        let hi = id_of(&bus, "Hi Paul.");
+        bus.execute(&Command::DeleteLine {
+            line_id: hi.clone(),
+        })
+        .unwrap();
+        let v2 = V1.replace("Goodbye now.", "Goodbye for now.");
+        import(&mut bus, 2, &v2);
+        let doc = bus.doc();
+        assert!(doc.lines[&hi].removed);
+        assert!(doc.scenes.values().all(|s| !s.order.contains(&hi)));
     }
 
     #[test]

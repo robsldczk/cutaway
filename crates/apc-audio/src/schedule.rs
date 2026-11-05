@@ -335,6 +335,7 @@ mod tests {
             changed: false,
             forced: false,
             adlib: false,
+            removed: false,
         };
         d.lines.insert("a".into(), line("a", 1));
         d.lines.insert("b".into(), line("b", 2));

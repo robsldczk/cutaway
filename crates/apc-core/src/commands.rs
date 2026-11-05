@@ -401,6 +401,26 @@ pub enum Command {
     ApplyMark {
         mark_id: String,
     },
+    /// A take marked by hand in the mapping editor: it joins the line's takes, last, and is
+    /// picked. The line's comp, word edits, trims and splits belonged to the old take and go.
+    AddTake {
+        take: Take,
+    },
+    /// A line that isn't in the script, with the take marked for it, after item `after`
+    /// (first in the scene without one).
+    AddLine {
+        scene_id: String,
+        #[serde(default)]
+        after: Option<String>,
+        character: String,
+        text: String,
+        take: Take,
+    },
+    /// Takes a line out of the cut. The line and its takes stay in the document, off the
+    /// scene's order. Sounds hanging on it move to the line that follows.
+    DeleteLine {
+        line_id: String,
+    },
 }
 
 fn yes() -> bool {
@@ -480,6 +500,9 @@ impl Command {
             Command::PutMark { .. } => "put_mark",
             Command::DeleteMark { .. } => "delete_mark",
             Command::ApplyMark { .. } => "apply_mark",
+            Command::AddTake { .. } => "add_take",
+            Command::AddLine { .. } => "add_line",
+            Command::DeleteLine { .. } => "delete_line",
         }
     }
 
@@ -720,14 +743,7 @@ impl Command {
                 let to = (*to_index).min(sc.order.len());
                 sc.order.insert(to, item);
                 tx.put(&sc)?;
-                // a pause belongs between two lines: the line that now opens the scene drops it
-                let first = first_locked(tx.doc(), &sc, &pacing);
-                if let Some(id) = first.filter(|f| Some(f) != first_before.as_ref()) {
-                    let mut b = boxed(tx, &id)?;
-                    if b.gap_s.take().is_some() {
-                        tx.put(&b)?;
-                    }
-                }
+                opening_drops_gap(tx, &sc, first_before, &pacing)?;
                 Ok(json!({ "index": to }))
             }
             Command::SetSceneTightness {
@@ -1218,6 +1234,23 @@ impl Command {
                 Ok(Value::Null)
             }
             Command::ApplyMark { mark_id } => apply_mark(tx, mark_id),
+            Command::AddTake { take } => add_take(tx, take),
+            Command::AddLine {
+                scene_id,
+                after,
+                character,
+                text,
+                take,
+            } => add_line(
+                tx,
+                scene_id,
+                after.as_deref(),
+                character,
+                text,
+                take,
+                &pacing,
+            ),
+            Command::DeleteLine { line_id } => delete_line(tx, line_id, &pacing),
             Command::SetLaneMix { mix } => {
                 let mut m = mix.clone();
                 m.volume_db = m.volume_db.clamp(-60.0, 12.0);
@@ -1422,6 +1455,23 @@ fn first_locked(doc: &Document, scene: &Scene, pacing: &crate::timeline::Pacing)
         .into_iter()
         .find(|i| i.kind == ItemKind::Box && !i.pieces.is_empty() && !i.pinned)
         .map(|i| i.item_id)
+}
+
+/// A pause belongs between two lines: a line that now opens the scene drops its own.
+fn opening_drops_gap(
+    tx: &mut Tx,
+    scene: &Scene,
+    first_before: Option<String>,
+    pacing: &crate::timeline::Pacing,
+) -> Result<()> {
+    let first = first_locked(tx.doc(), scene, pacing);
+    if let Some(id) = first.filter(|f| Some(f) != first_before.as_ref()) {
+        let mut b = boxed(tx, &id)?;
+        if b.gap_s.take().is_some() {
+            tx.put(&b)?;
+        }
+    }
+    Ok(())
 }
 
 /// Rounds to whole milliseconds (stored timing values).
@@ -1801,6 +1851,7 @@ fn use_unmatched(
         changed: false,
         forced: false,
         adlib: true,
+        removed: false,
     })?;
     // Spread word times evenly over the range (good enough for an ad-lib).
     let n = tokens.len().max(1) as f64;
@@ -1858,6 +1909,214 @@ fn use_unmatched(
     um.used_as = Some(line_id.clone());
     tx.put(&um)?;
     Ok(json!({ "line_id": line_id }))
+}
+
+/// A marked take goes on a character's mic, as every take does, and has a length.
+fn check_marked(tx: &Tx, take: &Take) -> Result<()> {
+    match tx.doc().sources.get(&take.source_id) {
+        Some(s) if s.role == Role::Character => {}
+        Some(_) => return Err(CoreError::invalid("a take goes on a character's mic")),
+        None => return Err(CoreError::not_found("source", &take.source_id)),
+    }
+    if take.t1 <= take.t0 {
+        return Err(CoreError::invalid("the out point is before the in point"));
+    }
+    Ok(())
+}
+
+fn add_take(tx: &mut Tx, take: &Take) -> Result<Value> {
+    check_marked(tx, take)?;
+    let line_id = &take.line_id;
+    if !tx.doc().lines.contains_key(line_id) {
+        return Err(CoreError::not_found("line", line_id));
+    }
+    let take_no = tx
+        .doc()
+        .takes_of_line(line_id)
+        .iter()
+        .map(|t| t.take_no)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    tx.put(&Take {
+        take_no,
+        origin: TakeOrigin::Marked,
+        ..take.clone()
+    })?;
+    let mut b = boxed(tx, line_id)?;
+    b.take_id = Some(take.id.clone());
+    b.comp.clear();
+    b.edits = WordEdits::default();
+    b.head_s = 0.0;
+    b.tail_s = 0.0;
+    b.split_points.clear();
+    b.dropped = false;
+    tx.put(&b)?;
+    Ok(json!({ "take_id": take.id, "take_no": take_no }))
+}
+
+fn add_line(
+    tx: &mut Tx,
+    scene_id: &str,
+    after: Option<&str>,
+    character: &str,
+    text: &str,
+    take: &Take,
+    pacing: &crate::timeline::Pacing,
+) -> Result<Value> {
+    check_marked(tx, take)?;
+    let text = text.trim();
+    let tokens = crate::text::display_tokens(text);
+    if tokens.is_empty() {
+        return Err(CoreError::invalid("a line needs words"));
+    }
+    if !tx.doc().characters.contains_key(character) {
+        return Err(CoreError::not_found("character", character));
+    }
+    let mut scene = tx
+        .doc()
+        .scenes
+        .get(scene_id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("scene", scene_id))?;
+    let at = match after {
+        Some(id) => {
+            scene
+                .order
+                .iter()
+                .position(|x| x == id)
+                .ok_or_else(|| CoreError::not_found("item", id))?
+                + 1
+        }
+        None => 0,
+    };
+    let number = tx
+        .doc()
+        .lines
+        .values()
+        .filter(|l| l.scene_id == scene_id)
+        .map(|l| l.number)
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let line_id = new_id("ln");
+    tx.put(&ScriptLine {
+        id: line_id.clone(),
+        scene_id: scene_id.to_string(),
+        kind: LineKind::Dialogue,
+        character: Some(character.to_string()),
+        extension: None,
+        text: text.to_string(),
+        paren: None,
+        words: tokens.iter().map(|t| crate::text::norm_word(t)).collect(),
+        tokens,
+        number,
+        version_added: 0,
+        changed: false,
+        forced: false,
+        adlib: true,
+        removed: false,
+    })?;
+    tx.put(&Take {
+        line_id: line_id.clone(),
+        take_no: 1,
+        origin: TakeOrigin::Marked,
+        ..take.clone()
+    })?;
+    tx.put(&BoxState {
+        id: line_id.clone(),
+        take_id: Some(take.id.clone()),
+        ..Default::default()
+    })?;
+    let first_before = first_locked(tx.doc(), &scene, pacing);
+    scene.order.insert(at, line_id.clone());
+    tx.put(&scene)?;
+    opening_drops_gap(tx, &scene, first_before, pacing)?;
+    Ok(json!({ "line_id": line_id, "take_id": take.id }))
+}
+
+fn delete_line(tx: &mut Tx, line_id: &str, pacing: &crate::timeline::Pacing) -> Result<Value> {
+    let mut line = tx
+        .doc()
+        .lines
+        .get(line_id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("line", line_id))?;
+    let mut scene = scene_of(tx, line_id)?;
+    let at = scene
+        .order
+        .iter()
+        .position(|x| x == line_id)
+        .ok_or_else(|| CoreError::invalid("the line isn't in the cut"))?;
+
+    // what hangs on the line goes where the line was
+    let speaks = |id: &&String| {
+        tx.doc()
+            .lines
+            .get(*id)
+            .is_some_and(|l| l.kind == LineKind::Dialogue)
+    };
+    let next = scene.order[at + 1..].iter().find(speaks).cloned();
+    let prev = scene.order[..at].iter().rev().find(speaks).cloned();
+    let home = match (&next, &prev) {
+        (Some(id), _) => Some((id.clone(), Edge::Start)),
+        (None, Some(id)) => Some((id.clone(), Edge::End)),
+        (None, None) => None,
+    }
+    .map(|(line_id, edge)| Anchor {
+        line_id,
+        word: None,
+        edge,
+    });
+    let layout = layout_scene(tx.doc(), &scene, pacing);
+    let hangs = |a: &Option<Anchor>| a.as_ref().is_some_and(|a| a.line_id == line_id);
+    let sounds: Vec<Placement> = tx
+        .doc()
+        .placements
+        .values()
+        .filter(|p| hangs(&p.anchor))
+        .cloned()
+        .collect();
+    for mut p in sounds {
+        if home.is_none() {
+            p.at_s = placement_start(&layout, &p);
+            p.offset_s = 0.0;
+        }
+        p.anchor = home.clone();
+        tx.put(&p)?;
+    }
+    let cues: Vec<SoundCue> = tx
+        .doc()
+        .cues
+        .values()
+        .filter(|c| hangs(&c.anchor))
+        .cloned()
+        .collect();
+    for mut c in cues {
+        c.anchor = home.clone();
+        tx.put(&c)?;
+    }
+
+    // speech taken from the bin can be used again
+    let used: Vec<Unmatched> = tx
+        .doc()
+        .unmatched
+        .values()
+        .filter(|u| u.used_as.as_deref() == Some(line_id))
+        .cloned()
+        .collect();
+    for mut u in used {
+        u.used_as = None;
+        tx.put(&u)?;
+    }
+
+    let first_before = first_locked(tx.doc(), &scene, pacing);
+    scene.order.remove(at);
+    tx.put(&scene)?;
+    line.removed = true;
+    tx.put(&line)?;
+    opening_drops_gap(tx, &scene, first_before, pacing)?;
+    Ok(json!({ "next": next.or(prev) }))
 }
 
 /// Boxes keep a valid selection, otherwise get the default take. Returns how many were set.
@@ -1979,15 +2238,22 @@ fn apply_analysis(tx: &mut Tx, payload: &AnalysisPayload) -> Result<Value> {
     let scope: HashSet<&str> = payload.line_scope.iter().map(String::as_str).collect();
     let in_scope = |line_id: &str| scope.is_empty() || scope.contains(line_id);
 
-    // Takes: replace in scope; keep user favorites when the same take id comes back.
+    // Takes: replace in scope; keep user favorites when the same take id comes back. What was
+    // marked by hand, and the takes of lines the matcher doesn't look at, aren't its to replace.
     let new_ids: HashSet<&str> = payload.takes.iter().map(|t| t.id.as_str()).collect();
+    let mut kept: HashSet<&str> = HashSet::new();
     for t in doc.takes.values() {
         if in_scope(&t.line_id) && !new_ids.contains(t.id.as_str()) {
-            if t.favorite && t.favorite_origin.as_deref() == Some("user") {
+            let by_hand = t.origin == TakeOrigin::Marked
+                || doc.lines.get(&t.line_id).is_some_and(|l| l.adlib);
+            if by_hand {
+                kept.insert(t.id.as_str());
+            } else if t.favorite && t.favorite_origin.as_deref() == Some("user") {
                 // a take starred by hand is never dropped by a re-run; it is flagged
-                let mut kept = t.clone();
-                kept.needs_rematch = true;
-                tx.put(&kept)?;
+                let mut flagged = t.clone();
+                flagged.needs_rematch = true;
+                tx.put(&flagged)?;
+                kept.insert(t.id.as_str());
             } else {
                 tx.delete::<Take>(&t.id)?;
             }
@@ -2008,6 +2274,22 @@ fn apply_analysis(tx: &mut Tx, payload: &AnalysisPayload) -> Result<Value> {
             }
         }
         tx.put(&t)?;
+    }
+    // the run numbers its own takes from one: what stayed goes after them
+    let lines: HashSet<String> = kept
+        .iter()
+        .filter_map(|id| doc.takes.get(*id))
+        .map(|t| t.line_id.clone())
+        .collect();
+    for lid in lines {
+        let mut takes: Vec<Take> = tx.doc().takes_of_line(&lid).into_iter().cloned().collect();
+        takes.sort_by_key(|t| (kept.contains(t.id.as_str()), t.take_no));
+        for (n, t) in takes.iter_mut().enumerate() {
+            if t.take_no != (n + 1) as u32 {
+                t.take_no = (n + 1) as u32;
+                tx.put(t)?;
+            }
+        }
     }
 
     let sources: HashSet<&str> = payload.source_scope.iter().map(String::as_str).collect();
@@ -2637,6 +2919,233 @@ mod tests {
         let l = lay(&bus);
         assert!(l.item("b").unwrap().start_s.abs() < 1e-9);
         assert!(bus.doc().boxes["b"].gap_s.is_none());
+    }
+
+    /// A take marked by hand on `src`.
+    fn marked(id: &str, line: &str, t0: f64, t1: f64) -> Take {
+        let mut t = crate::timeline::tests::take(id, line, t0, t1, vec![]);
+        t.origin = TakeOrigin::Marked;
+        t
+    }
+
+    fn seed_character(bus: &mut CommandBus, id: &str) {
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            let c: Character =
+                serde_json::from_value(json!({ "id": id, "label": id, "color_index": 0 }))?;
+            tx.put(&c)?;
+            tx.put(&source("src", "character"))?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_marked_take_goes_last_is_picked_and_clears_the_old_takes_edits() {
+        let (_d, mut bus) = setup();
+        seed_character(&mut bus, "A");
+        let line = bus.doc().scenes.values().next().unwrap().order[0].clone();
+        bus.execute(&Command::SetTrim {
+            line_id: line.clone(),
+            head_s: 0.1,
+            tail_s: 0.2,
+        })
+        .unwrap();
+        let before = bus.doc().clone();
+        let n = before.takes_of_line(&line).len() as u32;
+        let r = bus
+            .execute(&Command::AddTake {
+                take: marked("new", &line, 40.0, 41.0),
+            })
+            .unwrap();
+        assert_eq!(r.result["take_no"], n + 1);
+        let b = &bus.doc().boxes[&line];
+        assert_eq!(b.take_id.as_deref(), Some("new"));
+        assert_eq!((b.head_s, b.tail_s), (0.0, 0.0));
+        assert_eq!(bus.doc().takes_of_line(&line).len() as u32, n + 1);
+        bus.undo().unwrap();
+        assert_eq!(bus.doc(), &before);
+    }
+
+    #[test]
+    fn a_marked_take_is_heard_exactly_as_marked() {
+        let (_d, mut bus) = setup();
+        seed_character(&mut bus, "A");
+        let line = bus.doc().scenes.values().next().unwrap().order[0].clone();
+        bus.execute(&Command::AddTake {
+            take: marked("new", &line, 40.0, 41.0),
+        })
+        .unwrap();
+        let l = lay(&bus);
+        let it = l.item(&line).unwrap();
+        assert_eq!(it.audio[0].src_in, 40.0);
+        assert_eq!(it.audio[0].src_out, 41.0);
+    }
+
+    #[test]
+    fn a_take_cannot_go_on_the_director_mic_or_run_backwards() {
+        let (_d, mut bus) = setup();
+        seed_character(&mut bus, "A");
+        let line = bus.doc().scenes.values().next().unwrap().order[0].clone();
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            tx.put(&source("room", "room"))?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        let mut t = marked("new", &line, 40.0, 41.0);
+        t.source_id = "room".into();
+        assert!(bus.execute(&Command::AddTake { take: t }).is_err());
+        let t = marked("new", &line, 41.0, 40.0);
+        assert!(bus.execute(&Command::AddTake { take: t }).is_err());
+    }
+
+    #[test]
+    fn a_line_is_added_where_it_was_asked_for_and_undo_takes_it_away() {
+        let (_d, mut bus) = setup();
+        seed_character(&mut bus, "A");
+        let sc = bus.doc().scenes.values().next().unwrap().clone();
+        let before = bus.doc().clone();
+        let r = bus
+            .execute(&Command::AddLine {
+                scene_id: sc.id.clone(),
+                after: Some(sc.order[0].clone()),
+                character: "A".into(),
+                text: "Oh wow.".into(),
+                take: marked("new", "", 40.0, 41.0),
+            })
+            .unwrap();
+        let id = r.result["line_id"].as_str().unwrap().to_string();
+        let order = &bus.doc().scenes[&sc.id].order;
+        assert_eq!(order[1], id);
+        assert_eq!(order.len(), sc.order.len() + 1);
+        let l = &bus.doc().lines[&id];
+        assert!(l.adlib);
+        assert_eq!(l.tokens, ["Oh", "wow."]);
+        assert_eq!(bus.doc().takes["new"].line_id, id);
+        assert_eq!(bus.doc().boxes[&id].take_id.as_deref(), Some("new"));
+        bus.undo().unwrap();
+        assert_eq!(bus.doc(), &before);
+    }
+
+    #[test]
+    fn a_line_added_on_top_opens_the_scene() {
+        let (_d, mut bus) = setup();
+        seed_character(&mut bus, "A");
+        let sc = bus.doc().scenes.values().next().unwrap().clone();
+        bus.execute(&Command::SetGap {
+            line_id: sc.order[0].clone(),
+            gap_s: Some(1.0),
+        })
+        .unwrap();
+        let r = bus
+            .execute(&Command::AddLine {
+                scene_id: sc.id.clone(),
+                after: None,
+                character: "A".into(),
+                text: "First.".into(),
+                take: marked("new", "", 40.0, 41.0),
+            })
+            .unwrap();
+        let id = r.result["line_id"].as_str().unwrap();
+        assert_eq!(bus.doc().scenes[&sc.id].order[0], id);
+        assert_eq!(lay(&bus).items[0].start_s, 0.0);
+    }
+
+    #[test]
+    fn a_deleted_line_leaves_the_cut_and_undo_brings_it_back() {
+        let (_d, mut bus) = setup();
+        let sc = bus.doc().scenes.values().next().unwrap().clone();
+        let (a, b) = ("a".to_string(), "b".to_string());
+        let before = bus.doc().clone();
+        let r = bus
+            .execute(&Command::DeleteLine { line_id: a.clone() })
+            .unwrap();
+        assert_eq!(r.result["next"], b.as_str());
+        assert!(!bus.doc().scenes[&sc.id].order.contains(&a));
+        assert!(bus.doc().lines[&a].removed);
+        assert!(!bus.doc().takes_of_line(&a).is_empty(), "takes stay");
+        assert!(lay(&bus).item(&a).is_none());
+        // what's left closes up: the action opens the scene now and takes its own time (D94)
+        let l = lay(&bus);
+        assert_eq!(l.item(&b).unwrap().start_s, l.item("x").unwrap().end_s);
+        bus.undo().unwrap();
+        assert_eq!(bus.doc(), &before);
+        assert!(bus
+            .execute(&Command::DeleteLine {
+                line_id: "nope".into()
+            })
+            .is_err());
+    }
+
+    #[test]
+    fn sounds_on_a_deleted_line_move_to_the_next_line() {
+        let (_d, mut bus) = setup();
+        let sc = bus.doc().scenes.values().next().unwrap().clone();
+        let (a, b) = ("a".to_string(), "b".to_string());
+        let mut p: Placement = serde_json::from_value(json!({
+            "id": "p", "scene_id": sc.id, "asset_id": "x", "lane": "sfx", "len_s": 1.0,
+        }))
+        .unwrap();
+        p.anchor = Some(Anchor {
+            line_id: a.clone(),
+            word: Some(1),
+            edge: Edge::End,
+        });
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            tx.put(&p)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        bus.execute(&Command::DeleteLine { line_id: a }).unwrap();
+        let moved = bus.doc().placements["p"].anchor.clone().unwrap();
+        assert_eq!(moved.line_id, b);
+        assert_eq!((moved.word, moved.edge), (None, Edge::Start));
+        // no line left to hang on: it stays where it plays
+        bus.execute(&Command::DeleteLine { line_id: b }).unwrap();
+        assert!(bus.doc().placements["p"].anchor.is_none());
+    }
+
+    #[test]
+    fn a_rerun_leaves_marked_takes_and_numbers_them_after_its_own() {
+        let (_d, mut bus) = setup();
+        seed_character(&mut bus, "A");
+        let line = bus.doc().scenes.values().next().unwrap().order[0].clone();
+        bus.execute(&Command::AddTake {
+            take: marked("new", &line, 40.0, 41.0),
+        })
+        .unwrap();
+        let mut found = crate::timeline::tests::take("run", &line, 1.0, 2.0, vec![]);
+        found.take_no = 1;
+        bus.execute(&Command::ApplyAnalysis {
+            payload: AnalysisPayload {
+                takes: vec![found],
+                ..Default::default()
+            },
+        })
+        .unwrap();
+        let takes = bus.doc().takes_of_line(&line);
+        let ids: Vec<(&str, u32)> = takes.iter().map(|t| (t.id.as_str(), t.take_no)).collect();
+        assert_eq!(ids, [("run", 1), ("new", 2)]);
+        assert_eq!(bus.doc().boxes[&line].take_id.as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn a_rerun_leaves_the_takes_of_added_lines() {
+        let (_d, mut bus) = setup();
+        seed_character(&mut bus, "A");
+        let sc = bus.doc().scenes.values().next().unwrap().clone();
+        bus.execute(&Command::AddLine {
+            scene_id: sc.id,
+            after: None,
+            character: "A".into(),
+            text: "Oh.".into(),
+            take: marked("new", "", 40.0, 41.0),
+        })
+        .unwrap();
+        bus.execute(&Command::ApplyAnalysis {
+            payload: AnalysisPayload::default(),
+        })
+        .unwrap();
+        assert!(bus.doc().takes.contains_key("new"));
     }
 
     #[test]

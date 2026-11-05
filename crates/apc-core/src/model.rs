@@ -324,9 +324,13 @@ pub struct ScriptLine {
     pub changed: bool,
     #[serde(default)]
     pub forced: bool,
-    /// Created from the unmatched bin (not in the script).
+    /// Not in the script: from the unmatched bin, or added by hand in the mapping editor.
     #[serde(default)]
     pub adlib: bool,
+    /// Deleted from the cut. It stays here, off the scene's order, so the script keeps its
+    /// shape: the matcher still claims its audio and a new script version doesn't bring it back.
+    #[serde(default)]
+    pub removed: bool,
 }
 entity!(ScriptLine, Line, parent = scene_id, ord = number);
 
@@ -593,6 +597,9 @@ pub enum TakeOrigin {
     Rescue,
     /// Linked by hand in the dev panel.
     Manual,
+    /// In and out marked by hand in the mapping editor: heard exactly as marked, and a re-run
+    /// of the analysis leaves it alone.
+    Marked,
 }
 
 impl Take {
