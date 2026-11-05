@@ -788,3 +788,18 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **A re-run doesn't undo either.** `BoxState::dismissed` remembers a deleted take by id and stretch, and more than half of the same stretch on the same mic counts as the same performance. An edited take keeps its id, so the matcher finding it again changes nothing.
 - **The pop-up:** one, from the card's × and the editor's Delete…: Delete take N, with the focus, or Delete line. Rob's earlier "just deletes" would have been no question at all; he then asked for the question. A line without takes and a direction only offer themselves.
 
+### D106 The arrows walk the bucket chips (Rob, 2026-11-05)
+- **Rob:** when a dropped sound almost has a match, cycle through the chips with the arrows, then Enter, or Shift to complete, once the right one is selected.
+- **Arrows:** all four, round the ends, from the chip the name already is. ↑ and ↓ alone would do, but the chips are a row. The cost: ← and → no longer move the caret in this field.
+- **Enter** files into the chip lit, and the line under the field names it. **Shift** alone, on release so Shift and a letter stays a capital, completes the name from the chip lit, or from the first match while typing. Options: Tab, the usual completion key; Rob asked for Shift.
+- **Nothing is lit until an arrow is pressed,** and typing lets go. A first match lit by itself would take Enter away from a new bucket's name.
+- It works wherever the sheet opens, not only on Arrange: it's one sheet.
+
+### D107 ⌘D duplicates sounds (Rob, 2026-11-05)
+- **Rob:** ⌘D should just duplicate SFX, on Arrange and Edit.
+- **Where a copy goes:** right after its sound. A selection follows on from its last sound with its spacing kept, so a run of footsteps repeats as a run. One undo step, and the selection moves to the copies, so ⌘D again goes on.
+- **What it keeps:** everything about how it's set: loudness, pan, depth, fades, trim. On a free layer, as any placed sound.
+- **What it doesn't:** the anchor and the cue. The original hangs on a word; a copy after it has no word to hang on, so it stands at its own time and doesn't follow when the dialogue moves. It answers no cue.
+- **Any selected sound,** adlibs and music too. Dialogue clips stay as they are: they're takes of a line, not sounds.
+- `duplicate_sounds` on the CLI and MCP.
+

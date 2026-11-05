@@ -23,6 +23,16 @@ Details: `docs/design/round2-screens.md` (the spec files are read-only in this c
 - Import › Files on TARMAC: drop the fixture folder, check the cards, switch a file's type, link a room file by hand, Redo match, Start analysis.
 - Edit: drag a preview onto SFX 1 near an action line and watch it download and snap; try Split, Fade and Gain on a clip; mute and solo lanes while playing; set a cycle range by dragging in the ruler and press C.
 
+## Bucket chips by keyboard, ⌘D on sounds (D106, D107, 2026-11-05)
+
+**Built:** on a Finder drop the arrows walk the chips, Enter files into the one lit, and Shift alone completes the name. ⌘D copies the selected sounds right after themselves, on Arrange and Edit.
+
+**Verified:** Rust, vitest and Playwright. The chips need a real Finder drop, so they weren't driven in the desktop webview.
+
+**Rob, by hand:**
+- Drop a file from the Finder and walk the chips. ← and → walk them too, so they no longer move the caret: does that get in the way?
+- ⌘D a sound hanging on a word: the copy stands at its own time and won't follow if the dialogue moves. Is that right?
+
 ## Takes changed in place, lines read as said (D105, 2026-11-05)
 
 **Built:** the mapping editor saves to the current take or a new one. Cards show what each take says, with a text field to correct it and the script beside it. A longer crop shows the whole sentence. The × and Delete… ask: delete take or delete line.
