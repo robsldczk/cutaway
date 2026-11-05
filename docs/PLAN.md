@@ -679,7 +679,7 @@ Bottom up, each step green before the next:
 - [x] **CLI.** Every option of the page, plus lock, unlock, pipeline folder and history.
 - [x] **Export page.** Fourth page, per the mockup; replaces the export sheet. Show export from the show home.
 - [x] **Locks in the UI.** Banner, lock icons, hidden handles, inline refusal, unlock question, notice on opening.
-- [ ] **Docs and merge.** Specs, DECISIONS, RUN_REPORT; merge to `dev` when the main folder allows it.
+- [x] **Docs and merge.** Specs, DECISIONS, RUN_REPORT; merge to `dev` when the main folder allows it.
 
 Risks: the reverb must be linear for the null to hold (it is: one Room per return, same start frame); MP3 can't hold a stem to the sample (mix only); a show export writes into a Syncthing share, so it never goes to a guessed path and tests only ever touch temp copies.
 
@@ -753,4 +753,4 @@ Risks: the reverb must be linear for the null to hold (it is: one Room per retur
 - 2026-11-05 The mapping editor (D104): M on Options opens a mic with the words on the waveform, in and out, a sentence search and the whole file on a strip; a button makes a new take, exact to the marks. A plus between lines adds a line the same way, and an X deletes one after asking. ⌘Z undoes each. Marked takes, added lines and deletions survive a re-run and a new script version. On the CLI and MCP as `recording`, `add_take`, `add_line`, `delete_line`. Tried on a copy of Episode 2 and in the real webview with in-page events; not listened to, and a real mouse and real typing wait for Rob.
 - 2026-11-05 Takes changed in place, and lines read as said (D105, replacing D72): the mapping editor saves to the current take or a new one, and deletes a take or the line from one pop-up. Cards show the take's own words, with a text field to correct them; a corrected word takes the time of the misheard one. Edits and deletions survive a re-run.
 - 2026-11-05 The arrows walk the bucket chips, Enter takes the one lit and Shift completes (D106). ⌘D duplicates sounds on Arrange and Edit, one undo step (D107).
-
+- 2026-11-05 Export page and scene locks (D108–D114) on branch `export-tab` (worktree `../cutaway-export-tab`, because another session worked in the main folder): the fourth page after the mockup, aligned stems that null against the mix (better than −100 dB), individual clips, mix only, FCPXML only, WAV/FLAC/MP3, versions and manifests on disk, a lock the bus enforces on every command, show exports to a confirmed pipeline folder, all of it in the CLI and MCP. Verified in Playwright and in the real webview on temp demos; not run on the real tm-2610. Rob's checks are in RUN_REPORT.

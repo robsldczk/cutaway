@@ -274,3 +274,49 @@ cargo test --release -p apc-analysis --features parakeet --test fixture_tarmac -
 > Cutaway, first build run: the plan, the rename to Cutaway with central naming, the frontend rebuilt to the Option C prototype with separate design tokens, and milestones M0–M7 with M8 portability work. The Stage 0 matching is ported and reproduces its fixture results; exports to FCPXML/SRT/cut list/WAV; CLI and MCP share one service; the desktop app covers Options, Arrange, the box editor, the Edit page and the sound bucket. See `docs/RUN_REPORT.md` for what is verified, what isn't (Parakeet recall on this session, Windows CI never run) and the manual checks.
 >
 > 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+## Export page and scene locks (2026-11-05, D108–D114)
+
+From `tasks/export-tab`. Built on branch `export-tab` (worktree `../cutaway-export-tab`), because another session was working in the main folder.
+
+**Built**
+
+| Area | What works |
+|---|---|
+| Export page | Fourth page (`4`, ⌘E), after the mockup: Range, Export as, Tracks, Format, Also export, Save to, History, presets. Replaces the export sheet. |
+| Aligned stems | Every file of a scene is the same length to the sample and starts at 0:00, silent ones included. Dry stems plus room returns plus ambience and music null against the mix. Split dialogue by character. |
+| Other modes | Individual clips with handles, Mix only, FCPXML only (renders nothing). |
+| Formats | WAV 16, 24 and 32-bit float, FLAC, MP3 (mix only). Loudness on the mix alone, stopping short of clipping. |
+| FCPXML | Dry character lanes, two room lanes, source from recordings, rendered stems or exported clips. |
+| Versions | Per scene and per episode, never overwritten, across both destinations. Manifest with hash, checksums and settings. "Unchanged since v002". |
+| Locks | `lock_scene`, `unlock_scene`. The bus refuses whatever moves a locked scene, from the UI, CLI and MCP. Banner, lock icons, hidden trim handles, refusal at the pointer, notice on opening, unlock question. A new script keeps the lock and flags the scene. |
+| Show exports | From the show home, to a pipeline folder that's proposed and then confirmed. Never to a guess. |
+| CLI and MCP | `cutaway deliver`, `lock`, `unlock`, `exports`, `pipeline`, `preset`; every option reaches MCP. |
+
+**Not built**
+
+- A show-level delivery number (open question 3): versions are per scene and per episode, as specified.
+- Room lanes in FCPXML only: there's nothing rendered to point at (D113).
+
+**Known gaps**
+
+- ⌘Z or `undo` removes a lock without the unlock question, because `lock_scene` is undoable as specified. An agent can do this too.
+- Reverting to a backup restores whatever locks the backup had.
+- An edit made during a running export isn't in that export, and the scene is then locked with it. The next look at the Export page shows it as changed.
+- Sessions that aren't at the export's sample rate go through the mixer's linear resampler. Fine at 48 kHz; worth a better resampler before delivering 44.1 kHz from 48 kHz.
+
+**How it was verified**
+
+- 411 Rust tests, 216 UI unit tests and 145 Playwright tests, on the code merged with `dev`. New: `crates/apc-app/tests/export_page.rs` reads real exports back from disk, `crates/apc-audio/tests/stems.rs`, `crates/apc-core/tests/scene_lock.rs`, `app/tests/export.spec.ts`, `app/tests/export-show.spec.ts`.
+- The null test was checked by breaking the render on purpose: it fails at −2 dB and −22 dB when a return is misrouted, and passes better than −100 dB when it's right.
+- `duplicate_sounds`, written by another session after the lock, was refused on a locked scene with no change to it.
+- In the real app (WKWebView through Tauri, with a test script): page, rows, a background export of real files, banner, unlock.
+- Everything ran on temp demos. **Nothing was run against the real tm-2610 share.**
+
+**Manual checks for Rob**
+
+1. **Resolve and Logic:** open a scene's FCPXML, once from the recordings and once from the stems, and check the lanes, the two room lanes and the markers. Stack the stems of a scene and check they line up.
+2. **The pipeline folder:** on tm-2610 the proposal is `tm-2610/Sound`, so exports land in `Sound/Exports/`, beside `sfx` and `music`. Is that where deliverables belong? (Open question 1.)
+3. **By hand in the real app:** a press of ⌘E, the native popups, Reveal in the Finder and Choose… for the folder. The test script can't send real keys or open native menus.
+4. **Export a scene of Episode 2,** and listen to the stems against the mix.
+5. **The open questions, answered as proposed:** gain and pan flag a scene rather than block it (2), versions per scene and episode only (3), lock after export on by default (4), MP3 for the mix only (5). Say if any should go the other way.

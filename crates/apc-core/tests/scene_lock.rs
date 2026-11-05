@@ -152,6 +152,13 @@ fn whatever_moves_something_in_a_locked_scene_is_refused() {
     }))
     .unwrap();
     refused(&mut bus, Command::PlaceSound { placement: p });
+    // written after the lock, by another hand, and never listed anywhere: still covered
+    refused(
+        &mut bus,
+        Command::DuplicateSounds {
+            placement_ids: vec!["pl".into()],
+        },
+    );
     // one edit of a batch is enough to refuse the batch
     refused(
         &mut bus,
