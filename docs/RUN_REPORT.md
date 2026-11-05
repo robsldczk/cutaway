@@ -23,6 +23,16 @@ Details: `docs/design/round2-screens.md` (the spec files are read-only in this c
 - Import › Files on TARMAC: drop the fixture folder, check the cards, switch a file's type, link a room file by hand, Redo match, Start analysis.
 - Edit: drag a preview onto SFX 1 near an action line and watch it download and snap; try Split, Fade and Gain on a clip; mute and solo lanes while playing; set a cycle range by dragging in the ruler and press C.
 
+## Takes changed in place, lines read as said (D105, 2026-11-05)
+
+**Built:** the mapping editor saves to the current take or a new one. Cards show what each take says, with a text field to correct it and the script beside it. A longer crop shows the whole sentence. The × and Delete… ask: delete take or delete line.
+
+**Verified:** `check.sh` and Playwright green. Not listened to, and not looked at on Episode 2's real transcripts.
+
+**Rob, by eye:**
+- Scroll Episode 2 on Options. Misheard words are back on the cards, which D72 had hidden: is that a fair price, or should matched words keep the script's spelling?
+- Correct a word and play: does the highlight still follow?
+
 ## The mapping editor (D104, 2026-11-05)
 
 **Built:** M on Options opens the current line's mic on its take: the waveform with the heard words on it, in and out marks, the whole file on a strip, and a sentence search. Create take makes a new take, exact to the marks, and picks it. A plus on hover between two lines opens the same editor for a new line. An × on hover deletes a line or direction, after asking. ⌘Z undoes each. Marked takes, added lines and deletions survive a re-run of the analysis, and deletions a new script version. On the CLI and MCP as `recording`, `add_take`, `add_line` and `delete_line`.

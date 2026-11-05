@@ -412,6 +412,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Options not taken:** lengthening the clips themselves (would push every pause out by lead-in + tail); a longer fade alone (fades into the first consonant instead of running up to it); per-line handles (Rob asked for one global value; trims still adjust single lines).
 
 ### D72 The editor reads the script, timed by what was heard (Rob, 2026-11-03)
+*Replaced by D105: the cards now read what was said.*
 - **Rob:** transcription errors show in the boxes; the editor should see the script's real words, and the word highlight should carry on through a mismatch. Change nothing in the analysis.
 - **Choice:**
   - Display only, in the UI (`app/src/lib/words.ts`). The take words, the matching and the stored data are untouched.
@@ -773,4 +774,17 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Older builds:** a project with a Marked take needs this build or later. An older one can't read the origin.
 - **On Episode 2 (a copy):** a 50-minute mic is 2058 words, 247 kB, no noticeable wait. A sentence search takes a few ms, and finds a line with two words wrong unless that's over 30 % of it. A take made from real audio came out exact (743.11 to 746.23), with its own loudness, and undo gave back the 11 takes before it. Not listened to.
 - **In the real webview:** on a demo, with in-page events and no sound: 28 checks of the editor, the plus and the question, on WKWebView. Keys, wheel, drags, focus and undo work. A real mouse and hover, real typing and the sound on a real device wait for Rob.
+
+### D105 Takes can be changed and deleted, and a line reads as it was said (Rob, 2026-11-05)
+- **Rob:** not only a new take: the current take can be edited, and delete deletes the take. Fields sometimes show wrongly attributed text, so show what was transcribed, with a field to put the right word in. A longer crop should show the whole sentence, not just "the". The delete pop-up asks take or line.
+- **Why it read "the":** D72 shows the script's words, and only those matched. Words heard outside the script had no place, so a crop longer than the line lost them.
+- **Replaces D72.** Every card, the box editor, Arrange and Edit show the take's own words. `lib/words.ts` lost the spreading of script words over heard ones. **The cost:** the transcription errors D72 hid are back on the cards, on every take. The way out is the text field. Options: script spelling where a heard word matches a script word, heard words elsewhere. Rob asked for the transcription, so this stays simple until he's seen it on Episode 2.
+- **Three actions in the editor:** Save take N (⌘⏎) changes it where it stands, Save as new take (⏎), Delete…. Enter stays on the one that loses nothing. Numbers along the top and the T chips on the waveform move the editor to another take of the line.
+- **`edit_take`:** the number, favorite, pick and notes stay. New marks or another mic make it `Marked`. New text alone makes it `Corrected`: the matcher's edges and handles stay, because fixing a word mustn't change what's heard. Options: everything `Marked`, but a spelling fix would then clip the line's handles. New marks clear what was cut to the old stretch: trims, comp, splits, word edits.
+- **The text:** stored in the take's words, so karaoke, comps, word delete and the SRT follow with no second copy. `timed` aligns what was typed to what was heard: a word that matches keeps its time, the others share the time around them by length, so a corrected word takes the place of the misheard ones.
+- **A correction belongs to the take.** The transcript and the search don't change; the script doesn't. In the editor a take's own words lie over the mic's, so a correction stays when the crop grows. Text typed in the field doesn't follow the marks after that: Use what's heard fills it again.
+- **Cut list and FCPXML names stay on the script's text:** they say which line it is.
+- **`delete_take`:** the line stays, the next take is picked, the numbers close up. With the last take gone the line shows "no takes".
+- **A re-run doesn't undo either.** `BoxState::dismissed` remembers a deleted take by id and stretch, and more than half of the same stretch on the same mic counts as the same performance. An edited take keeps its id, so the matcher finding it again changes nothing.
+- **The pop-up:** one, from the card's × and the editor's Delete…: Delete take N, with the focus, or Delete line. Rob's earlier "just deletes" would have been no question at all; he then asked for the question. A line without takes and a direction only offer themselves.
 
