@@ -1,5 +1,8 @@
 <script lang="ts">
   import ClipState from '../components/ClipState.svelte';
+  import DeleteLine from '../components/DeleteLine.svelte';
+  import Icon from '../components/Icon.svelte';
+  import MappingEditor from '../components/MappingEditor.svelte';
   import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { fmt } from '../lib/format';
@@ -16,7 +19,9 @@
   type Row =
     | { kind: 'line'; it: ItemView; j: number }
     | { kind: 'gap'; h: number; j: number }
-    | { kind: 'act'; it: ItemView; d: number; gap: number };
+    | { kind: 'act'; it: ItemView; d: number; gap: number }
+    /** The plus between two lines: a new line goes after item `after`. */
+    | { kind: 'plus'; key: string; after: string | null };
 
   const rows = $derived.by(() => {
     const out: Row[] = [];
@@ -24,7 +29,10 @@
     if (!v) return out;
     let j = -1;
     let pending: ItemView[] = [];
+    let last: string | null = null;
     for (const it of v.items) {
+      const before = last;
+      last = it.line_id;
       if (it.kind === 'spacer') {
         pending.push(it);
         continue;
@@ -37,9 +45,11 @@
         out.push({ kind: 'gap', h: gap, j });
       }
       pending = [];
+      out.push({ kind: 'plus', key: `p${it.line_id}`, after: before });
       out.push({ kind: 'line', it, j });
     }
     for (const p of pending) out.push({ kind: 'act', it: p, d: Math.abs(j + 0.5 - app.curIndex), gap: 0.6 });
+    out.push({ kind: 'plus', key: 'p-end', after: last });
     return out;
   });
 
@@ -149,12 +159,17 @@
 
 <div class="optmask">
   <div class="col" style="width: min({Math.round(640 * sc)}px, 88%); transform: translate(-50%, -{off.toFixed(1)}px); transition: {ready ? 'transform var(--dur-scroll) var(--ease-scroll)' : 'none'}">
-    {#each rows as r, ri (r.kind === 'line' ? r.it.line_id : r.kind === 'act' ? r.it.line_id : 'g' + ri)}
-      {#if r.kind === 'gap'}
+    {#each rows as r, ri (r.kind === 'line' ? r.it.line_id : r.kind === 'act' ? r.it.line_id : r.kind === 'plus' ? r.key : 'g' + ri)}
+      {#if r.kind === 'plus'}
+        <div class="ins" data-own-keys>
+          <div class="zone"><button class="plus" aria-label="Add a line here" title="Add a line here" onclick={() => app.openMapping({ kind: 'line', after: r.after })} data-testid="add-line"><Icon name="plus" size={12} /></button></div>
+        </div>
+      {:else if r.kind === 'gap'}
         <div style="flex: none; height: {Math.round(Math.max(r.h, 0) * 10 * sc)}px; margin-top: {r.h < 0 ? Math.round(r.h * 14) : 0}px"></div>
       {:else if r.kind === 'act'}
-        <div style="flex: none; opacity: {Math.max(0.35, 1 - r.d * 0.12).toFixed(2)}; margin: {Math.round(Math.max(r.gap, 0) * 6 * sc)}px 0">
+        <div class="actrow" data-own-keys style="flex: none; opacity: {Math.max(0.35, 1 - r.d * 0.12).toFixed(2)}; margin: {Math.round(Math.max(r.gap, 0) * 6 * sc)}px 0">
           <button class="script act" class:off={!r.it.spacer_enabled} style="font-size: {Math.round(13 * sc)}px" title={r.it.text} onclick={(e) => (e.currentTarget as HTMLElement).classList.toggle('open')}>{r.it.text}</button>
+          <button class="rm" aria-label="Delete this direction" title="Delete" onclick={() => app.askDelete(r.it.line_id)} data-testid="delete-line">×</button>
         </div>
       {:else if cur && r.it.line_id === cur.line_id}
         <div class="active" bind:this={activeEl} data-testid="current-box">
@@ -169,9 +184,14 @@
                   {#if take?.favorite}<span style="font-size: 13px; color: {color.name}" title={take.favorite_origin === 'director' ? 'Director pick' : 'Your favorite'}>★</span>{/if}
                   {#if cur.low_confidence}<button class="lowc" title="Low confidence: open the inspector (⌘I)" aria-label="Low confidence" onclick={() => (app.drawer = 'inspector')}></button>{/if}
                   {#if cur.edited_in_edit}<button class="edited" onclick={() => app.setPage('edit')} title="Edited on the Edit page">edited in Edit</button>{/if}
+                  {#if cur.adlib}<span class="added" title="Not in the script">added</span>{/if}
                   <ClipState it={cur} />
                 </div>
-                <span class="pos" data-testid="take-pos">{cur.takes.length ? `${k + 1} / ${cur.takes.length}` : 'no takes'}</span>
+                <div class="tools" data-own-keys>
+                  <button class="map" ondblclick={(e) => e.stopPropagation()} onclick={() => app.openMapping({ kind: 'take', line_id: cur.line_id })} title="Mark the right take by hand" data-testid="open-mapping">Find take <span class="kb">M</span></button>
+                  <button class="rm" ondblclick={(e) => e.stopPropagation()} aria-label="Delete this line" title="Delete" onclick={() => app.askDelete(cur.line_id)} data-testid="delete-line">×</button>
+                  <span class="pos" data-testid="take-pos">{cur.takes.length ? `${k + 1} / ${cur.takes.length}` : 'no takes'}</span>
+                </div>
               </div>
               {#if cur.paren}<p class="script paren" style="font-size: {Math.round(14 * sc)}px">({cur.paren})</p>{/if}
               <p class="script line" style="font-size: {Math.round(24 * sc)}px" data-testid="current-text">
@@ -226,7 +246,10 @@
         <div class="boxs" class:passage={inPassage(r.it.line_id)} class:clip-muted={r.it.muted} class:clip-dropped={r.it.dropped} onclick={() => app.select(r.it.line_id)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} style="flex: none; {lineStyle(r.it, r.j)}" role="button" tabindex="-1" onkeydown={() => {}}>
           <div class="hd small">
             <span class="nm" style="color: {charColor(app.view, r.it.character).name}; font-size: {Math.max(10, Math.round(11 * sc))}px">{charLabel(app.view, r.it.character)}</span>
-            <span class="info">{r.it.takes[r.it.take_index ?? 0]?.favorite ? '★ ' : ''}{r.it.takes.length ? `${(r.it.take_index ?? 0) + 1}/${r.it.takes.length}` : '—'}{r.it.edited_in_edit ? ' · Edit' : ''}{r.it.dropped ? ' · cut' : r.it.muted ? ' · muted' : ''}</span>
+            <div class="tools" data-own-keys>
+              <button class="rm" ondblclick={(e) => e.stopPropagation()} aria-label="Delete this line" title="Delete" onclick={(e) => { e.stopPropagation(); app.askDelete(r.it.line_id); }} data-testid="delete-line">×</button>
+              <span class="info">{r.it.takes[r.it.take_index ?? 0]?.favorite ? '★ ' : ''}{r.it.takes.length ? `${(r.it.take_index ?? 0) + 1}/${r.it.takes.length}` : '—'}{r.it.adlib ? ' · added' : ''}{r.it.edited_in_edit ? ' · Edit' : ''}{r.it.dropped ? ' · cut' : r.it.muted ? ' · muted' : ''}</span>
+            </div>
           </div>
           {#if r.it.paren}<p class="script paren2" style="font-size: {Math.round(13 * sc)}px">({r.it.paren})</p>{/if}
           <p class="script txt" style="font-size: {Math.round(18 * sc)}px">{textOf(r.it)}</p>
@@ -235,6 +258,9 @@
     {/each}
   </div>
 </div>
+
+{#if app.overlay === 'mapping' && app.mapping}<MappingEditor />{/if}
+{#if app.overlay === 'delete-line' && app.deleting}<DeleteLine />{/if}
 
 <style>
   .optmask {
@@ -251,6 +277,109 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+  /* no height of its own: the plus sits in the gap above the next row */
+  .ins {
+    flex: none;
+    position: relative;
+    height: 0;
+    margin-bottom: -12px;
+    z-index: 7;
+  }
+  .zone {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .zone::before {
+    content: '';
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    top: 50%;
+    height: 1px;
+    background: var(--text-5);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .plus {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-on-light);
+    background: var(--button-light);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .zone:hover::before,
+  .zone:hover .plus,
+  .plus:focus-visible {
+    opacity: 1;
+  }
+  .tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rm {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 15px;
+    line-height: 18px;
+    color: var(--text-3);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .rm:hover {
+    background: var(--glass-hover);
+    color: var(--text-strong);
+  }
+  .map {
+    height: 22px;
+    padding: 0 8px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    color: var(--text-3);
+    box-shadow: inset 0 0 0 1px var(--text-5);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .map:hover {
+    color: var(--text-strong);
+  }
+  .active:hover .rm,
+  .active:hover .map,
+  .boxs:hover .rm,
+  .actrow:hover .rm,
+  .rm:focus-visible,
+  .map:focus-visible {
+    opacity: 1;
+  }
+  .actrow {
+    position: relative;
+  }
+  .actrow .rm {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .added {
+    font-size: 10px;
+    padding: 1px 7px;
+    border-radius: var(--radius-pill);
+    box-shadow: inset 0 0 0 1px var(--text-5);
+    color: var(--text-3);
   }
   .act {
     display: block;

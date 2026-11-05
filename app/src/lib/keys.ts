@@ -11,7 +11,7 @@ export function onKey(e: KeyboardEvent) {
   // a slider keeps the focus after a drag: its undo must still work, its arrows stay its own
   const sliderUndo = t instanceof HTMLInputElement && t.type === 'range' && (e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z');
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && e.key !== 'Escape' && !sliderUndo) return;
-  if (app.overlay === 'editor') return;
+  if (app.overlay === 'editor' || app.overlay === 'mapping') return;
   if (ownArrows(e)) return;
   // a button reached with Tab does what it says; after a click Space still plays
   if ((e.key === 'Enter' || e.key === ' ') && t?.tagName === 'BUTTON' && t.closest('[data-own-keys]') && t.matches(':focus-visible')) return;
@@ -48,6 +48,7 @@ export function onKey(e: KeyboardEvent) {
   else if (k === 'ArrowLeft' && app.page !== 'edit') void app.stepTake(-1);
   else if (k === 'ArrowRight' && app.page !== 'edit') void app.stepTake(1);
   else if (e.ctrlKey && (k === 'm' || k === 'M')) void app.toggleMuteCurrent();
+  else if ((k === 'm' || k === 'M') && !mod && app.page === 'options' && app.cur) app.openMapping({ kind: 'take', line_id: app.cur.line_id });
   else if (k === 'f' || k === 'F') void app.toggleFav();
   else if (k === 'e' || k === 'E') openEditor();
   else if (mod && (k === 'i' || k === 'I')) app.drawer = app.drawer === 'inspector' ? null : 'inspector';

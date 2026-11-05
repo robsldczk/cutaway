@@ -1,6 +1,6 @@
 // Dev panel types (views from `dev_sessions` / `dev_session`).
 
-export type TakeOrigin = 'matcher' | 'rescue' | 'manual';
+export type TakeOrigin = 'matcher' | 'rescue' | 'manual' | 'marked';
 export type MarkKind = 'missed_take' | 'wrong_line' | 'not_a_take' | 'edges' | 'other';
 export type MarkStatus = 'open' | 'proposed' | 'applied' | 'discarded';
 

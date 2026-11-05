@@ -8,7 +8,10 @@ const soundId = (key: SoundKey) => key.asset_id ?? key.remote_id ?? key.clip?.id
 export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'dev';
 export type ImportTab = 'files' | 'sounds' | 'rooms';
 export type Tool = 'pointer' | 'split' | 'fade' | 'gain' | 'marquee';
-export type Overlay = null | 'help' | 'editor' | 'settings' | 'history' | 'export';
+export type Overlay = null | 'help' | 'editor' | 'mapping' | 'delete-line' | 'settings' | 'history' | 'export';
+
+/** What the mapping editor is for: a new take of a line, or a new line after an item. */
+export type MappingTarget = { kind: 'take'; line_id: string } | { kind: 'line'; after: string | null };
 export type Drawer = null | 'inspector' | 'unmatched' | 'bucket';
 
 export type Theme = 'dark' | 'light';
@@ -116,6 +119,9 @@ class AppState {
   scale = $state(1);
   overlay = $state<Overlay>(null);
   drawer = $state<Drawer>(null);
+  mapping = $state<MappingTarget | null>(null);
+  /** The line the delete question is about. */
+  deleting = $state<string | null>(null);
   anim = $state({ n: 0, dir: 'R', id: '' });
   toast = $state<string | null>(null);
   busy = $state(false);
@@ -528,6 +534,54 @@ class AppState {
     const to = it?.takes.findIndex((t) => t.id === takeId) ?? 0;
     this.anim = { n: this.anim.n + 1, dir: to >= from ? 'R' : 'L', id: lineId };
     await this.cmd({ cmd: 'select_take', line_id: lineId, take_id: takeId });
+  }
+
+  /** The mapping editor (Options only). */
+  openMapping(target: MappingTarget) {
+    if (this.page !== 'options') return;
+    if (this.playing) void this.stop();
+    this.mapping = target;
+    this.overlay = 'mapping';
+  }
+
+  /** Makes a new take of a line from a stretch of a recording; it becomes the picked take. */
+  async addTake(lineId: string, sourceId: string, t0: number, t1: number) {
+    const r = await this.method<{ take_no: number }>('add_take', { line_id: lineId, source_id: sourceId, t0, t1 });
+    if (!r) return false;
+    this.curId = lineId;
+    if (this.cur) this.pos = this.cur.start_s;
+    this.say(`Take ${r.take_no} added`);
+    return true;
+  }
+
+  /** Adds a line after an item of the scene (first without one) and goes to it. */
+  async addLine(after: string | null, character: string, sourceId: string, t0: number, t1: number, text: string) {
+    const r = await this.method<{ line_id: string }>('add_line', { scene: this.sceneId, after, character, source_id: sourceId, t0, t1, text });
+    if (!r) return false;
+    this.curId = r.line_id;
+    if (this.cur) this.pos = this.cur.start_s;
+    this.say('Line added');
+    return true;
+  }
+
+  askDelete(lineId: string) {
+    this.deleting = lineId;
+    this.overlay = 'delete-line';
+  }
+
+  async deleteLine() {
+    const id = this.deleting;
+    this.overlay = null;
+    this.deleting = null;
+    if (!id) return;
+    if (this.playing) await this.stop();
+    const r = await this.method<{ next: string | null }>('delete_line', { line_id: id, confirm: true });
+    if (!r) return;
+    if (this.curId === id) {
+      this.curId = r.next;
+      if (this.cur) this.pos = this.cur.start_s;
+    }
+    this.say('Deleted. ⌘Z brings it back');
   }
 
   async toggleFav() {

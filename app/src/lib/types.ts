@@ -614,6 +614,55 @@ export interface PerformanceResults {
   heard: boolean;
 }
 
+/** A character with their mics, in the mapping editor. */
+export interface MappingVoice {
+  id: string;
+  label: string;
+  color_index: number;
+  /** Session time = file time − offset_s. */
+  mics: { id: string; name: string; duration_s: number; offset_s: number; session_id: string | null }[];
+}
+
+/** Where the mapping editor opens. */
+export interface MappingOpen {
+  cast: MappingVoice[];
+  character: string | null;
+  source_id: string | null;
+  /** Where to look first, in source-file seconds. */
+  at_s: number;
+  /** The line's take, when it has one. */
+  t0: number | null;
+  t1: number | null;
+}
+
+export interface RecordingWord {
+  text: string;
+  t0: number;
+  t1: number;
+}
+
+export interface RecordingTake {
+  id: string;
+  line_id: string;
+  take_no: number;
+  t0: number;
+  t1: number;
+  text: string;
+}
+
+/** One mic as heard. */
+export interface Recording {
+  source_id: string;
+  name: string;
+  character: string | null;
+  duration_s: number;
+  /** It has a transcript. */
+  heard: boolean;
+  words: RecordingWord[];
+  takes: RecordingTake[];
+  overview: number[];
+}
+
 /** What the preview player shows of it. */
 export interface SoundFace {
   name: string;

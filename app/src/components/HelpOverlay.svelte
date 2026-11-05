@@ -11,6 +11,7 @@
     ['Apply take to passage', ['P']],
     ['Favorite take', ['F']],
     ['Box editor', ['E']],
+    ['Mapping editor: mark the right take by hand (Options)', ['M']],
     ['Inspector', ['⌘I']],
     ['Unmatched bin', ['U']],
     ['Sound bucket', ['B']],

@@ -93,7 +93,7 @@
     for (const r of s?.rows ?? []) {
       if (r.status.kind === 'take') {
         if (r.status.origin === 'rescue') c.rescue++;
-        else if (r.status.origin === 'manual') c.manual++;
+        else if (r.status.origin === 'manual' || r.status.origin === 'marked') c.manual++;
         else c.take++;
       } else if (r.status.kind === 'near_miss') c.near++;
       else if (r.status.kind === 'unmatched') c.unmatched++;
@@ -255,7 +255,7 @@
               <div class="c rs" role="cell">
                 {#if r.status.kind === 'take' && r.status.origin === 'rescue'}
                   <span class="lbl">rescued</span>{#if r.status.read_as}<span class="read">“{r.status.read_as}”</span>{/if}
-                {:else if r.status.kind === 'take' && r.status.origin === 'manual'}
+                {:else if r.status.kind === 'take' && (r.status.origin === 'manual' || r.status.origin === 'marked')}
                   <span class="lbl">linked by hand</span>
                 {:else if r.status.kind === 'near_miss'}
                   <span class="lbl">near miss · {r.status.score}%</span>
