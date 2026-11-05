@@ -1,6 +1,9 @@
 // Dev panel types (views from `dev_sessions` / `dev_session`).
 
-export type TakeOrigin = 'matcher' | 'rescue' | 'manual' | 'marked';
+export type TakeOrigin = 'matcher' | 'rescue' | 'manual' | 'marked' | 'corrected';
+
+/** Settled by a person, in the dev panel or the mapping editor. */
+export const byHand = (o: TakeOrigin | null | undefined) => o === 'manual' || o === 'marked' || o === 'corrected';
 export type MarkKind = 'missed_take' | 'wrong_line' | 'not_a_take' | 'edges' | 'other';
 export type MarkStatus = 'open' | 'proposed' | 'applied' | 'discarded';
 

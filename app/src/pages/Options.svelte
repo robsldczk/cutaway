@@ -1,6 +1,6 @@
 <script lang="ts">
   import ClipState from '../components/ClipState.svelte';
-  import DeleteLine from '../components/DeleteLine.svelte';
+  import DeleteSheet from '../components/DeleteSheet.svelte';
   import Icon from '../components/Icon.svelte';
   import MappingEditor from '../components/MappingEditor.svelte';
   import { tick } from 'svelte';
@@ -86,7 +86,7 @@
   const live = $derived(!!cur && (app.playing || (app.pos > cur.start_s + 0.01 && app.pos < cur.end_s)));
   const R = $derived(Math.round(32 * sc));
 
-  // the script's words, timed by what was heard
+  // the words as they were said
   const curWords = $derived(cur ? lineWords(cur) : []);
 
   function wordStyle(w: ShownWord) {
@@ -121,6 +121,11 @@
     let st = i === k ? `background: ${rgba(psh, 0.92)}; color: var(--text-on-pill)` : `background: var(--glass-fill-3); color: var(--text-3); box-shadow: inset 0 -2px 0 ${rgba(psh, 0.85)}`;
     if (partial) st += '; outline: 1px dashed rgb(var(--ink-rgb) / 0.45); outline-offset: -1px';
     return st;
+  }
+
+  function closeDelete() {
+    app.overlay = null;
+    app.deleting = null;
   }
 
   const inPassage = (id: string) => app.passage.some((p) => p.line_id === id);
@@ -188,7 +193,7 @@
                   <ClipState it={cur} />
                 </div>
                 <div class="tools" data-own-keys>
-                  <button class="map" ondblclick={(e) => e.stopPropagation()} onclick={() => app.openMapping({ kind: 'take', line_id: cur.line_id })} title="Mark the right take by hand" data-testid="open-mapping">Find take <span class="kb">M</span></button>
+                  <button class="map" ondblclick={(e) => e.stopPropagation()} onclick={() => app.openMapping({ kind: 'take', line_id: cur.line_id })} title="Change this take or find the right one" data-testid="open-mapping">Edit take <span class="kb">M</span></button>
                   <button class="rm" ondblclick={(e) => e.stopPropagation()} aria-label="Delete this line" title="Delete" onclick={() => app.askDelete(cur.line_id)} data-testid="delete-line">×</button>
                   <span class="pos" data-testid="take-pos">{cur.takes.length ? `${k + 1} / ${cur.takes.length}` : 'no takes'}</span>
                 </div>
@@ -260,7 +265,7 @@
 </div>
 
 {#if app.overlay === 'mapping' && app.mapping}<MappingEditor />{/if}
-{#if app.overlay === 'delete-line' && app.deleting}<DeleteLine />{/if}
+{#if app.overlay === 'delete-line' && app.deleting}<DeleteSheet lineId={app.deleting} onclose={closeDelete} />{/if}
 
 <style>
   .optmask {

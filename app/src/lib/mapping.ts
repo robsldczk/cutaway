@@ -55,6 +55,17 @@ export function textBetween(words: RecordingWord[], t0: number, t1: number): str
     .join(' ');
 }
 
+/** A mic's words with one take's own over its stretch: what was typed there replaces what the
+ *  recogniser heard. A take's words are in take time. */
+export function withTake(words: RecordingWord[], take: { src_in: number; src_out: number; words: RecordingWord[] }): RecordingWord[] {
+  const own = take.words.map((w) => ({ text: w.text, t0: w.t0 + take.src_in, t1: w.t1 + take.src_in }));
+  const rest = words.filter((w) => {
+    const mid = (w.t0 + w.t1) / 2;
+    return mid < take.src_in || mid >= take.src_out;
+  });
+  return [...rest, ...own].sort((a, b) => a.t0 - b.t0);
+}
+
 export interface PlacedWord extends RecordingWord {
   row: number;
 }

@@ -7,7 +7,7 @@
   import { call } from '../lib/bridge';
   import { fmt } from '../lib/format';
   import type { Job } from '../lib/types';
-  import { MARK_KINDS, splitMatches, type DevLine, type DevRow, type DevSession, type DevSessionItem, type MarkKind } from '../lib/dev';
+  import { byHand, MARK_KINDS, splitMatches, type DevLine, type DevRow, type DevSession, type DevSessionItem, type MarkKind } from '../lib/dev';
   import DevMarks from '../components/DevMarks.svelte';
   import DevLearn from '../components/DevLearn.svelte';
 
@@ -93,7 +93,7 @@
     for (const r of s?.rows ?? []) {
       if (r.status.kind === 'take') {
         if (r.status.origin === 'rescue') c.rescue++;
-        else if (r.status.origin === 'manual' || r.status.origin === 'marked') c.manual++;
+        else if (byHand(r.status.origin)) c.manual++;
         else c.take++;
       } else if (r.status.kind === 'near_miss') c.near++;
       else if (r.status.kind === 'unmatched') c.unmatched++;
@@ -255,7 +255,7 @@
               <div class="c rs" role="cell">
                 {#if r.status.kind === 'take' && r.status.origin === 'rescue'}
                   <span class="lbl">rescued</span>{#if r.status.read_as}<span class="read">“{r.status.read_as}”</span>{/if}
-                {:else if r.status.kind === 'take' && (r.status.origin === 'manual' || r.status.origin === 'marked')}
+                {:else if r.status.kind === 'take' && byHand(r.status.origin)}
                   <span class="lbl">linked by hand</span>
                 {:else if r.status.kind === 'near_miss'}
                   <span class="lbl">near miss · {r.status.score}%</span>

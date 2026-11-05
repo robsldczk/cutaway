@@ -66,7 +66,7 @@
   });
 
   const edText = $derived(it ? lineText(it) : '');
-  // the script's words, timed by what was heard; each stands for its heard words
+  // the words as they were said
   const edWords = $derived(it ? lineWords(it) : []);
   const takeOfWord = (w: ShownWord) => it?.words.find((x) => x.idx === w.idxs[0])?.take_id ?? it?.take_id ?? '';
   const ticks = $derived.by(() => {
@@ -414,12 +414,12 @@
         {@const used = usedBars(t)}
         <div class="lane">
           <button class="lbl" onclick={() => app.cmd({ cmd: 'select_take', line_id: it.line_id, take_id: t.id })} aria-label="Use whole take {i + 1}" title="Use the whole take" style="box-shadow: inset 3px 0 0 {rgba(lsh, 0.95)}">
-            <span class="t2">{src === t.id ? '▶ ' : ''}T{i + 1}{t.favorite ? ' ★' : ''}{i === k ? ' · picked' : ''}</span><span class="sub ellip">{firstSentence(t.direction || t.feedback) || takeWords(it.tokens, t.words).map((w) => w.text).join(' ') || t.heard}</span>
+            <span class="t2">{src === t.id ? '▶ ' : ''}T{i + 1}{t.favorite ? ' ★' : ''}{i === k ? ' · picked' : ''}</span><span class="sub ellip">{firstSentence(t.direction || t.feedback) || takeWords(t.words).map((w) => w.text).join(' ') || t.heard}</span>
           </button>
           <div class="area take" data-testid="take-lane" onmousedown={(e) => laneDown(e, i)} role="button" tabindex="-1" style="background: {rgba(lsh, src === t.id ? 0.1 : 0.05)}{src === t.id ? `; box-shadow: inset 0 0 0 1.5px ${rgba(lsh, 0.9)}` : ''}{t.partial ? '; outline: 1px dashed rgb(var(--ink-rgb) / 0.3); outline-offset: -1px' : ''}">
             <Waveform peaks={t.peaks} fill={rgba(lsh, used.length ? 0.72 : 0.42)} />
             {#each used as u, j (j)}<div class="used" style="left: {u.a * 100}%; width: {(u.b - u.a) * 100}%; background: {rgba(lsh, 1)}"></div>{/each}
-            {#if showWords}{#each takeWords(it.tokens, t.words) as w (w.j)}<span class="ew static" style="left: {(w.start / t.duration) * 100}%; width: {((w.end - w.start) / t.duration) * 100}%{auditioning && src === t.id && app.pos >= w.start && app.pos <= w.end ? '; ' + hl(lsh) : ''}">{w.text}</span>{/each}{/if}
+            {#if showWords}{#each takeWords(t.words) as w (w.j)}<span class="ew static" style="left: {(w.start / t.duration) * 100}%; width: {((w.end - w.start) / t.duration) * 100}%{auditioning && src === t.id && app.pos >= w.start && app.pos <= w.end ? '; ' + hl(lsh) : ''}">{w.text}</span>{/each}{/if}
             {#if paint && paint.lane === i}<div class="paint" style="left: {Math.min(paint.a, paint.b) * 100}%; width: {Math.abs(paint.b - paint.a) * 100}%; background: {rgba(lsh, 0.25)}; box-shadow: inset 0 0 0 1px {rgba(lsh, 0.95)}"></div>{/if}
           </div>
         </div>

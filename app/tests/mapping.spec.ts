@@ -186,9 +186,108 @@ test('the X asks first, deletes, and ⌘Z brings the line back', async ({ page }
   await row.hover();
   await row.getByTestId('delete-line').click();
   if (shots) await page.screenshot({ path: `${shots}/mapping-delete.png` });
-  await page.keyboard.press('Enter');
+  await page.getByTestId('delete-line-yes').click();
   await expect(lines).toHaveCount(count - 1);
 
   await page.keyboard.press('Meta+z');
   await expect(lines).toHaveCount(count);
+});
+
+test('the question also offers the take, and Enter says that', async ({ page }) => {
+  await open(page);
+  const box = page.getByTestId('current-box');
+  await box.hover();
+  await box.getByTestId('delete-line').click();
+  await expect(page.getByTestId('delete-take-yes')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('take-pos')).toHaveText('1 / 1');
+  await page.keyboard.press('Meta+z');
+  await expect(page.getByTestId('take-pos')).toHaveText('2 / 2');
+});
+
+test('Save take changes the take where it stands', async ({ page }) => {
+  await open(page);
+  await openEditor(page);
+  const save = page.getByTestId('mapping-save');
+  await expect(save).toBeDisabled();
+
+  const lane = (await page.getByTestId('mapping-lane').boundingBox())!;
+  const handle = (await page.getByTestId('mark-in').boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, lane.y + 80);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 + 40, lane.y + 80, { steps: 4 });
+  await page.mouse.up();
+  await expect(save).toBeEnabled();
+  if (shots) await page.screenshot({ path: `${shots}/mapping-edit.png` });
+  await save.click();
+  await expect(page.getByTestId('mapping-editor')).toBeHidden();
+  await expect(page.getByTestId('take-pos')).toHaveText('2 / 2');
+  await page.keyboard.press('Meta+z');
+});
+
+test('a corrected word shows on the card, and the script stays beside it', async ({ page }) => {
+  await open(page);
+  await openEditor(page);
+  await expect(page.getByTestId('script-text')).toContainText('machine');
+  const field = page.getByTestId('line-text');
+  await expect(field).toHaveValue(/machine/);
+  await field.fill((await field.inputValue()).replace('machine', 'contraption'));
+  await page.keyboard.press('Meta+Enter');
+  await expect(page.getByTestId('mapping-editor')).toBeHidden();
+  await expect(page.getByTestId('current-text')).toContainText('contraption');
+
+  // it's what the editor reads next time, and the mic's other words are as heard
+  await openEditor(page);
+  await expect(page.getByTestId('line-text')).toHaveValue(/contraption/);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Meta+z');
+  await expect(page.getByTestId('current-text')).toContainText('machine');
+});
+
+test('a longer crop says the whole of it, and text typed over waits for a word', async ({ page }) => {
+  await open(page);
+  await openEditor(page);
+  const field = page.getByTestId('line-text');
+  const short = await field.inputValue();
+  const lane = (await page.getByTestId('mapping-lane').boundingBox())!;
+  const handle = (await page.getByTestId('mark-out').boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, lane.y + 80);
+  await page.mouse.down();
+  await page.mouse.move(lane.x + lane.width - 20, lane.y + 80, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => (await field.inputValue()).length).toBeGreaterThan(short.length);
+
+  await field.fill('Something typed.');
+  await page.getByTestId('use-heard').click();
+  await expect.poll(async () => (await field.inputValue()).length).toBeGreaterThan(short.length);
+  await page.keyboard.press('Escape');
+});
+
+test('Delete in the editor asks the same, and No goes back to it', async ({ page }) => {
+  await open(page);
+  await openEditor(page);
+  await page.getByTestId('mapping-delete').click();
+  await expect(page.getByTestId('delete-take-yes')).toBeVisible();
+  await expect(page.getByTestId('delete-line-yes')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('delete-take-yes')).toBeHidden();
+  await expect(page.getByTestId('mapping-editor')).toBeVisible();
+
+  await page.getByTestId('mapping-delete').click();
+  await page.getByTestId('delete-take-yes').click();
+  await expect(page.getByTestId('mapping-editor')).toBeHidden();
+  await expect(page.getByTestId('take-pos')).toHaveText('1 / 1');
+  await page.keyboard.press('Meta+z');
+  await expect(page.getByTestId('take-pos')).toHaveText('2 / 2');
+});
+
+test('the editor moves between the takes of the line', async ({ page }) => {
+  await open(page);
+  await openEditor(page);
+  const marks = page.getByTestId('mapping-marks');
+  const before = await marks.textContent();
+  await page.getByTestId('mapping-take').first().click();
+  await expect(marks).not.toHaveText(before!);
+  await expect(page.getByTestId('mapping-save')).toContainText('Save take 1');
+  await page.keyboard.press('Escape');
 });

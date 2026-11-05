@@ -1,14 +1,16 @@
 <script lang="ts">
-  // The mapping editor (D104), on the Options page: when the matcher got it wrong, you read and
-  // listen along a character's mic, mark in and out, and that stretch becomes a new take of the
-  // line, or a new line. It only reads the recording; the one change is the button at the end.
+  // The mapping editor (D104, D105), on the Options page: when the matcher got it wrong, you read
+  // and listen along a character's mic and mark in and out. That stretch changes a take, or
+  // becomes a new take or a new line, and the text field says what's said in it. It only reads
+  // the recording; nothing changes until one of the buttons at the top.
   import { onDestroy, onMount, tick } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { call } from '../lib/bridge';
   import { charColor, rgba } from '../lib/colors';
-  import { around, clock, fit, MIN_MARK_S, pan, placeWords, textBetween, ticks, zoom, type Span } from '../lib/mapping';
+  import { around, clock, fit, MIN_MARK_S, pan, placeWords, textBetween, ticks, withTake, zoom, type Span } from '../lib/mapping';
   import type { MappingOpen, MappingVoice, PerformanceHit, PerformanceResults, Recording } from '../lib/types';
   import { colorOf, solid } from '../theme';
+  import DeleteSheet from './DeleteSheet.svelte';
   import Icon from './Icon.svelte';
   import Waveform from './Waveform.svelte';
 
@@ -19,10 +21,13 @@
   const PX_PER_CHAR = 7;
   const STEP_S = 0.01;
   const BIG_STEP_S = 0.1;
+  /** Marks this close to a take's own haven't moved. */
+  const SAME_MARK_S = 0.002;
 
   const target = app.mapping;
   const line = target?.kind === 'take' ? app.lines.find((l) => l.line_id === target.line_id) : undefined;
   const adding = target?.kind === 'line';
+  const takes = line?.takes ?? [];
 
   let opened = $state<MappingOpen | null>(null);
   let rec = $state<Recording | null>(null);
@@ -38,9 +43,12 @@
   let found = $state<PerformanceResults | null>(null);
   let searched = $state('');
   let picked = $state<string | null>(null);
-  /** What the new line says, once typed over. */
+  /** The take being edited. */
+  let editing = $state<string | null>(line?.take_id ?? null);
+  /** What's said, once typed over. */
   let typed = $state<string | null>(null);
   let saving = $state(false);
+  let asking = $state(false);
 
   let lane = $state<HTMLElement>();
   let laneW = $state(1000);
@@ -57,17 +65,24 @@
   };
   const dur = $derived(rec?.duration_s ?? 0);
 
-  const words = $derived(rec ? placeWords(rec.words, view, pxPerS, PX_PER_CHAR, WORD_ROWS) : []);
+  const current = $derived(takes.find((t) => t.id === editing));
+  /** What's said on this mic: what was heard, with the take's own words over its stretch. */
+  const said = $derived(rec ? (current?.source_id === rec.source_id ? withTake(rec.words, current) : rec.words) : []);
+  const words = $derived(placeWords(said, view, pxPerS, PX_PER_CHAR, WORD_ROWS));
   const hidden = $derived(!!rec && rec.heard && pxPerS < 18);
   const rulerTicks = $derived(ticks(view, pxPerS));
   const takesHere = $derived((rec?.takes ?? []).filter((t) => t.t1 > view.t0 && t.t0 < view.t1));
   const own = (lineId: string) => target?.kind === 'take' && target.line_id === lineId;
   const takeNo = (id: string) => line?.takes.findIndex((t) => t.id === id) ?? -1;
 
-  const between = $derived(marks && rec ? textBetween(rec.words, marks.t0, marks.t1) : '');
+  const between = $derived(marks ? textBetween(said, marks.t0, marks.t1) : '');
   const text = $derived(typed ?? between);
   const length = $derived(marks ? marks.t1 - marks.t0 : 0);
   const ready = $derived(!!rec && length >= MIN_MARK_S && (!adding || text.trim().length > 0) && !saving);
+  const moved = $derived(!!current && !!marks && (rec?.source_id !== current.source_id || Math.abs(marks.t0 - current.src_in) > SAME_MARK_S || Math.abs(marks.t1 - current.src_out) > SAME_MARK_S));
+  const retyped = $derived(!!current && text.trim() !== current.words.map((w) => w.text).join(' '));
+  const canSave = $derived(ready && !!current && (moved || retyped));
+  const currentNo = $derived(takes.findIndex((t) => t.id === editing) + 1);
 
   const playing = $derived(app.previewing(PREVIEW_ID));
   const head = $derived(playing && app.preview ? playFrom + app.preview.pos : null);
@@ -256,7 +271,7 @@
   /** A word double-clicked is marked. */
   function laneDouble(e: MouseEvent) {
     const t = timeAt(e.clientX);
-    const w = rec?.words.find((x) => t >= x.t0 && t <= x.t1);
+    const w = said.find((x) => t >= x.t0 && t <= x.t1);
     if (w) marks = { t0: w.t0, t1: w.t1 };
   }
 
@@ -322,21 +337,45 @@
     app.mapping = null;
   }
 
+  const r3 = (t: number) => +t.toFixed(3);
+
   async function create() {
     if (!ready || !marks || !rec) return;
     saving = true;
     const { t0, t1 } = marks;
     const id = rec.source_id;
-    const r3 = (t: number) => +t.toFixed(3);
     const ok =
       target?.kind === 'take'
-        ? await app.addTake(target.line_id, id, r3(t0), r3(t1))
+        ? await app.addTake(target.line_id, id, r3(t0), r3(t1), text.trim() || undefined)
         : await app.addLine(target?.after ?? null, character ?? '', id, r3(t0), r3(t1), text.trim());
     saving = false;
     if (ok) close();
   }
 
+  async function save() {
+    if (!canSave || !marks || !rec || !current) return;
+    saving = true;
+    const stretch = moved ? { source_id: rec.source_id, t0: r3(marks.t0), t1: r3(marks.t1) } : {};
+    const ok = await app.editTake(current.id, { ...stretch, text: text.trim() || undefined });
+    saving = false;
+    if (ok) close();
+  }
+
+  /** Moves the editor onto another take of the line. */
+  async function editOther(id: string) {
+    const t = takes.find((x) => x.id === id);
+    if (!t) return;
+    editing = id;
+    typed = null;
+    picked = null;
+    if (t.source_id !== rec?.source_id) await loadRecording(t.source_id);
+    marks = { t0: t.src_in, t1: t.src_out };
+    locator = t.src_in;
+    view = around(t.src_in, t.src_out, dur);
+  }
+
   function onKey(e: KeyboardEvent) {
+    if (asking) return;
     const t = e.target;
     const typing = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
     const k = e.key;
@@ -347,12 +386,14 @@
       else close();
     } else if (typing) {
       if (k !== 'Enter') return;
-      if (t === searchEl && found?.hits[0] && picked !== found.hits[0].id) void useHit(found.hits[0]);
+      if (e.metaKey || e.ctrlKey) void save();
+      else if (t === searchEl && found?.hits[0] && picked !== found.hits[0].id) void useHit(found.hits[0]);
       else void create();
     } else if (t instanceof Element && t.hasAttribute('data-own-arrows') && (k === 'ArrowLeft' || k === 'ArrowRight')) return;
     else if (t instanceof HTMLButtonElement && t.matches(':focus-visible') && (k === 'Enter' || k === ' ')) return;
     else if (k === ' ' && e.shiftKey) playLocator();
     else if (k === ' ') playMarks();
+    else if (k === 'Enter' && (e.metaKey || e.ctrlKey)) void save();
     else if (k === 'Enter') void create();
     else if (k === 'i' || k === 'I') setIn(head ?? locator);
     else if (k === 'o' || k === 'O') setOut(head ?? locator);
@@ -384,17 +425,26 @@
     <div class="title">
       <div class="r">
         <span class="nm" style="font-size: 12px; color: {color.name}">{voice?.label ?? ''}</span>
-        <span class="info">{adding ? 'New line' : `Line ${line?.number ?? ''} · mark the right take`}</span>
+        <span class="info">{adding ? 'New line' : `Line ${line?.number ?? ''}`}</span>
+        {#if takes.length}
+          <div class="tks" role="group" aria-label="Take to edit">
+            {#each takes as t, i (t.id)}
+              <button class="tk" class:on={t.id === editing} onclick={() => editOther(t.id)} aria-label="Edit take {i + 1}" data-testid="mapping-take">{i + 1}</button>
+            {/each}
+          </div>
+        {/if}
       </div>
-      {#if adding}
-        <input class="said script" value={text} oninput={(e) => (typed = e.currentTarget.value)} placeholder={marks ? 'What’s said here' : 'Find it below, then mark in and out'} aria-label="What the line says" data-testid="line-text" />
-      {:else}
-        <p class="script txt">{line?.text ?? ''}</p>
-      {/if}
+      <textarea class="said script" rows="2" value={text} oninput={(e) => (typed = e.currentTarget.value)} placeholder={marks ? 'What’s said here' : 'Find it below, then mark in and out'} aria-label="What’s said" data-testid="line-text"></textarea>
+      <div class="under">
+        {#if line}<span class="ref ellip" title={line.text} data-testid="script-text"><span class="lab">Script</span> {line.text}</span>{/if}
+        {#if typed != null && typed !== between}<button class="refill" onclick={() => (typed = null)} data-testid="use-heard">Use what’s heard</button>{/if}
+      </div>
     </div>
     <div class="btns">
+      {#if current}<button class="b" onclick={() => (asking = true)} data-testid="mapping-delete">Delete…</button>{/if}
       <button class="b" onclick={close}>Cancel <span class="kb">Esc</span></button>
-      <button class="done" disabled={!ready} onclick={create} data-testid="mapping-create">{adding ? 'Add line' : 'Create take'} <span class="kb">⏎</span></button>
+      {#if current}<button class="b strong" disabled={!canSave} onclick={save} data-testid="mapping-save">Save take {currentNo} <span class="kb">⌘⏎</span></button>{/if}
+      <button class="done" disabled={!ready} onclick={create} data-testid="mapping-create">{adding ? 'Add line' : current ? 'Save as new take' : 'Create take'} <span class="kb">⏎</span></button>
     </div>
   </div>
 
@@ -451,7 +501,7 @@
         {/if}
         {#each takesHere as t (t.id)}
           {@const mine = own(t.line_id)}
-          <span class="take" class:mine title={mine ? `Take ${takeNo(t.id) + 1}` : t.text} style="left: {pct(t.t0)}%; width: {((t.t1 - t.t0) / span) * 100}%; {mine ? `background: ${rgba(color.rgb, 0.16)}; box-shadow: inset 0 2px 0 ${color.name}` : ''}" data-testid={mine ? 'mapping-own-take' : undefined}>{mine ? `T${takeNo(t.id) + 1}` : ''}</span>
+          <span class="take" class:mine title={mine ? `Take ${takeNo(t.id) + 1}` : t.text} style="left: {pct(t.t0)}%; width: {((t.t1 - t.t0) / span) * 100}%; {mine ? `background: ${rgba(color.rgb, 0.16)}; box-shadow: inset 0 2px 0 ${color.name}` : ''}" data-testid={mine ? 'mapping-own-take' : undefined}>{#if mine}<button class="tno" onmousedown={(e) => e.stopPropagation()} onclick={() => editOther(t.id)} aria-label="Edit take {takeNo(t.id) + 1}">T{takeNo(t.id) + 1}</button>{/if}</span>
         {/each}
         {#if marks}
           <span class="out" style="left: 0; width: {Math.max(0, pct(marks.t0))}%"></span>
@@ -486,6 +536,8 @@
     </div>
   {/if}
 </div>
+
+{#if asking && line}<DeleteSheet lineId={line.line_id} takeId={editing} onclose={() => (asking = false)} ondone={close} />{/if}
 
 <style>
   .dim {
@@ -536,25 +588,68 @@
     font-size: 12px;
     color: var(--text-3);
   }
-  .txt {
-    margin: 8px 0 0;
-    font-size: 21px;
-    line-height: 1.4;
-    color: var(--text-strong);
-  }
   .said {
+    display: block;
     width: 100%;
     box-sizing: border-box;
     margin-top: 6px;
     padding: 6px 10px;
-    font-size: 21px;
+    font-size: 19px;
     line-height: 1.4;
     color: var(--text-strong);
     border: 0;
     border-radius: 10px;
     background: var(--glass-fill-2);
+    resize: none;
     user-select: text;
     -webkit-user-select: text;
+  }
+  .under {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 22px;
+    margin-top: 4px;
+  }
+  .ref {
+    min-width: 0;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+  .lab {
+    margin-right: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-4);
+  }
+  .refill {
+    flex: none;
+    height: 22px;
+    padding: 0 10px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    color: var(--text-2);
+    box-shadow: inset 0 0 0 1px var(--text-5);
+  }
+  .tks {
+    display: flex;
+    gap: 4px;
+  }
+  .tk {
+    min-width: 24px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-3);
+    background: var(--glass-fill-2);
+  }
+  .tk.on {
+    color: var(--text-on-light);
+    background: var(--button-light);
   }
   .btns {
     display: flex;
@@ -569,6 +664,14 @@
     font-size: 12.5px;
     color: var(--text-2);
     background: var(--glass-fill-3);
+  }
+  .b.strong {
+    color: var(--text-strong);
+    font-weight: 600;
+  }
+  .b:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
   .done {
     height: 40px;
@@ -775,6 +878,12 @@
     background: rgb(var(--ink-rgb) / 0.035);
     box-shadow: inset 1px 0 0 rgb(var(--ink-rgb) / 0.1);
     pointer-events: none;
+  }
+  .tno {
+    font: inherit;
+    color: inherit;
+    pointer-events: auto;
+    cursor: pointer;
   }
   .out {
     position: absolute;

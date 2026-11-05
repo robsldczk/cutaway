@@ -545,12 +545,21 @@ class AppState {
   }
 
   /** Makes a new take of a line from a stretch of a recording; it becomes the picked take. */
-  async addTake(lineId: string, sourceId: string, t0: number, t1: number) {
-    const r = await this.method<{ take_no: number }>('add_take', { line_id: lineId, source_id: sourceId, t0, t1 });
+  async addTake(lineId: string, sourceId: string, t0: number, t1: number, text?: string) {
+    const r = await this.method<{ take_no: number }>('add_take', { line_id: lineId, source_id: sourceId, t0, t1, text });
     if (!r) return false;
     this.curId = lineId;
     if (this.cur) this.pos = this.cur.start_s;
     this.say(`Take ${r.take_no} added`);
+    return true;
+  }
+
+  /** Changes a take where it stands: its stretch, what it says, or both. */
+  async editTake(takeId: string, change: { source_id?: string; t0?: number; t1?: number; text?: string }) {
+    const r = await this.method<{ take_no: number }>('edit_take', { take_id: takeId, ...change });
+    if (!r) return false;
+    if (this.cur) this.pos = this.cur.start_s;
+    this.say(`Take ${r.take_no} saved`);
     return true;
   }
 
@@ -569,19 +578,20 @@ class AppState {
     this.overlay = 'delete-line';
   }
 
-  async deleteLine() {
-    const id = this.deleting;
-    this.overlay = null;
-    this.deleting = null;
-    if (!id) return;
+  async deleteLine(lineId: string) {
     if (this.playing) await this.stop();
-    const r = await this.method<{ next: string | null }>('delete_line', { line_id: id, confirm: true });
+    const r = await this.method<{ next: string | null }>('delete_line', { line_id: lineId, confirm: true });
     if (!r) return;
-    if (this.curId === id) {
+    if (this.curId === lineId) {
       this.curId = r.next;
       if (this.cur) this.pos = this.cur.start_s;
     }
-    this.say('Deleted. ⌘Z brings it back');
+    this.say('Line deleted. ⌘Z brings it back');
+  }
+
+  async deleteTake(takeId: string) {
+    if (this.playing) await this.stop();
+    if (await this.method('delete_take', { take_id: takeId, confirm: true })) this.say('Take deleted. ⌘Z brings it back');
   }
 
   async toggleFav() {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { around, clock, fit, MIN_SPAN_S, pan, placeWords, textBetween, ticks, zoom } from './mapping';
+import { around, clock, fit, MIN_SPAN_S, pan, placeWords, textBetween, ticks, withTake, zoom } from './mapping';
 
 const w = (text: string, t0: number, t1: number) => ({ text, t0, t1 });
 
@@ -47,6 +47,23 @@ describe('what is between the marks', () => {
 
   it('is empty where nothing was heard', () => {
     expect(textBetween(words, 5, 6)).toBe('');
+  });
+});
+
+describe('a take over the words of its mic', () => {
+  const mic = [w('before', 1, 1.4), w('no', 2, 2.2), w('bird', 2.3, 2.6), w('after', 3, 3.4)];
+  const take = { src_in: 1.9, src_out: 2.7, words: [w('Norbert', 0.1, 0.7)] };
+
+  it('shows what was typed in its stretch and what was heard around it', () => {
+    expect(withTake(mic, take).map((x) => x.text)).toEqual(['before', 'Norbert', 'after']);
+  });
+
+  it('puts its words in the time of the recording', () => {
+    expect(withTake(mic, take)[1].t0).toBeCloseTo(2);
+  });
+
+  it('keeps a correction when the crop grows around it', () => {
+    expect(textBetween(withTake(mic, take), 0.5, 3.5)).toBe('before Norbert after');
   });
 });
 
