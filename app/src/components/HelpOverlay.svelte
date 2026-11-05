@@ -33,6 +33,7 @@
     ['Select more sounds', ['⇧ click', 'drag on empty space']],
     ['Reach a sound, one after the other in time', ['Tab', '⇧Tab']],
     ['Select more sounds, or all', ['⇧Enter', '⌘A']],
+    ['Duplicate the selected sounds (Arrange, Edit)', ['⌘D']],
     ['Open a sound', ['2×', 'Enter']],
     ['Opened sound: trim, fade or move the part in focus', ['Tab', '↑', '↓']],
     ['Opened sound: the same by 10 ms / slip the audio inside', ['⌥↑', '⌥↓', '⌥ drag']],

@@ -434,6 +434,16 @@
     await batch(cmds);
   }
 
+  /** ⌘D: the selected sounds again, right after themselves. Dialogue clips stay as they are. */
+  async function duplicateSel() {
+    const ids = selection.flatMap((s) => (s.kind === 'sound' ? [s.id] : []));
+    if (!ids.length) return;
+    const r = await app.cmd({ cmd: 'duplicate_sounds', placement_ids: ids });
+    await app.loadEdit();
+    const made = (r as { result?: { ids: string[] } } | undefined)?.result?.ids;
+    if (made) selectOnly(made.map((id) => ({ kind: 'sound', id })));
+  }
+
   /** ⌘T: the selected clips under the playhead, else the dialogue under it. */
   async function splitAtPlayhead() {
     const t = app.pos;
@@ -823,6 +833,7 @@
     else if (e.ctrlKey && (k === 'm' || k === 'M')) void toggleMute();
     else if (mod && (k === 'u' || k === 'U')) cycleToSel();
     else if (mod && (k === 'a' || k === 'A')) selectOnly(clips.map((c) => c.sel));
+    else if (mod && (k === 'd' || k === 'D')) void duplicateSel();
     else if (k === 'Backspace' || k === 'Delete') void deleteSel();
     else if (mod) handled = false;
     else if (e.shiftKey && (k === 'f' || k === 'F')) selectFollowing();

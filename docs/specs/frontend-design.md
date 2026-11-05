@@ -349,6 +349,7 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 | , / . | Move 100 ms, with sounds selected; ⇧ 10 ms (Arrange) |
 | ⇧ scroll over a ball | Loudness (Arrange) |
 | ⌫ / Esc | Remove / clear the selected sounds; Esc closes an opened sound first (Arrange) |
+| ⌘D | Duplicate the selected sounds, right after themselves (Arrange, Edit) |
 
 **In the box editor:** Space play/stop, ⇧ Space from locator, ← → nudge segment (or move the playhead when no segment is selected; Shift coarse), Tab next segment, W words overlay, 1…5 use whole take, R reset comp, Delete delete selected words (Edit mode), Esc close.
 

@@ -14,7 +14,7 @@ async function rpc<T = unknown>(page: Page, method: string, params: object = {})
 }
 
 async function unlockAll(page: Page) {
-  const scenes = await rpc<{ number: number; lock: unknown }[]>(page, 'export_status').then((s: any) => s.scenes);
+  const { scenes } = await rpc<{ scenes: { number: number; lock: unknown }[] }>(page, 'export_status');
   for (const s of scenes) if (s.lock) await rpc(page, 'unlock_scene', { scene: String(s.number), confirm: true });
 }
 
