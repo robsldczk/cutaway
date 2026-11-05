@@ -3,15 +3,25 @@
 use std::path::Path;
 
 use crate::error::Result;
-use crate::mixer::{Renderer, SourceSet};
+use crate::mixer::{Part, Renderer, SourceSet};
 use crate::schedule::PlaySchedule;
 
-/// Renders the whole schedule to stereo frames at the source set's rate.
-pub fn render_to_buffer(s: &PlaySchedule, sources: &SourceSet) -> Result<Vec<f32>> {
+/// How long a bounce of the schedule is, in frames: to where the last sound has rung out.
+pub fn frames_of(s: &PlaySchedule, rate: u32) -> usize {
+    (s.end_s() * f64::from(rate)).round() as usize
+}
+
+/// Renders exactly `frames` stereo frames of one side of the schedule's room, unclipped, so
+/// stems can be added up and a mix measured before it is limited to full scale.
+pub fn render_part(
+    s: &PlaySchedule,
+    sources: &SourceSet,
+    frames: usize,
+    part: Part,
+) -> Result<Vec<f32>> {
     sources.preload(s)?;
-    let frames = (s.end_s() * sources.rate() as f64).round() as usize;
     let mut out = vec![0.0f32; frames * 2];
-    let mut renderer = Renderer::new(s, sources.rate());
+    let mut renderer = Renderer::part(s, sources.rate(), part);
     const BLOCK: usize = 4096;
     let mut f = 0usize;
     while f < frames {
@@ -19,6 +29,13 @@ pub fn render_to_buffer(s: &PlaySchedule, sources: &SourceSet) -> Result<Vec<f32
         renderer.render(s, sources, f as u64, &mut out[2 * f..2 * (f + n)]);
         f += n;
     }
+    Ok(out)
+}
+
+/// Renders the whole schedule to stereo frames at the source set's rate.
+pub fn render_to_buffer(s: &PlaySchedule, sources: &SourceSet) -> Result<Vec<f32>> {
+    let frames = frames_of(s, sources.rate());
+    let mut out = render_part(s, sources, frames, Part::Whole)?;
     for v in out.iter_mut() {
         *v = v.clamp(-1.0, 1.0);
     }

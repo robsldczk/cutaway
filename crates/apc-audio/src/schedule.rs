@@ -100,6 +100,33 @@ pub struct PlaySchedule {
     pub tail_s: f64,
 }
 
+/// The group of tracks a clip's direct sound belongs to in an export.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum StemGroup {
+    Dialogue,
+    Effects,
+    Ambience,
+    Music,
+}
+
+impl StemGroup {
+    /// By lane name (see [`ScheduledClip::lane`]): sound lanes are lower case, what's left is a
+    /// voice. Room tone sits under a scene like an ambience, and an adlib is a voice (D108).
+    pub fn of_lane(lane: &str) -> StemGroup {
+        let numbered = |p: &str| {
+            lane.strip_prefix(p)
+                .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        };
+        match lane {
+            "ambience" | "roomtone" => StemGroup::Ambience,
+            "music" => StemGroup::Music,
+            _ if numbered("sfx") => StemGroup::Effects,
+            _ => StemGroup::Dialogue,
+        }
+    }
+}
+
 /// Lane key of a clip as the Edit page names lanes (`PAUL`, `sfx1`, `ambience`, …).
 pub fn lane_key(c: &ScheduledClip) -> &str {
     &c.lane
@@ -296,6 +323,21 @@ impl PlaySchedule {
     /// When the last sound has rung out: the end of the bounce and of playback.
     pub fn end_s(&self) -> f64 {
         self.duration_s + self.tail_s
+    }
+
+    /// The same schedule with only some of its clips: same room, same length, so what it
+    /// renders lines up with the whole. The room stays only if something still reaches it.
+    pub fn only(&self, keep: impl Fn(&ScheduledClip) -> bool) -> PlaySchedule {
+        let clips: Vec<ScheduledClip> = self.clips.iter().filter(|c| keep(c)).cloned().collect();
+        let room = self
+            .room
+            .filter(|_| clips.iter().any(ScheduledClip::has_send));
+        PlaySchedule {
+            clips,
+            room,
+            duration_s: self.duration_s,
+            tail_s: self.tail_s,
+        }
     }
 
     /// Clips that sound between `t0` and `t1`.

@@ -15,5 +15,6 @@ cpal.workspace = true
 crossbeam-channel.workspace = true
 
 [dev-dependencies]
+serde_json.workspace = true
 tempfile.workspace = true
 hound.workspace = true

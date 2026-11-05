@@ -12,6 +12,6 @@ pub mod schedule;
 
 pub use depth::{depth_mix, DepthMix};
 pub use error::{AudioError, Result};
-pub use mixer::{Mixer, Renderer, SourceSet};
+pub use mixer::{Mixer, Part, Renderer, SourceSet};
 pub use room::{Room, RoomShape};
-pub use schedule::{ClipSpace, MixSettings, PlaySchedule, ScheduledClip};
+pub use schedule::{ClipSpace, MixSettings, PlaySchedule, ScheduledClip, StemGroup};

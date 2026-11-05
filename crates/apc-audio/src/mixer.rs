@@ -330,10 +330,23 @@ impl Mixer {
 /// Frames the room is warmed up in at a time.
 const WARMUP_BLOCK: usize = 4096;
 
+/// Which side of the room a render takes. A stem is one side of some of the clips: the room is
+/// linear, so the parts add back up to the whole.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Part {
+    /// Direct sound and room, as heard.
+    Whole,
+    /// The signal before the room send.
+    Dry,
+    /// The room's 100 % wet return of what was sent to it.
+    Wet,
+}
+
 /// Renders one schedule from any position, room included. One per loaded schedule: the
 /// bounce runs it from frame 0, the engine from wherever playback starts.
 pub struct Renderer {
     room: Option<Room>,
+    part: Part,
     /// The frame the room has heard up to.
     next_frame: Option<u64>,
     send: Vec<f32>,
@@ -341,8 +354,17 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(s: &PlaySchedule, rate: u32) -> Self {
+        Self::part(s, rate, Part::Whole)
+    }
+
+    /// A renderer of one side of the room.
+    pub fn part(s: &PlaySchedule, rate: u32, part: Part) -> Self {
         Renderer {
-            room: s.room.map(|shape| Room::new(rate, shape)),
+            room: s
+                .room
+                .filter(|_| part != Part::Dry)
+                .map(|shape| Room::new(rate, shape)),
+            part,
             next_frame: None,
             send: Vec::new(),
         }
@@ -360,7 +382,9 @@ impl Renderer {
     ) {
         let frames = out.len() / 2;
         let Some(room) = self.room.as_mut() else {
-            Mixer::mix(s, sources, start_frame, frames, Some(out), None);
+            if self.part != Part::Wet {
+                Mixer::mix(s, sources, start_frame, frames, Some(out), None);
+            }
             return;
         };
         if self.next_frame != Some(start_frame) {
@@ -368,14 +392,8 @@ impl Renderer {
         }
         self.send.clear();
         self.send.resize(out.len(), 0.0);
-        Mixer::mix(
-            s,
-            sources,
-            start_frame,
-            frames,
-            Some(out),
-            Some(&mut self.send),
-        );
+        let dry = (self.part == Part::Whole).then_some(&mut *out);
+        Mixer::mix(s, sources, start_frame, frames, dry, Some(&mut self.send));
         room.process(&self.send, out);
         self.next_frame = Some(start_frame + frames as u64);
     }
