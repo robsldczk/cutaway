@@ -95,6 +95,32 @@ pub enum Cmd {
         #[arg(long)]
         kind: Option<String>,
     },
+    /// Export as on the Export page: versioned folders, never overwriting, scenes locked after.
+    /// Whole episode without --scene. With --episode, a show export to its pipeline folder.
+    Deliver(DeliverArgs),
+    /// Lock a scene's timing.
+    Lock {
+        scene: String,
+    },
+    /// Unlock a scene (needs --yes): the exported files won't match it anymore.
+    Unlock {
+        scene: String,
+    },
+    /// Every scene's lock and export history.
+    Exports,
+    /// The show's pipeline folder, or a proposal; --set with --yes confirms one.
+    Pipeline {
+        #[arg(long)]
+        set: Option<PathBuf>,
+    },
+    /// Save the settings of `deliver` as a preset, or remove one with --delete.
+    Preset {
+        name: String,
+        #[arg(long)]
+        delete: bool,
+        #[command(flatten)]
+        settings: DeliverSettings,
+    },
     /// Progress, match rate, flagged items.
     Status,
     /// The last match report.
@@ -146,6 +172,152 @@ pub enum Cmd {
         #[arg(long, default_value = "127.0.0.1:7357")]
         addr: String,
     },
+}
+
+/// `deliver`: what to export, and how.
+#[derive(clap::Args, Debug)]
+pub struct DeliverArgs {
+    /// A scene to export (repeatable); the whole episode without it.
+    #[arg(long = "scene")]
+    scenes: Vec<String>,
+    /// Show export: an episode folder of the show (repeatable), to its pipeline folder.
+    #[arg(long = "episode")]
+    episodes: Vec<String>,
+    /// Use a saved preset instead of the options below.
+    #[arg(long)]
+    preset: Option<String>,
+    /// Only say what would be written.
+    #[arg(long)]
+    dry_run: bool,
+    #[command(flatten)]
+    settings: DeliverSettings,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct DeliverSettings {
+    /// stems, clips, mix or fcpxml.
+    #[arg(long = "as", default_value = "stems")]
+    mode: String,
+    /// Only these tracks, comma separated: dialogue, room-voices, effects, room-effects,
+    /// ambience, music, mix.
+    #[arg(long, value_delimiter = ',')]
+    tracks: Vec<String>,
+    /// One full-length file per character instead of one dialogue file.
+    #[arg(long)]
+    split_dialogue: bool,
+    /// wav, flac, or mp3 (mix only).
+    #[arg(long, default_value = "wav")]
+    format: String,
+    /// Sample rate.
+    #[arg(long, default_value_t = 48000)]
+    rate: u32,
+    /// 16, 24 or 32 (float, WAV only).
+    #[arg(long, default_value_t = 24)]
+    bits: u16,
+    /// The mix's target in LUFS, or `off`. Stems never change.
+    #[arg(long, default_value = "-16", allow_hyphen_values = true)]
+    loudness: String,
+    #[arg(long)]
+    no_fcpxml: bool,
+    /// What the FCPXML's clips point at: original or stems.
+    #[arg(long, default_value = "original")]
+    fcpxml_source: String,
+    #[arg(long)]
+    no_subtitles: bool,
+    /// Also a cut list: csv or md.
+    #[arg(long)]
+    cut_list: Option<String>,
+    /// Leave the scenes unlocked.
+    #[arg(long)]
+    no_lock: bool,
+    /// episode or pipeline.
+    #[arg(long, default_value = "episode")]
+    to: String,
+}
+
+impl DeliverSettings {
+    /// The settings as the service reads them, which refuses what can't be delivered.
+    fn to_json(&self) -> anyhow::Result<Value> {
+        let loudness = match self.loudness.as_str() {
+            "off" => Value::Null,
+            l => json!(l
+                .parse::<f64>()
+                .map_err(|_| anyhow!("--loudness is a number of LUFS, or off"))?),
+        };
+        let all = self.tracks.is_empty();
+        let on = |name: &str| all || self.tracks.iter().any(|t| t == name);
+        for t in &self.tracks {
+            let known = [
+                "dialogue",
+                "room-voices",
+                "effects",
+                "room-effects",
+                "ambience",
+                "music",
+                "mix",
+            ];
+            if !known.contains(&t.as_str()) {
+                return Err(anyhow!("unknown track '{t}' ({})", known.join(", ")));
+            }
+        }
+        Ok(json!({
+            "mode": self.mode,
+            "tracks": {
+                "dialogue": on("dialogue"), "room_voices": on("room-voices"),
+                "effects": on("effects"), "room_effects": on("room-effects"),
+                "ambience": on("ambience"), "music": on("music"), "mix": on("mix"),
+                "split_dialogue": self.split_dialogue,
+            },
+            "codec": self.format,
+            "sample_rate": self.rate,
+            "bit_depth": self.bits,
+            "loudness": loudness,
+            "fcpxml": !self.no_fcpxml,
+            "fcpxml_source": self.fcpxml_source,
+            "subtitles": !self.no_subtitles,
+            "cut_list": self.cut_list,
+            "lock_after": !self.no_lock,
+            "save_to": self.to,
+        }))
+    }
+}
+
+/// `deliver`: the page's one button.
+fn deliver(sess: &mut Session, a: &DeliverArgs) -> anyhow::Result<Value> {
+    let (settings, preset) = match &a.preset {
+        Some(p) => (Value::Null, json!(p)),
+        None => (a.settings.to_json()?, Value::Null),
+    };
+    if !a.episodes.is_empty() {
+        if a.dry_run {
+            return Err(anyhow!(
+                "--dry-run works on one episode: open it with --project and leave out --episode"
+            ));
+        }
+        // a scene of a show export is a scene of each episode named
+        let scenes = (!a.scenes.is_empty()).then(|| a.scenes.clone());
+        let episodes: Vec<Value> = a
+            .episodes
+            .iter()
+            .map(|e| json!({ "episode": e, "scenes": scenes }))
+            .collect();
+        return call(
+            sess,
+            "export_show",
+            json!({ "episodes": episodes, "settings": settings, "preset": preset }),
+        );
+    }
+    let scenes = (!a.scenes.is_empty()).then(|| a.scenes.clone());
+    let method = if a.dry_run {
+        "export_plan"
+    } else {
+        "export_scenes"
+    };
+    call(
+        sess,
+        method,
+        json!({ "scenes": scenes, "settings": settings, "preset": preset }),
+    )
 }
 
 #[derive(Subcommand, Debug)]
@@ -687,6 +859,38 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                     }
                     call(&mut sess, m, p)
                 }
+                Cmd::Deliver(a) => deliver(&mut sess, a),
+                Cmd::Lock { scene } => call(&mut sess, "lock_scene", json!({ "scene": scene })),
+                Cmd::Unlock { scene } => call(
+                    &mut sess,
+                    "unlock_scene",
+                    json!({ "scene": scene, "confirm": confirm }),
+                ),
+                Cmd::Exports => call(&mut sess, "export_status", json!({})),
+                Cmd::Pipeline { set } => match set {
+                    Some(p) => call(
+                        &mut sess,
+                        "set_pipeline_folder",
+                        json!({ "path": s(p), "confirm": confirm }),
+                    ),
+                    None => call(&mut sess, "pipeline_folder", json!({})),
+                },
+                Cmd::Preset {
+                    name,
+                    delete,
+                    settings,
+                } => {
+                    if *delete {
+                        call(&mut sess, "delete_export_preset", json!({ "name": name }))
+                    } else {
+                        let settings = settings.to_json()?;
+                        call(
+                            &mut sess,
+                            "save_export_preset",
+                            json!({ "name": name, "settings": settings }),
+                        )
+                    }
+                }
                 Cmd::Connect { service } => {
                     let key = read_secret(&format!("{service} API key (input hidden): "))?;
                     call(
@@ -737,5 +941,43 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                 _ => unreachable!("handled above"),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn settings(args: &[&str]) -> anyhow::Result<Value> {
+        let line = [&["cutaway", "deliver"], args].concat();
+        match Cli::try_parse_from(line)?.cmd {
+            Cmd::Deliver(a) => a.settings.to_json(),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_defaults_are_the_pages() {
+        let s: apc_core::config::ExportSettings =
+            serde_json::from_value(settings(&[]).unwrap()).unwrap();
+        assert_eq!(s, Default::default());
+    }
+
+    #[test]
+    fn loudness_takes_a_negative_number_or_off() {
+        assert_eq!(settings(&["--loudness", "-23"]).unwrap()["loudness"], -23.0);
+        assert_eq!(
+            settings(&["--loudness", "off"]).unwrap()["loudness"],
+            Value::Null
+        );
+        assert!(settings(&["--loudness", "loud"]).is_err());
+    }
+
+    #[test]
+    fn tracks_narrow_the_stack() {
+        let s = settings(&["--tracks", "dialogue,mix"]).unwrap();
+        assert_eq!(s["tracks"]["dialogue"], true);
+        assert_eq!(s["tracks"]["music"], false);
+        assert!(settings(&["--tracks", "voices"]).is_err());
     }
 }
