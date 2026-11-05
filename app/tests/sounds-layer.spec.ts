@@ -501,6 +501,28 @@ test('actions: they read between the lines, and a sound dropped on one hangs on 
 const fileDrag = (page: Page, call: string, ...args: unknown[]) =>
   page.evaluate(([c, a]) => (window as unknown as Record<string, Record<string, (...x: unknown[]) => unknown>>).cutawayFileDrag[c as string](...(a as unknown[])), [call, args] as const);
 
+test('finder: a bucket called Ambience does not break the sheet', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const { bucket_id } = await rpc<{ bucket_id: string }>('create_bucket', { name: 'Ambience', keywords: ['ambience'] });
+  const dir = mkdtempSync(join(tmpdir(), 'finder-'));
+  const file = join(dir, 'Foil wrap crinkle.wav');
+  wav(file, 1);
+  await open(page);
+  await bucketRow(page);
+  const field = (await page.getByTestId('sounds-field').boundingBox())!;
+  const y = (await page.getByTestId('arrange-row').nth(1).boundingBox())!.y;
+
+  await fileDrag(page, 'drop', [file], field.x + 330, y + 1);
+  const name = page.getByTestId('file-bucket');
+  await expect(name).toBeFocused();
+  await expect(name).not.toHaveValue('');
+  await expect(page.getByTestId('file-chip').filter({ hasText: /^Ambience$/ })).toHaveCount(1);
+  expect(errors).toEqual([]);
+  await page.keyboard.press('Escape');
+  await rpc('delete_bucket', { bucket_id, confirm: true });
+});
+
 test('finder: drop, Enter: the name guesses the bucket, and the sound is filed and in the scene', async ({ page }) => {
   const dir = mkdtempSync(join(tmpdir(), 'finder-'));
   const byName = join(dir, 'Foil wrap crinkle.wav');

@@ -6,7 +6,7 @@
   import { tick, untrack } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { call } from '../lib/bridge';
-  import { stepChip } from '../lib/sounds/chips';
+  import { stepChip, uniqueChips } from '../lib/sounds/chips';
   import type { BucketsView } from '../lib/types';
 
   const AMBIENCE = 'Ambience';
@@ -27,7 +27,7 @@
 
   const fold = (s: string) => s.trim().toLowerCase();
   /** Typing narrows the chips; what was guessed leaves them all. */
-  const chips = $derived([AMBIENCE, ...buckets.map((b) => b.name)].filter((n) => !typed || fold(n).includes(fold(text))));
+  const chips = $derived(uniqueChips([AMBIENCE, ...buckets.map((b) => b.name)]).filter((n) => !typed || fold(n).includes(fold(text))));
   const chosen = $derived(lit != null && chips.includes(lit) ? lit : null);
   /** Where the sound goes: the chip the arrows are on, or the name in the field. */
   const wanted = $derived(chosen ?? text);
