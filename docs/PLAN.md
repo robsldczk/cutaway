@@ -731,3 +731,4 @@ Decisions: D102.
 - 2026-11-04 One name at a time (D100): the balls lost their labels; the selection's name sits in the middle of the transport.
 - 2026-11-04 Character search in the bucket (D101): "paul huh" finds where an actor's own mic heard it, clipped to the sound, with the edges to trim. A drop cuts it into their vocals and places it, one undo step. Tried on a copy of Episode 2; not listened to, and not driven in the desktop webview.
 - 2026-11-04 Adlibs have their own track (D102): any drop of a character's vocal goes on the Adlibs lane and shows as a ball on Arrange. Vocals already on dialogue lanes stay there.
+- 2026-11-05 Build output under 20 GB (D103): debug info trimmed, a full `check.sh` now leaves 6.9 GB in `target/` (it was 69 GB). `scripts/clean-target.sh` holds the limit across every checkout, from `check.sh` and from an hourly LaunchAgent that Rob installs with `scripts/install-cleaner.sh`.

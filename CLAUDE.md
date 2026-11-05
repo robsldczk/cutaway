@@ -71,6 +71,8 @@ Owner: Rob. Read the specs before changing behaviour:
 
 ```
 scripts/check.sh            fmt, clippy, tests, UI lint/typecheck
+scripts/clean-target.sh     keep Rust build output under 20 GB (--dry-run, --limit <GB>)
+scripts/install-cleaner.sh  run that hourly through a LaunchAgent (--uninstall)
 cargo run -p apc-cli -- --help
 cargo test --workspace
 cd app && npm install && npm run tauri dev

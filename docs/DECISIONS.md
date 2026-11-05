@@ -745,3 +745,13 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Vocals already on a dialogue lane stay there.** Nothing moves by itself. They keep working as before, and don't show on Arrange.
 - **The file:** a project with an adlib in it needs this build or later. An older one can't read the lane.
 
+### D103 Build output stays under 20 GB (Rob, 2026-11-05)
+- **Rob:** the Rust build output filled the GitHub folder. Rebuilds can be slower, as long as it stays under about 20 GB.
+- **The cause:** `cutaway/target` had reached 69 GB. macOS leaves debug info in `.o` files next to each build, 444,442 of them, every dependency was built with full debug info, and Cargo never prunes old builds.
+- **Debug info:** `[profile.dev]` is now `debug = "line-tables-only"` and dependencies are `debug = false`. A full `check.sh` from clean now leaves 6.9 GB and 4,860 `.o` files, and took 4 minutes. Backtraces keep file and line for our crates. A debugger can't inspect variables any more, or step into dependencies.
+- **The cleaner:** `scripts/clean-target.sh` counts `target/` across the main checkout and every worktree, and deletes until the total is under the limit: other worktrees' `target/` (least recently built first), the main incremental cache, the main compiled output, then the release build. `--dry-run` shows what would go, `--limit` changes the 20 GB.
+- **Always kept:** `target/debug/cutaway`, because the MCP server launches from it, plus `cutaway-app` and the sherpa-onnx download.
+- **Compiled output goes in one step:** a fingerprint left behind would describe output that's gone.
+- **A running build skips the run.** A running app doesn't, or it would rarely run, since `tauri dev` is often left open.
+- **When it runs:** at the start of `check.sh`, and hourly once `scripts/install-cleaner.sh` has installed a LaunchAgent. Rob installs that himself, since it stays on the machine. The limit is checked at each run, so the total can pass it between runs.
+- **Alternatives:** one shared `CARGO_TARGET_DIR` was rejected, because parallel builds would wait on each other and overwrite the binary the MCP server runs from. `cargo-sweep` was rejected as a new tool for what a short script does.
