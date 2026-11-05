@@ -12,7 +12,7 @@ use apc_media::AudioReader;
 use serde_json::{json, Value};
 
 use crate::error::{AppError, Result};
-use crate::methods::{AddLineP, AddTakeP, MappingOpenP, PeaksP, RecordingP};
+use crate::methods::{AddLineP, AddTakeP, EditTakeP, MappingOpenP, PeaksP, RecordingP};
 use crate::performances::holds;
 use crate::service::Service;
 
@@ -216,58 +216,91 @@ fn heard_in(heard: &[TWord], t0: f64, t1: f64) -> Vec<TWord> {
         .collect()
 }
 
-/// A take of the stretch. What was heard is mapped onto the line's words; with nothing heard
-/// (a gasp, a mic without a transcript) the line's own words are spread over it.
+/// When each said word sits. A word that was heard keeps its time; the others share the time
+/// around them, by length, so a corrected word takes the place of the one misheard.
+fn timed(said: &[String], heard: &[TWord], (t0, t1): (f64, f64)) -> Vec<(f64, f64)> {
+    let norm: Vec<String> = said.iter().map(|w| norm_word(w)).collect();
+    let spoken: Vec<String> = heard.iter().map(|w| w.w.clone()).collect();
+    // `map_words` fills gaps with the word before: the first of each is the true match
+    let mut last = None;
+    let found: Vec<Option<usize>> = map_words(&norm, &spoken)
+        .into_iter()
+        .map(|m| {
+            let new = m.filter(|_| m != last);
+            last = m.or(last);
+            new
+        })
+        .collect();
+    let (first_s, last_s) = match (heard.first(), heard.last()) {
+        (Some(a), Some(z)) => (a.t0.max(t0), z.t1.min(t1)),
+        _ => (t0, t1),
+    };
+    let mut out = vec![(0.0, 0.0); said.len()];
+    let mut i = 0;
+    while i < said.len() {
+        if let Some(h) = found[i] {
+            out[i] = (heard[h].t0.max(t0), heard[h].t1.min(t1));
+            i += 1;
+            continue;
+        }
+        let end = (i..said.len())
+            .find(|&k| found[k].is_some())
+            .unwrap_or(said.len());
+        let from = i.checked_sub(1).map_or(first_s, |k| out[k].1);
+        let to = found
+            .get(end)
+            .copied()
+            .flatten()
+            .map_or(last_s, |h| heard[h].t0.max(t0));
+        let weight = |w: &String| w.chars().count() as f64 + 1.0;
+        let total: f64 = said[i..end].iter().map(weight).sum();
+        let span = (to - from).max(0.0);
+        let mut at = from;
+        for k in i..end {
+            let len = span * weight(&said[k]) / total;
+            out[k] = (at, at + len);
+            at += len;
+        }
+        i = end;
+    }
+    out
+}
+
+/// A take of the stretch, saying `said`. Its words are mapped onto the line's words.
 fn marked_take(
     line_id: &str,
     source_id: &str,
-    (t0, t1): (f64, f64),
+    range: (f64, f64),
     heard: &[TWord],
-    tokens: &[String],
+    said: &[String],
     script: &[String],
 ) -> Take {
-    let words: Vec<TakeWord> = if heard.is_empty() {
-        let n = tokens.len().max(1) as f64;
-        let span = t1 - t0;
-        tokens
-            .iter()
-            .zip(script)
-            .enumerate()
-            .map(|(i, (raw, w))| TakeWord {
-                w: w.clone(),
-                raw: raw.clone(),
-                t0: t0 + span * i as f64 / n,
-                t1: t0 + span * (i as f64 + 0.9) / n,
-                script_idx: Some(i),
-            })
-            .collect()
-    } else {
-        let said: Vec<String> = heard.iter().map(|w| w.w.clone()).collect();
-        heard
-            .iter()
-            .zip(map_words(&said, script))
-            .map(|(w, script_idx)| TakeWord {
-                w: w.w.clone(),
-                raw: w.raw.clone(),
-                t0: w.t0.max(t0),
-                t1: w.t1.min(t1),
-                script_idx,
-            })
-            .collect()
-    };
-    let said: Vec<String> = heard.iter().map(|w| w.w.clone()).collect();
-    let score = coverage(&map_words(&said, script), script.len()) * 100.0;
+    let norm: Vec<String> = said.iter().map(|w| norm_word(w)).collect();
+    let map = map_words(&norm, script);
+    let words: Vec<TakeWord> = said
+        .iter()
+        .zip(&norm)
+        .zip(timed(said, heard, range))
+        .zip(&map)
+        .map(|(((raw, w), (t0, t1)), script_idx)| TakeWord {
+            w: w.clone(),
+            raw: raw.clone(),
+            t0,
+            t1,
+            script_idx: *script_idx,
+        })
+        .collect();
     Take {
         id: new_id("tk"),
         line_id: line_id.to_string(),
         source_id: source_id.to_string(),
         take_no: 0,
         take_type: TakeType::Full,
-        t0,
-        t1,
+        t0: range.0,
+        t1: range.1,
         words,
-        score,
-        heard: spoken(heard),
+        score: coverage(&map, script.len()) * 100.0,
+        heard: said.join(" "),
         lufs: None,
         db: 0.0,
         partial: false,
@@ -288,9 +321,14 @@ fn marked_take(
     }
 }
 
-fn spoken(heard: &[TWord]) -> String {
-    let raw: Vec<&str> = heard.iter().map(|w| w.raw.trim()).collect();
-    raw.join(" ")
+/// What a take says: what was typed, else what was heard, else the line (a gasp, a mic without
+/// a transcript).
+fn said_in(text: Option<&str>, heard: &[TWord], line: &[String]) -> Vec<String> {
+    match text.map(str::trim).filter(|t| !t.is_empty()) {
+        Some(t) => display_tokens(t),
+        None if heard.is_empty() => line.to_vec(),
+        None => heard.iter().map(|w| w.raw.trim().to_string()).collect(),
+    }
 }
 
 /// What the matcher measures of a take, for the stretch: level and loudness.
@@ -311,47 +349,100 @@ fn measured(svc: &mut Service, src: &SourceFile, mut take: Take) -> Take {
     take
 }
 
+/// A line by its id.
+fn line_of(svc: &Service, id: &str) -> Result<ScriptLine> {
+    svc.doc()
+        .lines
+        .get(id)
+        .cloned()
+        .ok_or_else(|| AppError::Params(format!("no line '{id}'")))
+}
+
+/// The words heard between in and out on a mic.
+fn heard_on(svc: &Service, src: &SourceFile, (t0, t1): (f64, f64)) -> Vec<TWord> {
+    let words = crate::dev::transcript(svc, src).map_or(vec![], |t| t.words);
+    heard_in(&words, t0, t1)
+}
+
 pub fn add_take(svc: &mut Service, p: &AddTakeP) -> Result<Value> {
     let src = mic(svc, &p.source_id)?;
     let range = stretch(&src, p.t0, p.t1)?;
-    let line = svc
-        .doc()
-        .lines
-        .get(&p.line_id)
-        .cloned()
-        .ok_or_else(|| AppError::Params(format!("no line '{}'", p.line_id)))?;
-    let words = crate::dev::transcript(svc, &src).map_or(vec![], |t| t.words);
-    let heard = heard_in(&words, range.0, range.1);
-    let take = marked_take(&line.id, &src.id, range, &heard, &line.tokens, &line.words);
+    let line = line_of(svc, &p.line_id)?;
+    let heard = heard_on(svc, &src, range);
+    let said = said_in(p.text.as_deref(), &heard, &line.tokens);
+    let take = marked_take(&line.id, &src.id, range, &heard, &said, &line.words);
     let take = measured(svc, &src, take);
     Ok(svc.exec(&Command::AddTake { take })?.result)
+}
+
+/// Marks closer than this to the take's own haven't moved: the page rounds to the millisecond.
+const SAME_MARK_S: f64 = 0.002;
+
+pub fn edit_take(svc: &mut Service, p: &EditTakeP) -> Result<Value> {
+    let old = svc
+        .doc()
+        .takes
+        .get(&p.take_id)
+        .cloned()
+        .ok_or_else(|| AppError::Params(format!("no take '{}'", p.take_id)))?;
+    let line = line_of(svc, &old.line_id)?;
+    let source = p.source_id.clone().unwrap_or_else(|| old.source_id.clone());
+    let (t0, t1) = (p.t0.unwrap_or(old.t0), p.t1.unwrap_or(old.t1));
+    let moved = source != old.source_id
+        || (t0 - old.t0).abs() > SAME_MARK_S
+        || (t1 - old.t1).abs() > SAME_MARK_S;
+
+    let mut take = if moved {
+        let src = mic(svc, &source)?;
+        let range = stretch(&src, t0, t1)?;
+        let heard = heard_on(svc, &src, range);
+        let said = said_in(p.text.as_deref(), &heard, &line.tokens);
+        let t = marked_take(&line.id, &src.id, range, &heard, &said, &line.words);
+        measured(svc, &src, t)
+    } else {
+        // the same stretch: the words it holds are the ones to correct
+        let heard: Vec<TWord> = old
+            .words
+            .iter()
+            .map(|w| TWord {
+                w: w.w.clone(),
+                raw: w.raw.clone(),
+                t0: w.t0,
+                t1: w.t1,
+                seg: 0,
+            })
+            .collect();
+        let said = said_in(p.text.as_deref(), &heard, &line.tokens);
+        let range = (old.t0, old.t1);
+        let t = marked_take(&line.id, &old.source_id, range, &heard, &said, &line.words);
+        Take {
+            lufs: old.lufs,
+            db: old.db,
+            ..t
+        }
+    };
+    take.id = old.id;
+    Ok(svc.exec(&Command::EditTake { take })?.result)
 }
 
 pub fn add_line(svc: &mut Service, scene_id: &str, p: &AddLineP) -> Result<Value> {
     let src = mic(svc, &p.source_id)?;
     let range = stretch(&src, p.t0, p.t1)?;
-    let words = crate::dev::transcript(svc, &src).map_or(vec![], |t| t.words);
-    let heard = heard_in(&words, range.0, range.1);
-    let text = p
-        .text
-        .as_deref()
-        .map(str::trim)
-        .filter(|t| !t.is_empty())
-        .map_or_else(|| spoken(&heard), str::to_string);
-    if text.is_empty() {
+    let heard = heard_on(svc, &src, range);
+    let said = said_in(p.text.as_deref(), &heard, &[]);
+    if said.is_empty() {
         return Err(AppError::Params(
             "nothing was heard there: type what's said".into(),
         ));
     }
-    let tokens = display_tokens(&text);
-    let script: Vec<String> = tokens.iter().map(|t| norm_word(t)).collect();
-    let take = marked_take("", &src.id, range, &heard, &tokens, &script);
+    let script: Vec<String> = said.iter().map(|t| norm_word(t)).collect();
+    let take = marked_take("", &src.id, range, &heard, &said, &script);
     let take = measured(svc, &src, take);
     let cmd = Command::AddLine {
         scene_id: scene_id.to_string(),
         after: p.after.clone(),
         character: p.character.clone(),
-        text,
+        text: said.join(" "),
         take,
     };
     Ok(svc.exec(&cmd)?.result)
@@ -391,9 +482,10 @@ mod tests {
 
     #[test]
     fn a_take_keeps_its_marks_and_maps_what_was_heard() {
-        let (tokens, words) = script("Oh wow, really?");
+        let (_, words) = script("Oh wow, really?");
         let heard = [word("oh", 1.9, 2.2), word("wow", 2.3, 2.6)];
-        let t = marked_take("ln", "src", (2.0, 2.5), &heard, &tokens, &words);
+        let said = said_in(None, &heard, &[]);
+        let t = marked_take("ln", "src", (2.0, 2.5), &heard, &said, &words);
         assert_eq!((t.t0, t.t1), (2.0, 2.5));
         assert_eq!(t.origin, TakeOrigin::Marked);
         assert_eq!(t.words[0].script_idx, Some(0));
@@ -408,11 +500,96 @@ mod tests {
     #[test]
     fn with_nothing_heard_the_line_is_spread_over_the_stretch() {
         let (tokens, words) = script("Ah!");
-        let t = marked_take("ln", "src", (5.0, 6.0), &[], &tokens, &words);
+        let said = said_in(None, &[], &tokens);
+        let t = marked_take("ln", "src", (5.0, 6.0), &[], &said, &words);
         assert_eq!(t.words.len(), 1);
         assert_eq!(t.words[0].script_idx, Some(0));
         assert_eq!(t.words[0].t0, 5.0);
         assert!(t.words[0].t1 <= 6.0);
+    }
+
+    fn line_of_words() -> Vec<TWord> {
+        vec![
+            word("the", 1.0, 1.2),
+            word("no", 1.3, 1.5),
+            word("bird", 1.5, 1.8),
+            word("project", 2.0, 2.6),
+        ]
+    }
+
+    fn said(s: &str) -> Vec<String> {
+        display_tokens(s)
+    }
+
+    #[test]
+    fn a_corrected_word_takes_the_time_of_the_one_misheard() {
+        let t = timed(&said("the Norbert project"), &line_of_words(), (1.0, 2.6));
+        assert_eq!(t[0], (1.0, 1.2));
+        assert_eq!(t[2], (2.0, 2.6));
+        assert_eq!(t[1], (1.2, 2.0), "the gap the misheard words were in");
+    }
+
+    #[test]
+    fn text_as_heard_keeps_every_time() {
+        let heard = line_of_words();
+        let t = timed(&said("the no bird project"), &heard, (1.0, 2.6));
+        let want: Vec<(f64, f64)> = heard.iter().map(|w| (w.t0, w.t1)).collect();
+        assert_eq!(t, want);
+    }
+
+    #[test]
+    fn words_added_around_what_was_heard_stay_in_the_stretch_and_in_order() {
+        let t = timed(
+            &said("oh the no bird project again"),
+            &line_of_words(),
+            (0.5, 3.0),
+        );
+        assert_eq!(t.len(), 6);
+        assert!(t.windows(2).all(|w| w[0].1 <= w[1].0 + 1e-9), "{t:?}");
+        assert!(t.iter().all(|w| w.0 >= 0.5 && w.1 <= 3.0), "{t:?}");
+    }
+
+    #[test]
+    fn a_repeated_word_doesnt_lose_its_place() {
+        let heard = [
+            word("no", 1.0, 1.2),
+            word("no", 1.5, 1.7),
+            word("way", 2.0, 2.3),
+        ];
+        let t = timed(&said("no no way"), &heard, (1.0, 2.3));
+        assert_eq!(t[1], (1.5, 1.7));
+    }
+
+    #[test]
+    fn text_nothing_like_what_was_heard_is_spread_over_it() {
+        let t = timed(
+            &said("something else entirely"),
+            &line_of_words(),
+            (1.0, 2.6),
+        );
+        assert_eq!(t[0].0, 1.0);
+        assert!((t[2].1 - 2.6).abs() < 1e-9);
+    }
+
+    #[test]
+    fn typed_text_wins_over_what_was_heard() {
+        let heard = line_of_words();
+        assert_eq!(
+            said_in(Some(" the Norbert "), &heard, &[]),
+            ["the", "Norbert"]
+        );
+        assert_eq!(said_in(Some("  "), &heard, &[]).len(), 4);
+        assert_eq!(said_in(None, &[], &said("Ah!")), ["Ah!"]);
+    }
+
+    #[test]
+    fn a_long_stretch_says_all_of_it_though_the_line_is_one_word() {
+        let (_, words) = script("the");
+        let heard = line_of_words();
+        let s = said_in(None, &heard, &[]);
+        let t = marked_take("ln", "src", (1.0, 2.6), &heard, &s, &words);
+        assert_eq!(t.heard, "the no bird project");
+        assert_eq!(t.words.len(), 4);
     }
 
     #[test]

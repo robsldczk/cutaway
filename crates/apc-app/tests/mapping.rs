@@ -208,3 +208,140 @@ fn a_sentence_search_stays_on_the_character_asked_for() {
         "the take itself is among the hits"
     );
 }
+
+fn take_of(s: &mut apc_app::Session, line: &Value, id: &Value) -> Value {
+    let l = lines(s)
+        .into_iter()
+        .find(|x| x["line_id"] == line["line_id"])
+        .unwrap();
+    l["takes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["id"] == *id)
+        .unwrap()
+        .clone()
+}
+
+fn words_of(t: &Value) -> Vec<String> {
+    t["words"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["text"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn a_take_edited_in_place_keeps_its_number_and_says_what_was_typed() {
+    env();
+    let d = tempfile::tempdir().unwrap();
+    let mut s = demo(d.path());
+    let (l, t) = first_take(&mut s);
+    let n = l["takes"].as_array().unwrap().len();
+
+    // text alone: the marks stay, the words are corrected
+    let heard = words_of(&t);
+    let mut fixed = heard.clone();
+    fixed[1] = "Corrected".to_string();
+    call(
+        &mut s,
+        "edit_take",
+        json!({ "take_id": t["id"], "text": fixed.join(" ") }),
+    );
+    let e = take_of(&mut s, &l, &t["id"]);
+    assert_eq!(words_of(&e), fixed);
+    assert_eq!(e["src_in"], t["src_in"]);
+    assert_eq!(e["src_out"], t["src_out"]);
+    assert_eq!(e["take_no"], t["take_no"]);
+    assert_eq!(e["lufs"], t["lufs"]);
+
+    // what plays says it too
+    let now = lines(&mut s)
+        .into_iter()
+        .find(|x| x["line_id"] == l["line_id"])
+        .unwrap();
+    let shown: Vec<&str> = now["words"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w["text"].as_str().unwrap())
+        .collect();
+    assert!(shown.contains(&"Corrected"), "{shown:?}");
+
+    // new marks: same take, shorter
+    let a = t["src_in"].as_f64().unwrap() + 0.2;
+    call(&mut s, "edit_take", json!({ "take_id": t["id"], "t0": a }));
+    let e = take_of(&mut s, &l, &t["id"]);
+    assert_eq!(e["src_in"].as_f64().unwrap(), a);
+    assert_eq!(
+        lines(&mut s)
+            .iter()
+            .find(|x| x["line_id"] == l["line_id"])
+            .unwrap()["takes"]
+            .as_array()
+            .unwrap()
+            .len(),
+        n
+    );
+
+    call(&mut s, "undo", json!({}));
+    call(&mut s, "undo", json!({}));
+    let e = take_of(&mut s, &l, &t["id"]);
+    assert_eq!(words_of(&e), heard);
+    assert_eq!(e["src_in"], t["src_in"]);
+}
+
+#[test]
+fn a_lengthened_crop_says_all_of_it() {
+    env();
+    let d = tempfile::tempdir().unwrap();
+    let mut s = demo(d.path());
+    let (l, t) = first_take(&mut s);
+    let r = call(&mut s, "recording", json!({ "source_id": t["source_id"] }));
+    let all = r["words"].as_array().unwrap();
+    let (a, z) = (
+        all[0]["t0"].as_f64().unwrap(),
+        all[all.len() - 1]["t1"].as_f64().unwrap(),
+    );
+    let made = call(
+        &mut s,
+        "add_take",
+        json!({ "line_id": l["line_id"], "source_id": t["source_id"], "t0": a - 0.05, "t1": z + 0.05 }),
+    );
+    let e = take_of(&mut s, &l, &made["take_id"]);
+    assert_eq!(
+        words_of(&e).len(),
+        all.len(),
+        "not only what's in the script"
+    );
+}
+
+#[test]
+fn a_take_deleted_needs_a_yes_leaves_the_line_and_comes_back_on_undo() {
+    env();
+    let d = tempfile::tempdir().unwrap();
+    let mut s = demo(d.path());
+    let (l, t) = first_take(&mut s);
+    let n = l["takes"].as_array().unwrap().len();
+    let count = lines(&mut s).len();
+    assert!(s
+        .call("delete_take", &json!({ "take_id": t["id"] }))
+        .is_err());
+    call(
+        &mut s,
+        "delete_take",
+        json!({ "take_id": t["id"], "confirm": true }),
+    );
+    let ls = lines(&mut s);
+    assert_eq!(ls.len(), count, "the line stays");
+    let now = ls.iter().find(|x| x["line_id"] == l["line_id"]).unwrap();
+    assert_eq!(now["takes"].as_array().unwrap().len(), n - 1);
+    assert_ne!(now["take_id"], t["id"]);
+    call(&mut s, "undo", json!({}));
+    let now = lines(&mut s)
+        .into_iter()
+        .find(|x| x["line_id"] == l["line_id"])
+        .unwrap();
+    assert_eq!(now["take_id"], t["id"]);
+}

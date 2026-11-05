@@ -652,6 +652,33 @@ pub struct AddTakeP {
     /// In and out, in source-file seconds.
     pub t0: f64,
     pub t1: f64,
+    /// What's said. Left out, it's what was heard between in and out.
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct EditTakeP {
+    pub take_id: String,
+    /// Another mic; left out, the one it's on.
+    #[serde(default)]
+    pub source_id: Option<String>,
+    /// New in and out, in source-file seconds; left out, they stay.
+    #[serde(default)]
+    pub t0: Option<f64>,
+    #[serde(default)]
+    pub t1: Option<f64>,
+    /// What it says. Left out with new marks, it's what was heard between them.
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct DeleteTakeP {
+    pub take_id: String,
+    /// Needs `"confirm": true`.
+    #[serde(default)]
+    pub confirm: bool,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -968,7 +995,9 @@ registry! {
     "set_scene_room", SceneRoomP, Write, true, "Set a scene's room: size, damping, wet (0 to 1 each; left out stays). Each scene has its own room, shared by all its sounds.";
     "mapping_open", MappingOpenP, Read, false, "Where the mapping editor opens: the mics of the cast, and the stretch of a line's take, or the place to start looking for a new line.";
     "recording", RecordingP, Read, true, "One mic's recording as heard: its words and the takes on it, with their times, and the shape of the whole file.";
-    "add_take", AddTakeP, Write, true, "Make a new take of a line from a stretch of a character's mic, with exactly these in and out points, and pick it. The line's other takes stay. A re-run of the analysis leaves it alone.";
+    "add_take", AddTakeP, Write, true, "Make a new take of a line from a stretch of a character's mic, with exactly these in and out points, and pick it. Give text to correct what was heard. The line's other takes stay. A re-run of the analysis leaves it alone.";
+    "edit_take", EditTakeP, Write, true, "Change a take where it stands: its in and out points, its mic, or what it says (to correct a misheard word). Its number, favorite and notes stay. A re-run of the analysis leaves it alone.";
+    "delete_take", DeleteTakeP, Destructive, true, "Delete one take of a line; the line stays. The next take is picked, undo brings it back, and a re-run of the analysis doesn't.";
     "add_line", AddLineP, Write, true, "Add a line that isn't in the script, from a stretch of a character's mic, after a line or action of the scene. A re-run of the analysis leaves it alone.";
     "delete_line", DeleteLineP, Destructive, true, "Take a line out of the cut. The script and the recordings stay as they are, a new script version doesn't bring it back, and undo does. Sounds hanging on it move to the next line.";
 }
@@ -1673,6 +1702,15 @@ impl Service {
             "add_take" => {
                 let p: AddTakeP = parse(params)?;
                 crate::mapping::add_take(self, &p)
+            }
+            "edit_take" => {
+                let p: EditTakeP = parse(params)?;
+                crate::mapping::edit_take(self, &p)
+            }
+            "delete_take" => {
+                let p: DeleteTakeP = parse(params)?;
+                need_confirm("delete_take", p.confirm)?;
+                Ok(self.exec(&Command::DeleteTake { take_id: p.take_id })?.result)
             }
             "add_line" => {
                 let p: AddLineP = parse(params)?;
