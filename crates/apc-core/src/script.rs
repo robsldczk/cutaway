@@ -42,6 +42,9 @@ pub struct ChangeSummary {
     pub takes_to_rematch: usize,
     #[serde(default)]
     pub story: StorySummary,
+    /// Locked scenes whose lines this version changed: they stay locked, and are flagged.
+    #[serde(default)]
+    pub locked_scenes: Vec<String>,
 }
 
 impl ChangeSummary {
@@ -58,7 +61,18 @@ impl ChangeSummary {
             self.takes_to_rematch,
             self.takes_to_unmatched
         ) + &story_text(&self.story)
+            + &locked_text(&self.locked_scenes)
     }
+}
+
+fn locked_text(scenes: &[String]) -> String {
+    if scenes.is_empty() {
+        return String::new();
+    }
+    format!(
+        "; changed while locked: {} (their exported files no longer match the script)",
+        scenes.join(", ")
+    )
 }
 
 fn story_text(s: &StorySummary) -> String {
@@ -399,6 +413,7 @@ pub fn apply_version(
     summary.story = crate::story::merge(tx, &parsed.story)?;
 
     // Lines.
+    let mut touched: HashSet<String> = HashSet::new();
     let mut orders: Vec<Vec<String>> = vec![Vec::new(); parsed.scenes.len()];
     let mut numbers: Vec<u32> = vec![0; parsed.scenes.len()];
     for (n, (si, u)) in new_units.iter().enumerate() {
@@ -438,6 +453,9 @@ pub fn apply_version(
             old_text: new_to_old.get(&n).map(|(o, _)| old_lines[*o].text.clone()),
             new_text: Some(u.text.clone()),
         };
+        if !matches!(new_to_old.get(&n), Some((_, false))) {
+            touched.insert(scene_ids[*si].clone());
+        }
         match new_to_old.get(&n) {
             Some((_, true)) => {
                 // re-match: keep the takes, flag them, keep the old pick as a suggestion
@@ -488,6 +506,7 @@ pub fn apply_version(
     // Deleted lines: their takes go to the unmatched bin.
     for o in deleted {
         let ol = old_lines[o];
+        touched.insert(ol.scene_id.clone());
         summary.deleted.push(LineChange {
             line_id: ol.id.clone(),
             character: ol.character.clone(),
@@ -535,6 +554,14 @@ pub fn apply_version(
                 }
             }
         }
+        // the lock stays: the delivered files are still what was delivered
+        let lock = old.and_then(|s| s.lock.clone()).map(|mut l| {
+            if touched.contains(id) {
+                l.script_changed = true;
+                summary.locked_scenes.push(format!("Sc. {}", si + 1));
+            }
+            l
+        });
         tx.put(&Scene {
             id: id.clone(),
             number: (si + 1) as u32,
@@ -548,6 +575,7 @@ pub fn apply_version(
             story: crate::story::merge_scene(old.map(|s| &s.story), &sc.story),
             room: old.map(|s| s.room).unwrap_or_default(),
             tone: old.and_then(|s| s.tone.clone()),
+            lock,
         })?;
     }
     for s in doc.scenes.values() {
@@ -606,6 +634,38 @@ mod tests {
             })
             .unwrap();
         serde_json::from_value(r.result).unwrap()
+    }
+
+    #[test]
+    fn a_new_version_keeps_a_lock_and_flags_the_scene_it_changes() {
+        let (_d, mut bus) = bus();
+        let v1 = "INT. LAB - DAY\n\nPAUL\nHello there.\n\nINT. YARD - DAY\n\nANNA\nGood morning.\n";
+        import(&mut bus, 1, v1);
+        let ids: Vec<String> = bus
+            .doc()
+            .scenes_in_order()
+            .iter()
+            .map(|s| s.id.clone())
+            .collect();
+        for id in &ids {
+            bus.execute(&Command::LockScene {
+                scene_id: id.clone(),
+                version: Some(2),
+                at: "2026-11-05".into(),
+            })
+            .unwrap();
+        }
+        let s = import(
+            &mut bus,
+            2,
+            &v1.replace("Hello there.", "Hello over there."),
+        );
+        assert_eq!(s.locked_scenes, ["Sc. 1"], "listed in the change summary");
+        assert!(s.text().contains("changed while locked: Sc. 1"));
+        let lock = |id: &str| bus.doc().scenes[id].lock.clone().unwrap();
+        assert!(lock(&ids[0]).script_changed, "the changed scene is flagged");
+        assert_eq!(lock(&ids[0]).version, Some(2), "and stays locked");
+        assert!(!lock(&ids[1]).script_changed, "the other one isn't");
     }
 
     fn id_of(bus: &CommandBus, text: &str) -> String {

@@ -205,9 +205,54 @@ pub struct Scene {
     /// The ambience looping under this scene. Without one it plays what its location has (D97).
     #[serde(default)]
     pub tone: Option<SceneTone>,
+    /// Delivered: its timing holds still until it's unlocked (D106).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lock: Option<SceneLock>,
+}
+
+/// Why a scene's timing is held, and since when. See `timeline::timing_print` for what it holds.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, schemars::JsonSchema)]
+#[serde(default)]
+pub struct SceneLock {
+    /// The export the lock protects; `None` for a scene locked by hand before any export.
+    pub version: Option<u32>,
+    /// The day it was locked, `2026-11-05`.
+    pub at: String,
+    /// A newer script version changed lines inside the scene while it was locked.
+    pub script_changed: bool,
+}
+
+impl SceneLock {
+    /// `5 Nov`
+    pub fn day(&self) -> String {
+        chrono::NaiveDate::parse_from_str(&self.at, "%Y-%m-%d")
+            .map(|d| d.format("%-d %b").to_string())
+            .unwrap_or_else(|_| self.at.clone())
+    }
+
+    /// `Exported as v003 on 5 Nov.`, or nothing for a scene never exported.
+    pub fn story(&self) -> Option<String> {
+        self.version
+            .map(|v| format!("Exported as v{v:03} on {}.", self.day()))
+    }
 }
 
 impl Scene {
+    /// `Sc. 2`
+    pub fn label(&self) -> String {
+        format!("Sc. {}", self.number)
+    }
+
+    /// What an edit that would move something here is told.
+    pub fn lock_refusal(&self) -> Option<String> {
+        let lock = self.lock.as_ref()?;
+        let story = lock.story().map(|s| format!(" {s}")).unwrap_or_default();
+        Some(format!(
+            "{} is locked.{story} Timing can't change; unlock it first.",
+            self.label()
+        ))
+    }
+
     /// Dark outside: the time of day a place may have a second ambience for.
     pub fn is_night(&self) -> bool {
         let t = self.time_of_day.to_lowercase();

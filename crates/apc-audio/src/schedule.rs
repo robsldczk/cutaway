@@ -396,6 +396,7 @@ mod tests {
             story: Default::default(),
             room: Default::default(),
             tone: None,
+            lock: None,
         };
         (d, s)
     }

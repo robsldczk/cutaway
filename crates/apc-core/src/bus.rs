@@ -8,6 +8,10 @@ use crate::commands::Command;
 use crate::error::{CoreError, Result};
 use crate::model::{Document, Entity, Kind};
 use crate::store::{CommitOutcome, EpisodeStore, LogRow};
+use crate::timeline::{broken_lock, locked_timing};
+
+/// The command that may change a locked scene.
+const SCRIPT_IMPORT: &str = "import_script_version";
 
 /// One entity change with both sides, so undo and redo are generic.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -208,6 +212,12 @@ impl CommandBus {
     ) -> Result<Executed> {
         for _attempt in 0..3 {
             self.refresh()?;
+            // a new script version may change a locked scene: it flags it instead (D106)
+            let locks = if name == SCRIPT_IMPORT {
+                Vec::new()
+            } else {
+                locked_timing(&self.doc)
+            };
             let mut tx = Tx::new(&mut self.doc);
             let result = match f(&mut tx) {
                 Ok(v) => v,
@@ -216,6 +226,10 @@ impl CommandBus {
                     return Err(e);
                 }
             };
+            if let Some(refusal) = broken_lock(tx.doc(), &locks) {
+                tx.rollback()?;
+                return Err(CoreError::SceneLocked(refusal));
+            }
             let changes = tx.into_changes();
             if changes.is_empty() {
                 return Ok(Executed {

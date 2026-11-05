@@ -17,6 +17,9 @@ pub enum CoreError {
     Invalid(String),
     #[error("unsupported project schema version {found} (this build reads up to {supported})")]
     SchemaVersion { found: i64, supported: i64 },
+    /// An edit would have moved something in a locked scene. The message names the lock.
+    #[error("{0}")]
+    SceneLocked(String),
     #[error("{0}")]
     Other(String),
 }

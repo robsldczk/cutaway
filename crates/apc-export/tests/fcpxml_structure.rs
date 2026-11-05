@@ -219,6 +219,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             story: Default::default(),
             room: Default::default(),
             tone: None,
+            lock: None,
         },
     );
     d.assets.insert(

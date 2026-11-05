@@ -5,6 +5,7 @@
 //! absolute pin. Everything after a box ripples when it changes; pinned boxes stay put.
 
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 
@@ -154,6 +155,69 @@ impl SceneLayout {
     pub fn pieces(&self) -> impl Iterator<Item = &ClipPiece> {
         self.items.iter().flat_map(|i| i.pieces.iter())
     }
+}
+
+/// What a lock holds still in a scene: where everything sits and which audio it is. Levels, pan,
+/// depth, fades and mutes aren't in it, so they stay free (D106). Two equal prints mean the files
+/// already delivered still line up.
+pub fn timing_print(doc: &Document, scene: &Scene, pacing: &Pacing) -> String {
+    let layout = layout_scene(doc, scene, pacing);
+    let mut out = format!("{:.4}\n", layout.duration_s);
+    for i in &layout.items {
+        let _ = writeln!(out, "{} {:.4} {:.4}", i.item_id, i.start_s, i.end_s);
+        for p in &i.audio {
+            let _ = writeln!(
+                out,
+                " {} {:.4} {:.4} {:.4}",
+                p.source_id, p.src_in, p.src_out, p.start_s
+            );
+        }
+    }
+    let mut sounds: Vec<&Placement> = doc
+        .placements
+        .values()
+        .filter(|p| p.scene_id == scene.id)
+        .collect();
+    sounds.sort_by(|a, b| a.id.cmp(&b.id));
+    for p in sounds {
+        let _ = writeln!(
+            out,
+            "{} {} {:.4} {:.4} {:.4} {}",
+            p.id,
+            p.asset_id,
+            placement_start(&layout, p),
+            p.len_s,
+            p.in_s,
+            p.looped
+        );
+    }
+    out
+}
+
+/// The timing of every locked scene, by scene id. Empty, and free, when nothing is locked.
+pub fn locked_timing(doc: &Document) -> Vec<(String, String)> {
+    if doc.scenes.values().all(|s| s.lock.is_none()) {
+        return Vec::new();
+    }
+    let pacing = crate::config::ProjectConfig::from_doc(doc).pacing();
+    doc.scenes
+        .values()
+        .filter(|s| s.lock.is_some())
+        .map(|s| (s.id.clone(), timing_print(doc, s, &pacing)))
+        .collect()
+}
+
+/// The first scene still locked whose timing differs from `before`, as what to tell the editor.
+pub fn broken_lock(doc: &Document, before: &[(String, String)]) -> Option<String> {
+    if before.is_empty() {
+        return None;
+    }
+    let pacing = crate::config::ProjectConfig::from_doc(doc).pacing();
+    before.iter().find_map(|(id, print)| {
+        let scene = doc.scenes.get(id)?;
+        let refusal = scene.lock_refusal()?;
+        (timing_print(doc, scene, &pacing) != *print).then_some(refusal)
+    })
 }
 
 /// Default spacer length for an action line: a beat that grows with its length.
@@ -996,6 +1060,7 @@ pub(crate) mod tests {
             story: Default::default(),
             room: Default::default(),
             tone: None,
+            lock: None,
         };
         (d, sc)
     }

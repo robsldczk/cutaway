@@ -40,6 +40,7 @@ fn scene(id: &str, number: u32, room: SceneRoom) -> Scene {
         story: Default::default(),
         room,
         tone: None,
+        lock: None,
     }
 }
 

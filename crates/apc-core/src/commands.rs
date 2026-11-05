@@ -431,6 +431,18 @@ pub enum Command {
     DeleteTake {
         take_id: String,
     },
+    /// Holds a scene's timing still: from here on the bus refuses whatever would move something
+    /// in it. `version` is the export the lock protects; locking again moves it on.
+    LockScene {
+        scene_id: String,
+        #[serde(default)]
+        version: Option<u32>,
+        /// The day, `2026-11-05`.
+        at: String,
+    },
+    UnlockScene {
+        scene_id: String,
+    },
 }
 
 fn yes() -> bool {
@@ -515,6 +527,8 @@ impl Command {
             Command::DeleteLine { .. } => "delete_line",
             Command::EditTake { .. } => "edit_take",
             Command::DeleteTake { .. } => "delete_take",
+            Command::LockScene { .. } => "lock_scene",
+            Command::UnlockScene { .. } => "unlock_scene",
         }
     }
 
@@ -1265,6 +1279,26 @@ impl Command {
             Command::DeleteLine { line_id } => delete_line(tx, line_id, &pacing),
             Command::EditTake { take } => edit_take(tx, take),
             Command::DeleteTake { take_id } => delete_take(tx, take_id),
+            Command::LockScene {
+                scene_id,
+                version,
+                at,
+            } => {
+                let mut s = scene(tx, scene_id)?;
+                s.lock = Some(SceneLock {
+                    version: *version,
+                    at: at.clone(),
+                    script_changed: false,
+                });
+                tx.put(&s)?;
+                Ok(Value::Null)
+            }
+            Command::UnlockScene { scene_id } => {
+                let mut s = scene(tx, scene_id)?;
+                s.lock = None;
+                tx.put(&s)?;
+                Ok(Value::Null)
+            }
             Command::SetLaneMix { mix } => {
                 let mut m = mix.clone();
                 m.volume_db = m.volume_db.clamp(-60.0, 12.0);
@@ -1365,6 +1399,14 @@ fn boxed(tx: &Tx, line_id: &str) -> Result<BoxState> {
         id: line_id.to_string(),
         ..Default::default()
     }))
+}
+
+fn scene(tx: &Tx, scene_id: &str) -> Result<Scene> {
+    tx.doc()
+        .scenes
+        .get(scene_id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("scene", scene_id))
 }
 
 fn scene_of(tx: &Tx, line_id: &str) -> Result<Scene> {
