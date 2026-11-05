@@ -62,7 +62,7 @@ pub fn sessions(svc: &Service) -> Value {
                 match t.origin {
                     TakeOrigin::Matcher => matcher += 1,
                     TakeOrigin::Rescue => rescue += 1,
-                    TakeOrigin::Manual | TakeOrigin::Marked => manual += 1,
+                    TakeOrigin::Manual | TakeOrigin::Marked | TakeOrigin::Corrected => manual += 1,
                 }
             }
             json!({

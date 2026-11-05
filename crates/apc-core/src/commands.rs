@@ -421,6 +421,16 @@ pub enum Command {
     DeleteLine {
         line_id: String,
     },
+    /// Changes a take where it stands: its stretch and what it says. Its number, favorite and
+    /// notes stay. New marks make it `Marked`; new text alone `Corrected`, its edges as they were.
+    EditTake {
+        take: Take,
+    },
+    /// Deletes one take of a line; the line stays. The next take is picked, and a re-run of the
+    /// analysis doesn't bring it back.
+    DeleteTake {
+        take_id: String,
+    },
 }
 
 fn yes() -> bool {
@@ -503,6 +513,8 @@ impl Command {
             Command::AddTake { .. } => "add_take",
             Command::AddLine { .. } => "add_line",
             Command::DeleteLine { .. } => "delete_line",
+            Command::EditTake { .. } => "edit_take",
+            Command::DeleteTake { .. } => "delete_take",
         }
     }
 
@@ -1251,6 +1263,8 @@ impl Command {
                 &pacing,
             ),
             Command::DeleteLine { line_id } => delete_line(tx, line_id, &pacing),
+            Command::EditTake { take } => edit_take(tx, take),
+            Command::DeleteTake { take_id } => delete_take(tx, take_id),
             Command::SetLaneMix { mix } => {
                 let mut m = mix.clone();
                 m.volume_db = m.volume_db.clamp(-60.0, 12.0);
@@ -1955,6 +1969,112 @@ fn add_take(tx: &mut Tx, take: &Take) -> Result<Value> {
     Ok(json!({ "take_id": take.id, "take_no": take_no }))
 }
 
+fn edit_take(tx: &mut Tx, take: &Take) -> Result<Value> {
+    check_marked(tx, take)?;
+    let old = tx
+        .doc()
+        .takes
+        .get(&take.id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("take", &take.id))?;
+    let moved = old.source_id != take.source_id || old.t0 != take.t0 || old.t1 != take.t1;
+    let origin = if moved || old.origin == TakeOrigin::Marked {
+        TakeOrigin::Marked
+    } else {
+        TakeOrigin::Corrected
+    };
+    let line_id = old.line_id.clone();
+    let mut b = boxed(tx, &line_id)?;
+    let picked = b.take_id.as_deref() == Some(old.id.as_str());
+    let in_comp = b.comp.iter().any(|c| c.take_id == old.id);
+    if moved {
+        // what was cut to the old stretch doesn't fit the new one
+        if picked {
+            b.head_s = 0.0;
+            b.tail_s = 0.0;
+        }
+        if in_comp {
+            b.comp.clear();
+        }
+        b.split_points.retain(|s| s.take_id != old.id);
+    }
+    if (picked || in_comp) && (moved || old.words.len() != take.words.len()) {
+        // word edits count the words as they were
+        b.edits = WordEdits::default();
+    }
+    tx.put(&b)?;
+    tx.put(&Take {
+        source_id: take.source_id.clone(),
+        t0: take.t0,
+        t1: take.t1,
+        words: take.words.clone(),
+        score: take.score,
+        heard: take.heard.clone(),
+        lufs: take.lufs,
+        db: take.db,
+        partial: old.partial && !moved,
+        take_type: if moved { TakeType::Full } else { old.take_type },
+        confidence: 1.0,
+        needs_rematch: false,
+        ai_flag: None,
+        origin,
+        ..old.clone()
+    })?;
+    Ok(json!({ "take_id": old.id, "take_no": old.take_no, "moved": moved }))
+}
+
+fn delete_take(tx: &mut Tx, take_id: &str) -> Result<Value> {
+    let take = tx
+        .doc()
+        .takes
+        .get(take_id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("take", take_id))?;
+    let line_id = take.line_id.clone();
+    let mut left: Vec<Take> = tx
+        .doc()
+        .takes_of_line(&line_id)
+        .into_iter()
+        .filter(|t| t.id != take_id)
+        .cloned()
+        .collect();
+    let mut b = boxed(tx, &line_id)?;
+    b.dismissed.push(DismissedTake {
+        take_id: take.id.clone(),
+        source_id: take.source_id.clone(),
+        t0: take.t0,
+        t1: take.t1,
+    });
+    if b.take_id.as_deref() == Some(take_id) {
+        let next = left
+            .iter()
+            .find(|t| t.take_no > take.take_no)
+            .or(left.last());
+        b.take_id = next.map(|t| t.id.clone());
+        b.comp.clear();
+        b.edits = WordEdits::default();
+        b.head_s = 0.0;
+        b.tail_s = 0.0;
+        b.split_points.clear();
+    } else {
+        if b.comp.iter().any(|c| c.take_id == take_id) {
+            b.edits = WordEdits::default();
+        }
+        b.comp.retain(|c| c.take_id != take_id);
+        b.split_points.retain(|s| s.take_id != take_id);
+    }
+    let picked = b.take_id.clone();
+    tx.put(&b)?;
+    tx.delete::<Take>(take_id)?;
+    for (n, t) in left.iter_mut().enumerate() {
+        if t.take_no != (n + 1) as u32 {
+            t.take_no = (n + 1) as u32;
+            tx.put(t)?;
+        }
+    }
+    Ok(json!({ "line_id": line_id, "picked": picked }))
+}
+
 fn add_line(
     tx: &mut Tx,
     scene_id: &str,
@@ -2243,12 +2363,11 @@ fn apply_analysis(tx: &mut Tx, payload: &AnalysisPayload) -> Result<Value> {
     let new_ids: HashSet<&str> = payload.takes.iter().map(|t| t.id.as_str()).collect();
     let mut kept: HashSet<&str> = HashSet::new();
     for t in doc.takes.values() {
-        if in_scope(&t.line_id) && !new_ids.contains(t.id.as_str()) {
-            let by_hand = t.origin == TakeOrigin::Marked
-                || doc.lines.get(&t.line_id).is_some_and(|l| l.adlib);
-            if by_hand {
-                kept.insert(t.id.as_str());
-            } else if t.favorite && t.favorite_origin.as_deref() == Some("user") {
+        let by_hand = t.origin.by_hand() || doc.lines.get(&t.line_id).is_some_and(|l| l.adlib);
+        if in_scope(&t.line_id) && by_hand {
+            kept.insert(t.id.as_str());
+        } else if in_scope(&t.line_id) && !new_ids.contains(t.id.as_str()) {
+            if t.favorite && t.favorite_origin.as_deref() == Some("user") {
                 // a take starred by hand is never dropped by a re-run; it is flagged
                 let mut flagged = t.clone();
                 flagged.needs_rematch = true;
@@ -2259,7 +2378,17 @@ fn apply_analysis(tx: &mut Tx, payload: &AnalysisPayload) -> Result<Value> {
             }
         }
     }
+    let mut lines: HashSet<String> = HashSet::new();
     for t in &payload.takes {
+        // a take settled by hand stays as it is, and one deleted by hand stays deleted
+        let deleted = doc
+            .boxes
+            .get(&t.line_id)
+            .is_some_and(|b| b.dismissed.iter().any(|d| d.covers(t)));
+        if deleted || kept.contains(t.id.as_str()) {
+            lines.insert(t.line_id.clone());
+            continue;
+        }
         let mut t = t.clone();
         match doc.takes.get(&t.id) {
             Some(old) if old.favorite_origin.as_deref() == Some("user") => {
@@ -2276,11 +2405,11 @@ fn apply_analysis(tx: &mut Tx, payload: &AnalysisPayload) -> Result<Value> {
         tx.put(&t)?;
     }
     // the run numbers its own takes from one: what stayed goes after them
-    let lines: HashSet<String> = kept
-        .iter()
-        .filter_map(|id| doc.takes.get(*id))
-        .map(|t| t.line_id.clone())
-        .collect();
+    lines.extend(
+        kept.iter()
+            .filter_map(|id| doc.takes.get(*id))
+            .map(|t| t.line_id.clone()),
+    );
     for lid in lines {
         let mut takes: Vec<Take> = tx.doc().takes_of_line(&lid).into_iter().cloned().collect();
         takes.sort_by_key(|t| (kept.contains(t.id.as_str()), t.take_no));
@@ -3146,6 +3275,173 @@ mod tests {
         })
         .unwrap();
         assert!(bus.doc().takes.contains_key("new"));
+    }
+
+    /// Line "a" with takes "one" and "two" on `src`, "two" picked.
+    fn two_takes(bus: &mut CommandBus) {
+        seed_character(bus, "A");
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            for (id, no, t0) in [("one", 1, 1.0), ("two", 2, 5.0)] {
+                let mut t = crate::timeline::tests::take(id, "a", t0, t0 + 1.0, vec![]);
+                t.take_no = no;
+                tx.put(&t)?;
+            }
+            let others: Vec<String> = tx
+                .doc()
+                .takes
+                .values()
+                .filter(|t| t.line_id == "a" && t.id != "one" && t.id != "two")
+                .map(|t| t.id.clone())
+                .collect();
+            for id in others {
+                tx.delete::<Take>(&id)?;
+            }
+            let mut b = tx.doc().boxes["a"].clone();
+            b.take_id = Some("two".into());
+            tx.put(&b)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn new_marks_change_a_take_where_it_stands() {
+        let (_d, mut bus) = setup();
+        two_takes(&mut bus);
+        bus.execute(&Command::ToggleFavorite {
+            take_id: "two".into(),
+        })
+        .unwrap();
+        bus.execute(&Command::SetTrim {
+            line_id: "a".into(),
+            head_s: 0.1,
+            tail_s: 0.0,
+        })
+        .unwrap();
+        let before = bus.doc().clone();
+        bus.execute(&Command::EditTake {
+            take: marked("two", "a", 7.0, 9.0),
+        })
+        .unwrap();
+        let t = &bus.doc().takes["two"];
+        assert_eq!((t.t0, t.t1, t.take_no), (7.0, 9.0, 2));
+        assert_eq!(t.origin, TakeOrigin::Marked);
+        assert!(t.favorite, "what the take was stays");
+        assert_eq!(bus.doc().boxes["a"].head_s, 0.0);
+        assert_eq!(bus.doc().takes_of_line("a").len(), 2);
+        bus.undo().unwrap();
+        assert_eq!(bus.doc(), &before);
+    }
+
+    #[test]
+    fn new_text_alone_keeps_a_takes_edges_and_handles() {
+        let (_d, mut bus) = setup();
+        two_takes(&mut bus);
+        let word = crate::timeline::tests::word("fixed", 5.1, 5.9, 0);
+        let mut t = bus.doc().takes["two"].clone();
+        t.words = vec![word];
+        t.heard = "fixed".into();
+        bus.execute(&Command::EditTake { take: t }).unwrap();
+        let t = &bus.doc().takes["two"];
+        assert_eq!(t.origin, TakeOrigin::Corrected);
+        assert_eq!(t.heard, "fixed");
+        let l = lay(&bus);
+        let it = l.item("a").unwrap();
+        assert!(
+            it.audio[0].src_out > it.pieces[0].src_out,
+            "the handle stays"
+        );
+    }
+
+    #[test]
+    fn a_rerun_leaves_an_edited_take_though_it_finds_the_same_one() {
+        let (_d, mut bus) = setup();
+        two_takes(&mut bus);
+        bus.execute(&Command::EditTake {
+            take: marked("two", "a", 7.0, 9.0),
+        })
+        .unwrap();
+        let found = crate::timeline::tests::take("two", "a", 5.0, 6.0, vec![]);
+        bus.execute(&Command::ApplyAnalysis {
+            payload: AnalysisPayload {
+                takes: vec![found],
+                ..Default::default()
+            },
+        })
+        .unwrap();
+        assert_eq!(bus.doc().takes["two"].t0, 7.0);
+    }
+
+    #[test]
+    fn deleting_a_take_picks_the_next_and_undo_brings_it_back() {
+        let (_d, mut bus) = setup();
+        two_takes(&mut bus);
+        bus.execute(&Command::SelectTake {
+            line_id: "a".into(),
+            take_id: "one".into(),
+        })
+        .unwrap();
+        let before = bus.doc().clone();
+        let r = bus
+            .execute(&Command::DeleteTake {
+                take_id: "one".into(),
+            })
+            .unwrap();
+        assert_eq!(r.result["picked"], "two");
+        assert_eq!(bus.doc().boxes["a"].take_id.as_deref(), Some("two"));
+        assert_eq!(bus.doc().takes["two"].take_no, 1, "the numbers close up");
+        assert!(bus.doc().lines.contains_key("a"), "the line stays");
+        assert!(bus
+            .doc()
+            .scenes
+            .values()
+            .next()
+            .unwrap()
+            .order
+            .contains(&"a".to_string()));
+        bus.undo().unwrap();
+        assert_eq!(bus.doc(), &before);
+    }
+
+    #[test]
+    fn the_last_take_goes_and_the_line_stays_without_one() {
+        let (_d, mut bus) = setup();
+        two_takes(&mut bus);
+        for id in ["two", "one"] {
+            bus.execute(&Command::DeleteTake { take_id: id.into() })
+                .unwrap();
+        }
+        assert!(bus.doc().boxes["a"].take_id.is_none());
+        assert!(bus.doc().takes_of_line("a").is_empty());
+        assert!(lay(&bus).item("a").is_some());
+    }
+
+    #[test]
+    fn a_rerun_does_not_bring_a_deleted_take_back() {
+        let (_d, mut bus) = setup();
+        two_takes(&mut bus);
+        bus.execute(&Command::DeleteTake {
+            take_id: "two".into(),
+        })
+        .unwrap();
+        // the same stretch, and the same stretch placed a little differently under a new id
+        let same = crate::timeline::tests::take("two", "a", 5.0, 6.0, vec![]);
+        let near = crate::timeline::tests::take("near", "a", 5.1, 6.1, vec![]);
+        let other = crate::timeline::tests::take("other", "a", 20.0, 21.0, vec![]);
+        bus.execute(&Command::ApplyAnalysis {
+            payload: AnalysisPayload {
+                takes: vec![same, near, other],
+                ..Default::default()
+            },
+        })
+        .unwrap();
+        let ids: Vec<&str> = bus
+            .doc()
+            .takes_of_line("a")
+            .iter()
+            .map(|t| t.id.as_str())
+            .collect();
+        assert_eq!(ids, ["other"]);
     }
 
     #[test]

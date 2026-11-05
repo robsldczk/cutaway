@@ -600,6 +600,16 @@ pub enum TakeOrigin {
     /// In and out marked by hand in the mapping editor: heard exactly as marked, and a re-run
     /// of the analysis leaves it alone.
     Marked,
+    /// Found by the matcher, its text corrected by hand. It keeps its edges and handles, and a
+    /// re-run leaves it alone.
+    Corrected,
+}
+
+impl TakeOrigin {
+    /// A person settled this take: a re-run of the analysis doesn't replace it.
+    pub fn by_hand(self) -> bool {
+        matches!(self, TakeOrigin::Marked | TakeOrigin::Corrected)
+    }
 }
 
 impl Take {
@@ -786,6 +796,31 @@ pub struct BoxState {
     /// Old pick kept as a suggestion after a script change.
     #[serde(default)]
     pub suggested_take: Option<String>,
+    /// Takes deleted by hand: a re-run of the analysis doesn't bring them back.
+    #[serde(default)]
+    pub dismissed: Vec<DismissedTake>,
+}
+
+/// What's remembered of a deleted take.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, schemars::JsonSchema)]
+pub struct DismissedTake {
+    pub take_id: String,
+    pub source_id: String,
+    pub t0: f64,
+    pub t1: f64,
+}
+
+impl DismissedTake {
+    /// Is this the performance that was deleted? The same id, or most of the same stretch:
+    /// a re-run can place its edges a little differently.
+    pub fn covers(&self, t: &Take) -> bool {
+        if t.id == self.take_id {
+            return true;
+        }
+        let shared = self.t1.min(t.t1) - self.t0.max(t.t0);
+        let shorter = (self.t1 - self.t0).min(t.t1 - t.t0);
+        t.source_id == self.source_id && shorter > 0.0 && shared > shorter / 2.0
+    }
 }
 
 impl Entity for BoxState {
