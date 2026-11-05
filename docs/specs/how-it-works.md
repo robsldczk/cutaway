@@ -102,6 +102,8 @@ Rules:
 - **Mute and ripple delete** *(added in implementation, M11 / D56)*: a muted box, part or sound keeps its time but is not heard (skipped in playback and bounce, disabled in FCPXML, no subtitle). A ripple-deleted part leaves the cut and the time closes up; it can be restored.
 - **Pinned boxes** *(changed in implementation, M11 / D57)*: a box pinned to absolute time is out of the ripple chain; the next box follows the last unpinned one. The first unpinned box honours its pause.
 
+*(Changed in implementation, D104: a take can be marked by hand in the mapping editor (`TakeOrigin::Marked`): it's heard exactly as marked, without handles, and a re-run leaves it alone. A line can be added by hand (`adlib`) or deleted (`removed`: off the scene's order, its takes kept, so the matcher still claims its audio and a new script version doesn't bring it back).)*
+
 ## Audio rules
 
 - **Cut points:** snap to word boundaries, then to the nearest zero crossing.

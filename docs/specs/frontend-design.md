@@ -301,6 +301,8 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 - **Summary card after processing:** lines matched, takes found, picks found, flagged items.
 - **Flagged items:** listed in the scene rail/list, not in the column.
 
+*(Changed in implementation, D104: the mapping editor, on Options. M opens a character's mic on the current line's take: the waveform with the heard words on it, in and out marks, a strip of the whole file, a sentence search and a button that makes a new take. A plus on hover between two lines opens it for a new line. An × on hover deletes a line or direction, after asking; ⌘Z brings it back. Inside it: I / O mark at the locator, Space plays the marks, ⇧ Space from the locator, Enter creates, / searches, Esc closes.)*
+
 ## Keyboard map
 
 | Key | Action |
@@ -313,6 +315,7 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 | Enter | Play line in context |
 | F | Favorite take |
 | E | Open box editor |
+| M | Open the mapping editor (Options) |
 | Esc | Close box editor / inspector / drawers |
 | I / O | In / out at the locator (Options, Arrange) |
 | ⌘I | Inspector |
