@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use apc_audio::{offline, MixSettings, PlaySchedule, SourceSet};
-use apc_core::config::ProjectConfig;
+use apc_core::config::{AudioCodec, ProjectConfig};
 use apc_core::project::EpisodePaths;
-use apc_core::Document;
+use apc_core::{Document, Scene};
 
 use crate::error::{ExportError, Result};
 use crate::fcpxml::media_info;
@@ -50,6 +50,39 @@ pub fn ffmpeg_available() -> bool {
         .unwrap_or(false)
 }
 
+/// What a scene's exports hear: the same schedule for the bounce, the stems and the mix.
+pub fn schedule_of(doc: &Document, scene: &Scene) -> PlaySchedule {
+    let cfg = ProjectConfig::from_doc(doc);
+    let settings = MixSettings {
+        room_tone: cfg.pacing.room_tone,
+        ..MixSettings::default()
+    };
+    PlaySchedule::from_scene(doc, scene, &cfg.pacing(), &settings)
+}
+
+/// Encodes a WAV as MP3 or FLAC next to it and removes the WAV.
+pub fn encode(wav: &Path, out: &Path, codec: AudioCodec) -> Result<()> {
+    let args: &[&str] = match codec {
+        AudioCodec::Wav => return Ok(()),
+        AudioCodec::Mp3 => &["-codec:a", "libmp3lame", "-b:a", "192k"],
+        AudioCodec::Flac => &["-codec:a", "flac"],
+    };
+    let st = Command::new("ffmpeg")
+        .args(["-y", "-loglevel", "error", "-i"])
+        .arg(wav)
+        .args(args)
+        .arg(out)
+        .status()?;
+    if !st.success() {
+        return Err(ExportError::Invalid(format!(
+            "ffmpeg failed to encode the {}",
+            codec.ext().to_uppercase()
+        )));
+    }
+    std::fs::remove_file(wav)?;
+    Ok(())
+}
+
 /// Bounces one scene. Returns the written file and its length.
 pub fn bounce_scene(
     doc: &Document,
@@ -61,12 +94,7 @@ pub fn bounce_scene(
     let scene = doc
         .find_scene(scene_key)
         .ok_or_else(|| ExportError::Invalid(format!("no scene '{scene_key}'")))?;
-    let cfg = ProjectConfig::from_doc(doc);
-    let settings = MixSettings {
-        room_tone: cfg.pacing.room_tone,
-        ..MixSettings::default()
-    };
-    let sched = PlaySchedule::from_scene(doc, scene, &cfg.pacing(), &settings);
+    let sched = schedule_of(doc, scene);
     let set = source_set(doc, paths, mix_rate(doc));
     std::fs::create_dir_all(out_dir)?;
     let base = format!("S{} {}", scene.number, scene.place);
@@ -81,18 +109,7 @@ pub fn bounce_scene(
                 ));
             }
             let mp3 = out_dir.join(format!("{base}.mp3"));
-            let st = Command::new("ffmpeg")
-                .args(["-y", "-loglevel", "error", "-i"])
-                .arg(&wav)
-                .args(["-codec:a", "libmp3lame", "-b:a", "192k"])
-                .arg(&mp3)
-                .status()?;
-            if !st.success() {
-                return Err(ExportError::Invalid(
-                    "ffmpeg failed to encode the MP3".into(),
-                ));
-            }
-            std::fs::remove_file(&wav)?;
+            encode(&wav, &mp3, AudioCodec::Mp3)?;
             Ok((mp3, len))
         }
     }

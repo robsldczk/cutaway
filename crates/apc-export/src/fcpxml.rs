@@ -116,11 +116,21 @@ pub fn media_info(doc: &Document, paths: &EpisodePaths, id: &str) -> Option<Medi
     })
 }
 
+/// Lanes of the rendered room tracks.
+pub const ROOM_VOICES_LANE: &str = "ROOM VOICES";
+pub const ROOM_EFFECTS_LANE: &str = "ROOM EFFECTS";
+
 fn role_of(lane: &str, doc: &Document) -> String {
     if let Some(c) = doc.characters.get(lane) {
         return format!("dialogue.{}", c.label.replace(['.', ' '], "_"));
     }
-    if lane.starts_with("ADLIB") {
+    if lane == ROOM_VOICES_LANE {
+        "dialogue.Room".into()
+    } else if lane == ROOM_EFFECTS_LANE {
+        "effects.Room".into()
+    } else if lane == "DIALOGUE" {
+        "dialogue".into()
+    } else if lane.starts_with("ADLIB") {
         "dialogue.Adlibs".into()
     } else if lane.starts_with("SFX") {
         "effects".into()
@@ -131,6 +141,16 @@ fn role_of(lane: &str, doc: &Document) -> String {
     }
 }
 
+/// What an export changes about the timeline it writes.
+#[derive(Default)]
+pub struct Options<'a> {
+    /// Files of this export behind the clips that point at them, by source id: rendered stems,
+    /// room tracks, individual clips.
+    pub media: BTreeMap<String, MediaInfo>,
+    /// Where the markers come from, when the clips are no longer the cut's own.
+    pub marks: Option<&'a EpisodeTimeline>,
+}
+
 /// Writes the FCPXML document.
 pub fn write(
     doc: &Document,
@@ -138,12 +158,28 @@ pub fn write(
     tl: &EpisodeTimeline,
     project_name: &str,
 ) -> String {
+    write_with(doc, paths, tl, project_name, &Options::default())
+}
+
+/// Writes the FCPXML document of an export.
+pub fn write_with(
+    doc: &Document,
+    paths: &EpisodePaths,
+    tl: &EpisodeTimeline,
+    project_name: &str,
+    options: &Options,
+) -> String {
     let mut assets: BTreeMap<String, (String, MediaInfo)> = BTreeMap::new();
     for c in &tl.clips {
         if assets.contains_key(&c.source_id) {
             continue;
         }
-        if let Some(info) = media_info(doc, paths, &c.source_id) {
+        let info = options
+            .media
+            .get(&c.source_id)
+            .cloned()
+            .or_else(|| media_info(doc, paths, &c.source_id));
+        if let Some(info) = info {
             let rid = format!("r{}", assets.len() + 2);
             assets.insert(c.source_id.clone(), (rid, info));
         }
@@ -273,11 +309,12 @@ pub fn write(
     }
 
     // Markers: scenes, then notes.
+    let marks = options.marks.unwrap_or(tl);
     let mut markers: Vec<(f64, String)> = Vec::new();
-    for sc in &tl.scenes {
+    for sc in &marks.scenes {
         markers.push((sc.start_s, format!("S{} {}", sc.number, sc.heading)));
     }
-    for c in tl
+    for c in marks
         .clips
         .iter()
         .filter(|c| c.part.0 == 1 && (!c.direction.is_empty() || !c.feedback.is_empty()))

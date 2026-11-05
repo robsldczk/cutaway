@@ -133,6 +133,201 @@ pub struct ExportConfig {
     pub loudness_normalize: bool,
     pub target_lufs: f64,
     pub room_tone_track: bool,
+    /// Named settings of the Export page.
+    pub presets: Vec<ExportPreset>,
+}
+
+/// What an export writes: one file per track, one per clip, the mix, or only the timeline.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ExportMode {
+    #[default]
+    Stems,
+    Clips,
+    Mix,
+    Fcpxml,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioCodec {
+    #[default]
+    Wav,
+    Flac,
+    Mp3,
+}
+
+impl AudioCodec {
+    pub fn ext(self) -> &'static str {
+        match self {
+            AudioCodec::Wav => "wav",
+            AudioCodec::Flac => "flac",
+            AudioCodec::Mp3 => "mp3",
+        }
+    }
+}
+
+/// What the clips of an exported FCPXML point at.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FcpxmlSource {
+    #[default]
+    Original,
+    Stems,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CutListFormat {
+    Csv,
+    Md,
+}
+
+/// Where an export goes: the episode's working area, or the production's pipeline folder.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SaveTo {
+    #[default]
+    Episode,
+    Pipeline,
+}
+
+impl SaveTo {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SaveTo::Episode => "episode",
+            SaveTo::Pipeline => "pipeline",
+        }
+    }
+}
+
+/// The tracks of a stem export. All on except the split by character.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema)]
+#[serde(default)]
+pub struct ExportTracks {
+    pub dialogue: bool,
+    pub room_voices: bool,
+    pub effects: bool,
+    pub room_effects: bool,
+    pub ambience: bool,
+    pub music: bool,
+    pub mix: bool,
+    /// One full-length file per character instead of one dialogue file.
+    pub split_dialogue: bool,
+}
+
+impl Default for ExportTracks {
+    fn default() -> Self {
+        ExportTracks {
+            dialogue: true,
+            room_voices: true,
+            effects: true,
+            room_effects: true,
+            ambience: true,
+            music: true,
+            mix: true,
+            split_dialogue: false,
+        }
+    }
+}
+
+/// Everything the Export page asks. The defaults are the page's defaults.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, JsonSchema)]
+#[serde(default)]
+pub struct ExportSettings {
+    pub mode: ExportMode,
+    pub tracks: ExportTracks,
+    pub codec: AudioCodec,
+    pub sample_rate: u32,
+    /// 16, 24, or 32 (float; WAV only).
+    pub bit_depth: u16,
+    /// The mix's target in LUFS; `None` leaves it at mix level. Never applied to stems.
+    pub loudness: Option<f64>,
+    pub fcpxml: bool,
+    pub fcpxml_source: FcpxmlSource,
+    pub subtitles: bool,
+    pub cut_list: Option<CutListFormat>,
+    pub lock_after: bool,
+    pub save_to: SaveTo,
+}
+
+impl Default for ExportSettings {
+    fn default() -> Self {
+        ExportSettings {
+            mode: ExportMode::Stems,
+            tracks: ExportTracks::default(),
+            codec: AudioCodec::Wav,
+            sample_rate: 48000,
+            bit_depth: 24,
+            loudness: Some(-16.0),
+            fcpxml: true,
+            fcpxml_source: FcpxmlSource::Original,
+            subtitles: true,
+            cut_list: None,
+            lock_after: true,
+            save_to: SaveTo::Episode,
+        }
+    }
+}
+
+impl ExportSettings {
+    /// Audio files at all: FCPXML only renders nothing.
+    pub fn renders(&self) -> bool {
+        self.mode != ExportMode::Fcpxml
+    }
+
+    /// FCPXML only always writes the FCPXML, whatever "Also export" says.
+    pub fn writes_fcpxml(&self) -> bool {
+        self.fcpxml || self.mode == ExportMode::Fcpxml
+    }
+
+    /// Refuses what can't be delivered, in words for the person exporting.
+    pub fn check(&self) -> Result<()> {
+        if self.mode == ExportMode::Fcpxml {
+            return Ok(());
+        }
+        if self.codec == AudioCodec::Mp3 && self.mode != ExportMode::Mix {
+            return Err(CoreError::invalid(
+                "MP3 pads its start and end, so it can't hold a stem or clip to the sample: choose WAV or FLAC, or Mix only",
+            ));
+        }
+        if self.codec == AudioCodec::Flac && self.bit_depth == 32 {
+            return Err(CoreError::invalid(
+                "FLAC goes up to 24-bit: choose 16 or 24",
+            ));
+        }
+        if self.codec != AudioCodec::Mp3 && ![16, 24, 32].contains(&self.bit_depth) {
+            return Err(CoreError::invalid("bit depth is 16, 24 or 32"));
+        }
+        if ![44100, 48000, 88200, 96000].contains(&self.sample_rate) {
+            return Err(CoreError::invalid(
+                "sample rate is 44100, 48000, 88200 or 96000",
+            ));
+        }
+        if self.loudness.is_some_and(|l| !(-40.0..=-5.0).contains(&l)) {
+            return Err(CoreError::invalid("loudness runs from -40 to -5 LUFS"));
+        }
+        let t = self.tracks;
+        let any = t.dialogue
+            || t.room_voices
+            || t.effects
+            || t.room_effects
+            || t.ambience
+            || t.music
+            || t.mix
+            || t.split_dialogue;
+        if self.mode != ExportMode::Mix && !any {
+            return Err(CoreError::invalid("no tracks are ticked"));
+        }
+        Ok(())
+    }
+}
+
+/// A saved set of export settings.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct ExportPreset {
+    pub name: String,
+    pub settings: ExportSettings,
 }
 
 impl Default for ExportConfig {
@@ -143,6 +338,7 @@ impl Default for ExportConfig {
             loudness_normalize: false,
             target_lufs: -23.0,
             room_tone_track: true,
+            presets: Vec::new(),
         }
     }
 }
