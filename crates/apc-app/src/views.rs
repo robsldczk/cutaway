@@ -221,6 +221,7 @@ pub struct SceneView {
 fn flagged_in(doc: &Document, scene_id: &str) -> usize {
     doc.lines_of_scene(scene_id)
         .iter()
+        .filter(|l| !l.removed)
         .filter(|l| {
             let ts = doc.takes_of_line(&l.id);
             ts.iter()
@@ -237,7 +238,7 @@ pub fn scene_summaries(doc: &Document) -> Vec<SceneSummary> {
             let lines: Vec<&ScriptLine> = doc
                 .lines_of_scene(&s.id)
                 .into_iter()
-                .filter(|l| l.kind == LineKind::Dialogue)
+                .filter(|l| l.kind == LineKind::Dialogue && !l.removed)
                 .collect();
             SceneSummary {
                 id: s.id.clone(),

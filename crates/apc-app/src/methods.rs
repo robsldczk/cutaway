@@ -617,6 +617,67 @@ pub struct PerformanceSearchP {
     /// without a name every character is searched.
     #[serde(default)]
     pub query: String,
+    /// Search this character when the words alone find them saying it; a name in the query
+    /// is tried after that.
+    #[serde(default)]
+    pub character: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct MappingOpenP {
+    /// The line whose take is being fixed …
+    #[serde(default)]
+    pub line_id: Option<String>,
+    /// … or the scene a line is being added to, after item `after` (first without one).
+    #[serde(default)]
+    pub scene: Option<String>,
+    #[serde(default)]
+    pub after: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct RecordingP {
+    pub source_id: String,
+    /// Only the words and takes of this stretch (source-file seconds); all of them without.
+    #[serde(default)]
+    pub t0: Option<f64>,
+    #[serde(default)]
+    pub t1: Option<f64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct AddTakeP {
+    pub line_id: String,
+    pub source_id: String,
+    /// In and out, in source-file seconds.
+    pub t0: f64,
+    pub t1: f64,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct AddLineP {
+    /// The scene (the first when left out).
+    #[serde(default)]
+    pub scene: Option<String>,
+    /// The line or action it comes after; first in the scene without one.
+    #[serde(default)]
+    pub after: Option<String>,
+    pub character: String,
+    pub source_id: String,
+    /// In and out, in source-file seconds.
+    pub t0: f64,
+    pub t1: f64,
+    /// What's said. Left out, it's what was heard between in and out.
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct DeleteLineP {
+    pub line_id: String,
+    /// Needs `"confirm": true`.
+    #[serde(default)]
+    pub confirm: bool,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -905,6 +966,11 @@ registry! {
     "set_scene_tone", SceneToneP, Write, true, "Set the ambience looping under a scene's location, from a library sound, and its level: every scene of the place shares it, or give night to set the place's night scenes or the others apart.";
     "bucket_set_loop", BucketLoopP, Write, true, "Set whether a bucket sound loops. Dropped, a sound over 6 s with Loop on goes on the ambience lane and repeats to the end of the scene.";
     "set_scene_room", SceneRoomP, Write, true, "Set a scene's room: size, damping, wet (0 to 1 each; left out stays). Each scene has its own room, shared by all its sounds.";
+    "mapping_open", MappingOpenP, Read, false, "Where the mapping editor opens: the mics of the cast, and the stretch of a line's take, or the place to start looking for a new line.";
+    "recording", RecordingP, Read, true, "One mic's recording as heard: its words and the takes on it, with their times, and the shape of the whole file.";
+    "add_take", AddTakeP, Write, true, "Make a new take of a line from a stretch of a character's mic, with exactly these in and out points, and pick it. The line's other takes stay. A re-run of the analysis leaves it alone.";
+    "add_line", AddLineP, Write, true, "Add a line that isn't in the script, from a stretch of a character's mic, after a line or action of the scene. A re-run of the analysis leaves it alone.";
+    "delete_line", DeleteLineP, Destructive, true, "Take a line out of the cut. The script and the recordings stay as they are, a new script version doesn't bring it back, and undo does. Sounds hanging on it move to the next line.";
 }
 
 pub fn method(name: &str) -> Option<MethodInfo> {
@@ -1594,7 +1660,29 @@ impl Service {
             }
             "search_performances" => {
                 let p: PerformanceSearchP = parse(params)?;
-                crate::performances::search(self, &p.query)
+                crate::performances::search(self, &p.query, p.character.as_deref())
+            }
+            "mapping_open" => {
+                let p: MappingOpenP = parse(params)?;
+                crate::mapping::open(self, &p)
+            }
+            "recording" => {
+                let p: RecordingP = parse(params)?;
+                crate::mapping::recording(self, &p)
+            }
+            "add_take" => {
+                let p: AddTakeP = parse(params)?;
+                crate::mapping::add_take(self, &p)
+            }
+            "add_line" => {
+                let p: AddLineP = parse(params)?;
+                let scene = scene_id(self, p.scene.as_deref())?;
+                crate::mapping::add_line(self, &scene, &p)
+            }
+            "delete_line" => {
+                let p: DeleteLineP = parse(params)?;
+                need_confirm("delete_line", p.confirm)?;
+                Ok(self.exec(&Command::DeleteLine { line_id: p.line_id })?.result)
             }
             "stop_sound" => crate::player::stop_sound(self),
             "sound_playhead" => crate::player::sound_playhead(self),
@@ -1669,7 +1757,7 @@ impl Service {
         let dialogue: Vec<&ScriptLine> = doc
             .lines
             .values()
-            .filter(|l| l.kind == LineKind::Dialogue && !l.adlib)
+            .filter(|l| l.kind == LineKind::Dialogue && !l.adlib && !l.removed)
             .collect();
         let recorded: std::collections::BTreeSet<&str> = doc
             .sources

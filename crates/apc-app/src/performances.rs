@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use apc_analysis::asr::Transcript;
-use apc_analysis::performance::{find_words, sound_kind, Mic};
+use apc_analysis::performance::{find_sentence, find_words, sound_kind, Mic};
 use apc_analysis::vocals::{every_vocal, find_vocals, VocalCandidate, VocalTrack};
 use apc_core::text::{norm_word, norm_words};
 use apc_core::*;
@@ -44,6 +44,8 @@ struct Hit {
     tag: Option<String>,
     close: bool,
     alone: bool,
+    /// Share of what was asked that was heard.
+    score: f64,
     level_db: f64,
 }
 
@@ -73,7 +75,7 @@ fn split_name<'a>(doc: &Document, words: &'a [String]) -> (Option<String>, &'a [
 }
 
 /// Does this mic hold `character`'s voice? Their session mic, or takes of their lines.
-fn holds(doc: &Document, s: &SourceFile, character: &str) -> bool {
+pub(crate) fn holds(doc: &Document, s: &SourceFile, character: &str) -> bool {
     s.character.as_deref() == Some(character)
         || doc.takes.values().any(|t| {
             t.source_id == s.id
@@ -220,7 +222,9 @@ fn window(svc: &mut Service, h: &Hit, duration_s: f64) -> Value {
     json!({ "w0": w0, "w1": w1, "peaks": peaks })
 }
 
-pub fn search(svc: &mut Service, query: &str) -> Result<Value> {
+/// `scope` is the character a search looks at when its words don't name one. There, the words
+/// are first read as they stand: a line can start with a name ("Paul, wait").
+pub fn search(svc: &mut Service, query: &str, scope: Option<&str>) -> Result<Value> {
     let doc = svc.doc();
     let cast: Vec<Value> = doc
         .characters
@@ -233,14 +237,30 @@ pub fn search(svc: &mut Service, query: &str) -> Result<Value> {
         .map(norm_word)
         .filter(|w| !w.is_empty())
         .collect();
-    let (character, asked) = split_name(doc, &words);
-    let asked = asked.to_vec();
+    let (named, rest) = split_name(doc, &words);
+    let rest = rest.to_vec();
     if words.is_empty() {
         return Ok(
             json!({ "cast": cast, "character": null, "hits": [], "total": 0, "heard": true }),
         );
     }
+    if let Some(who) = scope {
+        let r = look(svc, &cast, Some(who.to_string()), words)?;
+        let empty = r["hits"].as_array().is_none_or(Vec::is_empty);
+        if !empty || named.is_none() {
+            return Ok(r);
+        }
+    }
+    look(svc, &cast, named, rest)
+}
 
+/// What `character` (anyone without one) said of `asked`.
+fn look(
+    svc: &mut Service,
+    cast: &[Value],
+    character: Option<String>,
+    asked: Vec<String>,
+) -> Result<Value> {
     let mics = load(svc, character.as_deref());
     let doc = svc.doc();
     let mut hits: Vec<Hit> = Vec::new();
@@ -270,7 +290,14 @@ pub fn search(svc: &mut Service, query: &str) -> Result<Value> {
             speech_db: speech_db(&m.analysis.env, &takes_on(doc, &m.src.id)),
             thr: m.analysis.percentile(60.0) * 3.0,
         };
-        for f in find_words(&mic, &others, &asked) {
+        let mut found = find_words(&mic, &others, &asked);
+        // a sentence the recogniser got partly wrong
+        for f in find_sentence(&mic, &others, &asked) {
+            if !found.iter().any(|g| f.t0 < g.t1 && g.t0 < f.t1) {
+                found.push(f);
+            }
+        }
+        for f in found {
             hits.push(Hit {
                 source_id: m.src.id.clone(),
                 character: character.clone().unwrap_or_else(|| owner.to_string()),
@@ -282,6 +309,7 @@ pub fn search(svc: &mut Service, query: &str) -> Result<Value> {
                 tag: None,
                 close: f.close,
                 alone: f.alone,
+                score: f.score,
                 level_db: m.analysis.rms_db(f.t0, f.t1),
             });
         }
@@ -315,6 +343,7 @@ pub fn search(svc: &mut Service, query: &str) -> Result<Value> {
                 tag: Some(c.tag),
                 close: false,
                 alone: true,
+                score: 1.0,
                 level_db,
             });
         }
@@ -322,6 +351,7 @@ pub fn search(svc: &mut Service, query: &str) -> Result<Value> {
     hits.sort_by(|a, b| {
         a.close
             .cmp(&b.close)
+            .then(b.score.total_cmp(&a.score))
             .then(b.alone.cmp(&a.alone))
             .then(b.level_db.total_cmp(&a.level_db))
     });

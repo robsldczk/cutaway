@@ -19,6 +19,12 @@ const THEIRS_DB: f64 = 3.0;
 /// Further than this under the mic's typical speech, it's someone else in the room. Wider than
 /// the analysis's bleed margin: a grunt is allowed to be quieter than a line.
 const QUIET_DB: f64 = 18.0;
+/// From this many words a search is a sentence: the recogniser may have got some of them wrong.
+const SENTENCE_WORDS: usize = 3;
+/// Share of a sentence's words that have to be there, in order.
+const SENTENCE_SHARE: f64 = 0.7;
+/// Words a sentence is read for at most.
+const SENTENCE_MAX: usize = 40;
 /// Words of the same breath shown around what was found.
 const CONTEXT_WORDS: usize = 4;
 /// Further apart than this, in seconds, the neighbouring word isn't context.
@@ -58,6 +64,8 @@ pub struct Found {
     pub close: bool,
     /// Quiet on both sides, so it cuts out clean.
     pub alone: bool,
+    /// Share of what was asked that was heard, 0 … 1.
+    pub score: f64,
 }
 
 /// What kind of sound a searched word asks for, among the sounds the analysis names: the
@@ -141,43 +149,126 @@ pub fn find_words(mic: &Mic, others: &[Mic], asked: &[String]) -> Vec<Found> {
         let Some(matches) = matches else {
             continue;
         };
-        let (w0, w1) = (span[0].t0, span[n - 1].t1);
+        let close = matches.iter().any(|m| *m != Match::Exact);
         let prev = i.checked_sub(1).map(|k| &mic.words[k]);
         let next = mic.words.get(i + n);
-        let alone =
-            prev.is_none_or(|p| w0 - p.t1 >= ALONE_S) && next.is_none_or(|x| x.t0 - w1 >= ALONE_S);
+        let alone = stands_alone(prev, next, span[0].t0, span[n - 1].t1);
         if matches.contains(&Match::Alike) && !alone {
             continue; // an "uh" inside a sentence is no "huh"
         }
-        if not_theirs(mic, others, w0, w1) {
-            continue;
-        }
-        let (a, b) = refine(mic.env, w0, w1, mic.thr);
-        // the snapped edges stop at the words around it
-        let t0 = prev.map_or(a, |p| a.max(p.t1.min(w0)));
-        let t1 = next.map_or(b, |x| b.min(x.t0.max(w1)));
-        let near = |w: &&TWord, to: f64| (w.t0 - to).abs() < CONTEXT_GAP_S;
-        let before: Vec<TWord> = mic.words[i.saturating_sub(CONTEXT_WORDS)..i]
-            .iter()
-            .filter(|w| near(w, w0))
-            .cloned()
-            .collect();
-        let after: Vec<TWord> = mic.words[i + n..(i + n + CONTEXT_WORDS).min(mic.words.len())]
-            .iter()
-            .filter(|w| near(w, w1))
-            .cloned()
-            .collect();
-        out.push(Found {
-            t0,
-            t1,
-            text: joined(span),
-            before: joined(&before),
-            after: joined(&after),
-            close: matches.iter().any(|m| *m != Match::Exact),
-            alone,
-        });
+        out.extend(cut(mic, others, i, i + n, close, 1.0));
     }
     out
+}
+
+fn stands_alone(prev: Option<&TWord>, next: Option<&TWord>, w0: f64, w1: f64) -> bool {
+    prev.is_none_or(|p| w0 - p.t1 >= ALONE_S) && next.is_none_or(|x| x.t0 - w1 >= ALONE_S)
+}
+
+/// The stretch of `mic.words[i..end]`, cut to the sound. `None` when it isn't this actor's voice.
+fn cut(mic: &Mic, others: &[Mic], i: usize, end: usize, close: bool, score: f64) -> Option<Found> {
+    let span = &mic.words[i..end];
+    let (w0, w1) = (span.first()?.t0, span.last()?.t1);
+    if not_theirs(mic, others, w0, w1) {
+        return None;
+    }
+    let prev = i.checked_sub(1).map(|k| &mic.words[k]);
+    let next = mic.words.get(end);
+    let (a, b) = refine(mic.env, w0, w1, mic.thr);
+    // the snapped edges stop at the words around it
+    let t0 = prev.map_or(a, |p| a.max(p.t1.min(w0)));
+    let t1 = next.map_or(b, |x| b.min(x.t0.max(w1)));
+    let near = |w: &&TWord, to: f64| (w.t0 - to).abs() < CONTEXT_GAP_S;
+    let before: Vec<TWord> = mic.words[i.saturating_sub(CONTEXT_WORDS)..i]
+        .iter()
+        .filter(|w| near(w, w0))
+        .cloned()
+        .collect();
+    let after: Vec<TWord> = mic.words[end..(end + CONTEXT_WORDS).min(mic.words.len())]
+        .iter()
+        .filter(|w| near(w, w1))
+        .cloned()
+        .collect();
+    Some(Found {
+        t0,
+        t1,
+        text: joined(span),
+        before: joined(&before),
+        after: joined(&after),
+        close,
+        alone: stands_alone(prev, next, w0, w1),
+        score,
+    })
+}
+
+/// Where a sentence was said, when the recogniser got some of it wrong: stretches holding most
+/// of its words in order, the best first, none overlapping. Short searches go by `find_words`.
+pub fn find_sentence(mic: &Mic, others: &[Mic], asked: &[String]) -> Vec<Found> {
+    let asked = &asked[..asked.len().min(SENTENCE_MAX)];
+    let n = asked.len();
+    if n < SENTENCE_WORDS {
+        return vec![];
+    }
+    let need = (n as f64 * SENTENCE_SHARE).ceil() as usize;
+    // which asked words each heard word could be, worked out once
+    let like: Vec<Vec<bool>> = mic
+        .words
+        .iter()
+        .map(|w| asked.iter().map(|a| same_word(a, &w.w)).collect())
+        .collect();
+    let reach = n + n / 3 + 1;
+    let mut spans: Vec<(usize, usize, usize)> = Vec::new();
+    for i in 0..like.len() {
+        if !like[i].contains(&true) {
+            continue; // it starts on a word of the sentence
+        }
+        let end = (i + reach).min(like.len());
+        if let Some((got, last)) = in_order(&like[i..end]).filter(|(got, _)| *got >= need) {
+            spans.push((got, i, i + last + 1));
+        }
+    }
+    spans.sort_by_key(|&(got, i, end)| (std::cmp::Reverse(got), end - i, i));
+    let mut taken: Vec<(usize, usize)> = Vec::new();
+    let mut out = Vec::new();
+    for (got, i, end) in spans {
+        if taken.iter().any(|&(a, b)| i < b && a < end) {
+            continue;
+        }
+        taken.push((i, end));
+        out.extend(cut(mic, others, i, end, got < n, got as f64 / n as f64));
+    }
+    out
+}
+
+fn same_word(asked: &str, heard: &str) -> bool {
+    asked == heard
+        || (asked.len() >= CLOSE_MIN_LEN
+            && heard.len() >= CLOSE_MIN_LEN
+            && ratio(asked, heard) >= CLOSE_RATIO)
+}
+
+/// The most asked words these heard words hold in order (longest common subsequence), and the
+/// index of the heard word the best run ends on.
+fn in_order(like: &[Vec<bool>]) -> Option<(usize, usize)> {
+    let n = like.first()?.len();
+    let mut row = vec![0usize; n + 1];
+    let mut best = (0, 0);
+    for (h, words) in like.iter().enumerate() {
+        let mut diag = 0;
+        for (j, &same) in words.iter().enumerate() {
+            let up = row[j + 1];
+            row[j + 1] = if same {
+                diag + 1
+            } else {
+                row[j + 1].max(row[j])
+            };
+            diag = up;
+        }
+        if row[n] > best.0 {
+            best = (row[n], h);
+        }
+    }
+    Some(best)
 }
 
 #[cfg(test)]
@@ -217,6 +308,41 @@ mod tests {
 
     fn asked(q: &str) -> Vec<String> {
         q.split_whitespace().map(norm_word).collect()
+    }
+
+    fn sentence() -> (Vec<TWord>, Vec<f32>) {
+        let said = "well I never thought you would come back here again";
+        let misheard = said.replace("thought", "fought").replace("would", "wood");
+        let words: Vec<TWord> = misheard
+            .split(' ')
+            .enumerate()
+            .map(|(i, w)| {
+                let t = 10.0 + i as f64 * 0.4;
+                word(w, t, t + 0.35)
+            })
+            .collect();
+        (words, env(20.0, &[(10.0, 14.5, 0.2)]))
+    }
+
+    #[test]
+    fn a_sentence_is_found_with_words_misheard() {
+        let (words, e) = sentence();
+        let q = asked("I never thought you would come back");
+        assert!(find_words(&mic(&e, &words), &[], &q).is_empty());
+        let f = find_sentence(&mic(&e, &words), &[], &q);
+        assert_eq!(f.len(), 1, "{f:?}");
+        assert!(f[0].close);
+        assert!(f[0].score >= 0.7 && f[0].score < 1.0, "{}", f[0].score);
+        assert!(f[0].text.starts_with("I never") && f[0].text.ends_with("back"));
+    }
+
+    #[test]
+    fn a_sentence_needs_most_of_its_words_in_order() {
+        let (words, e) = sentence();
+        let f = find_sentence(&mic(&e, &words), &[], &asked("back come you never I"));
+        assert!(f.is_empty(), "{f:?}");
+        let f = find_sentence(&mic(&e, &words), &[], &asked("the cat sat on my mat"));
+        assert!(f.is_empty(), "{f:?}");
     }
 
     #[test]

@@ -76,6 +76,7 @@ pub fn spot(svc: &mut Service, scene_key: &str) -> Result<Value> {
     let items: Vec<ScriptItem> = doc
         .lines_of_scene(&scene.id)
         .iter()
+        .filter(|l| !l.removed)
         .map(|l| ScriptItem {
             line_id: l.id.clone(),
             kind: format!("{:?}", l.kind).to_lowercase(),

@@ -9,6 +9,7 @@ pub mod dev;
 pub mod error;
 pub mod import;
 pub mod jobs;
+pub mod mapping;
 pub mod methods;
 pub mod performances;
 pub mod player;
