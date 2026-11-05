@@ -39,8 +39,10 @@ fn last_number(name: &str) -> Option<u32> {
         .and_then(|p| p.parse().ok())
 }
 
-/// The `Exports` folder of a destination. A pipeline export needs the confirmed folder.
-fn exports_dir(paths: &EpisodePaths, to: SaveTo) -> Result<PathBuf> {
+/// The folder a destination's scene folders go in: straight in the episode's own `Exports`, or
+/// in the pipeline's under the episode, because that one holds them all. The pipeline needs its
+/// confirmed folder; the episode's is simply there.
+fn base_dir(paths: &EpisodePaths, ep: EpisodeTag, to: SaveTo) -> Result<PathBuf> {
     match to {
         SaveTo::Episode => Ok(paths.exports.clone()),
         SaveTo::Pipeline => {
@@ -49,7 +51,7 @@ fn exports_dir(paths: &EpisodePaths, to: SaveTo) -> Result<PathBuf> {
                     "this episode isn't in a show, so it has no pipeline folder".into(),
                 )
             })?;
-            pipeline_exports(show)
+            Ok(pipeline_exports(show)?.join(ep.folder()))
         }
     }
 }
@@ -82,9 +84,9 @@ fn exports_in(dir: &Path) -> PathBuf {
 
 /// Every version of the episode, in both destinations.
 fn history(paths: &EpisodePaths, ep: EpisodeTag) -> History {
-    let mut records = versions::scan(&paths.exports, ep);
+    let mut records = versions::scan(&paths.exports);
     if let Some(dir) = paths.show.as_ref().and_then(Show::pipeline_dir) {
-        records.extend(versions::scan(&exports_in(&dir), ep));
+        records.extend(versions::scan(&exports_in(&dir).join(ep.folder())));
     }
     History::new(records)
 }
@@ -209,7 +211,11 @@ pub fn resolve<'a>(svc: &'a Service, p: &ExportRunP) -> Result<(ExportSettings, 
     let doc = svc.doc();
     let settings = settings_of(doc, p.preset.as_deref(), p.settings)?;
     deliverable(&settings)?;
-    exports_dir(&svc.paths, settings.save_to)?;
+    base_dir(
+        &svc.paths,
+        episode_tag(&svc.name(), &svc.paths),
+        settings.save_to,
+    )?;
     let scenes = pick_scenes(doc, p.scenes.as_deref())?;
     Ok((settings, scenes))
 }
@@ -247,13 +253,13 @@ fn pick_scenes<'a>(doc: &'a Document, keys: Option<&[String]>) -> Result<Vec<&'a
 pub fn plan(svc: &Service, p: &ExportRunP) -> Result<Value> {
     let (settings, scenes) = resolve(svc, p)?;
     let ep = episode_tag(&svc.name(), &svc.paths);
-    let exports = exports_dir(&svc.paths, settings.save_to)?;
+    let base = base_dir(&svc.paths, ep, settings.save_to)?;
     let title = svc.name();
     let t = Target {
         doc: svc.doc(),
         paths: &svc.paths,
         ep,
-        exports: &exports,
+        base: &base,
         settings,
         now: Local::now(),
         app_version: APP_VERSION,
@@ -274,7 +280,7 @@ pub fn run(svc: &mut Service, p: &ExportRunP, progress: &dyn Fn(f64, &str)) -> R
     let (settings, scenes) = resolve(svc, p)?;
     let scenes: Vec<Scene> = scenes.into_iter().cloned().collect();
     let ep = episode_tag(&svc.name(), &svc.paths);
-    let exports = exports_dir(&svc.paths, settings.save_to)?;
+    let base = base_dir(&svc.paths, ep, settings.save_to)?;
     let h = history(&svc.paths, ep);
     let title = svc.name();
     let now = Local::now();
@@ -287,7 +293,7 @@ pub fn run(svc: &mut Service, p: &ExportRunP, progress: &dyn Fn(f64, &str)) -> R
             doc: svc.doc(),
             paths: &svc.paths,
             ep,
-            exports: &exports,
+            base: &base,
             settings,
             now,
             app_version: APP_VERSION,
@@ -356,7 +362,7 @@ pub fn run(svc: &mut Service, p: &ExportRunP, progress: &dyn Fn(f64, &str)) -> R
             doc: svc.doc(),
             paths: &svc.paths,
             ep,
-            exports: &exports,
+            base: &base,
             settings,
             now,
             app_version: APP_VERSION,

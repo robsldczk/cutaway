@@ -37,8 +37,8 @@ pub struct Target<'a> {
     pub doc: &'a Document,
     pub paths: &'a EpisodePaths,
     pub ep: EpisodeTag,
-    /// The `Exports` folder of the destination.
-    pub exports: &'a Path,
+    /// The folder the scene folders go in.
+    pub base: &'a Path,
     pub settings: ExportSettings,
     pub now: DateTime<Local>,
     pub app_version: &'a str,
@@ -562,8 +562,7 @@ pub fn write_scene(
     preflight(&t.settings)?;
     let s = t.settings;
     let folder = t
-        .exports
-        .join(t.ep.folder())
+        .base
         .join(scene_folder(scene))
         .join(version_folder(version, &t.date()));
     let stem = t.ep.stem(scene.number, version);
@@ -695,8 +694,7 @@ fn write_clip(t: &Target, c: &TimelineClip, f: &ClipFile, dir: &Path) -> Result<
 pub fn write_episode(t: &Target, version: u32, scenes: &[ManifestScene]) -> Result<ExportRecord> {
     let s = t.settings;
     let folder = t
-        .exports
-        .join(t.ep.folder())
+        .base
         .join(EPISODE_FOLDER)
         .join(version_folder(version, &t.date()));
     let stem = t.ep.episode_stem(version);
@@ -752,7 +750,7 @@ pub struct ScenePlan {
     pub version: u32,
     /// `Sc02 v003`
     pub label: String,
-    /// `Ep02/Sc02 Canteen/v003 2026-11-05`
+    /// `Sc02 Canteen/v003 2026-11-05`
     pub folder: String,
     pub files: Vec<String>,
     pub bytes: u64,
@@ -820,12 +818,7 @@ fn plan_scene(t: &Target, scene: &Scene, history: &History) -> Result<ScenePlan>
         place: scene.place.clone(),
         version,
         label: format!("Sc{:02} v{version:03}", scene.number),
-        folder: format!(
-            "{}/{}/{}",
-            ep.folder(),
-            scene_folder(scene),
-            version_folder(version, &date)
-        ),
+        folder: format!("{}/{}", scene_folder(scene), version_folder(version, &date)),
         files,
         bytes: bytes as u64,
         length_s,

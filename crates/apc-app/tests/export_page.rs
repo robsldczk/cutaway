@@ -441,7 +441,7 @@ fn a_failed_export_leaves_no_version_and_no_lock() {
         .unwrap_err();
     assert!(e.to_string().starts_with("Sc. 1: "), "{e}");
     assert!(svc.doc().scenes.values().all(|s| s.lock.is_none()));
-    let scene_dir = svc.paths.exports.join("Ep01");
+    let scene_dir = svc.paths.exports.clone();
     let left: Vec<_> = walk(&scene_dir)
         .into_iter()
         .filter(|p| p.is_file())
@@ -822,7 +822,65 @@ fn a_show_export_goes_only_to_the_confirmed_pipeline_folder() {
     assert_eq!(r["scenes"][0]["version"], 2);
     assert!(folder(&r, 0)
         .to_string_lossy()
-        .contains("Episodes/Episode 2/Sound/Exports/Ep02"));
+        .contains("Episodes/Episode 2/Sound/Exports/Sc01 Lab"));
+}
+
+#[test]
+fn the_default_goes_straight_into_the_episodes_exports_with_no_folder_chosen() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut sess, root) = show(dir.path());
+    sess.call("open_episode", &json!({ "episode": "Episode 2" }))
+        .unwrap();
+    assert_eq!(
+        sess.call("pipeline_folder", &json!({})).unwrap()["path"],
+        Value::Null
+    );
+
+    // no settings at all: nothing asked, nothing chosen
+    let r = sess
+        .call("export_scenes", &json!({ "scenes": ["1"] }))
+        .unwrap();
+    let exports = root.join("Episodes/Episode 2/Sound/Exports");
+    let f = folder(&r, 0);
+    assert_eq!(
+        f.parent().unwrap(),
+        exports.join("Sc01 Lab"),
+        "no Ep02 inside Episode 2"
+    );
+    // the files still say which episode they're from, once they leave the folder
+    assert!(names(&f).contains(&"E02_S01_v001_Mix.wav".to_string()));
+    let plan = sess
+        .call("export_plan", &json!({ "scenes": ["1"] }))
+        .unwrap();
+    assert!(plan["scenes"][0]["folder"]
+        .as_str()
+        .unwrap()
+        .starts_with("Sc01 Lab/v002 "));
+}
+
+#[test]
+fn a_custom_folder_gets_its_exports_folder_and_keeps_the_episodes_apart() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut sess, root) = show(dir.path());
+    let custom = root.join("Deliveries");
+    std::fs::create_dir_all(&custom).unwrap();
+    sess.call(
+        "set_pipeline_folder",
+        &json!({ "path": custom.to_string_lossy(), "confirm": true }),
+    )
+    .unwrap();
+    let r = sess
+        .call(
+            "export_show",
+            &json!({ "episodes": [{ "episode": "Episode 2", "scenes": ["1"] }] }),
+        )
+        .unwrap();
+    let f = PathBuf::from(
+        r["episodes"][0]["result"]["scenes"][0]["folder"]
+            .as_str()
+            .unwrap(),
+    );
+    assert!(f.starts_with(custom.join("Exports/Ep02/Sc01 Lab")), "{f:?}");
 }
 
 #[test]

@@ -876,3 +876,11 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Bucket under 1100 px:** an overlay, shut until asked for (B, or the tab on the edge), that fades away during a drag so the field is free. Its open state is separate from the wide window's, so resizing doesn't throw one over the timeline. Arrange gains the tab that Edit had.
 - **The lock banner** moved below the Edit bar, which it was lying on.
 
+### D117 The default export goes straight into the episode's Exports (Rob, 2026-11-05)
+- **Rob:** the default path should be the project's dedicated export folder. Choosing a folder made it redundant, and in Episode 2 there shouldn't be a subfolder also called Episode 2. Default settings, and custom settings that create the export folder.
+- **Conflict with the handover,** which draws `Exports/Ep02/Sc02 Canteen/…` for both destinations ("files look the same wherever they land"). Rob's word goes for the episode: `Exports/Sc02 Canteen/v003 2026-11-05/`, and `Exports/Episode/…` for a whole-episode version.
+- **A custom (pipeline) folder keeps `Exports/Ep02/`:** it holds every episode, so there the level tells them apart, and it creates its `Exports` unless the folder is one already (D115).
+- **File names keep `E02_S02_v003_…`:** they say where they're from once they leave the folder.
+- **Nothing to choose for the default:** Save to starts on Episode exports, and a folder is asked for only when the pipeline is picked. The popup no longer repeats `Ep02`.
+- **Versions already in `Exports/Ep02/` aren't counted:** the layout lasted hours and the only real export was deleted by hand.
+

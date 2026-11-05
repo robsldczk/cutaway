@@ -417,10 +417,10 @@
             <span class="pathline">{pipeline?.path ?? 'Pipeline folder'}</span>
           {:else}
             <label class="pop">
-              {s.save_to === 'pipeline' ? `Pipeline folder · ${status?.episode ?? ''}` : `Episode exports · ${status?.episode ?? ''}`}{@render chevrons()}
+              {s.save_to === 'pipeline' ? 'Pipeline folder' : 'Episode exports'}{@render chevrons()}
               <select aria-label="Save to" value={s.save_to} onchange={(e) => s && (s.save_to = e.currentTarget.value as ExportSettings['save_to'])} data-testid="save-to">
-                <option value="episode">Episode exports · {status?.episode ?? ''}</option>
-                {#if pipeline}<option value="pipeline">Pipeline folder · {status?.episode ?? ''}</option>{/if}
+                <option value="episode">Episode exports</option>
+                {#if pipeline}<option value="pipeline">Pipeline folder</option>{/if}
               </select>
             </label>
           {/if}

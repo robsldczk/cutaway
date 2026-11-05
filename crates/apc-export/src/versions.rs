@@ -3,9 +3,12 @@
 //! because it isn't in the document, and it can't disagree with what's on disk (D112).
 //!
 //! ```text
-//! Exports/Ep02/Sc02 Canteen/v003 2026-11-05/  E02_S02_v003_Dialogue.wav … manifest.json
-//! Exports/Ep02/Episode/v002 2026-11-05/       E02_v002.fcpxml … manifest.json
+//! Exports/Sc02 Canteen/v003 2026-11-05/  E02_S02_v003_Dialogue.wav … manifest.json
+//! Exports/Episode/v002 2026-11-05/       E02_v002.fcpxml … manifest.json
 //! ```
+//!
+//! That's the episode's own `Exports` folder. A pipeline folder holds every episode, so there
+//! the same tree sits under `Exports/Ep02/` (D117).
 
 use std::path::{Path, PathBuf};
 
@@ -130,11 +133,11 @@ pub struct ExportRecord {
     pub folder: PathBuf,
 }
 
-/// Every version under an `Exports` folder for this episode, oldest first. Folders still being
-/// written start with a dot; an unreadable manifest doesn't hide the rest.
-pub fn scan(exports: &Path, ep: EpisodeTag) -> Vec<ExportRecord> {
+/// Every version under the folder an episode's scene folders are in, oldest first. Folders still
+/// being written start with a dot; an unreadable manifest doesn't hide the rest.
+pub fn scan(base: &Path) -> Vec<ExportRecord> {
     let mut out = Vec::new();
-    for scene_dir in subfolders(&exports.join(ep.folder())) {
+    for scene_dir in subfolders(base) {
         for folder in subfolders(&scene_dir) {
             let Ok(bytes) = std::fs::read(folder.join(MANIFEST)) else {
                 continue;
@@ -300,8 +303,7 @@ mod tests {
     #[test]
     fn a_half_written_or_broken_version_is_not_history() {
         let dir = tempfile::tempdir().unwrap();
-        let ep = EpisodeTag(2);
-        let scene = dir.path().join("Ep02/Sc02 Canteen");
+        let scene = dir.path().join("Sc02 Canteen");
         let good = scene.join("v001 2026-11-05");
         std::fs::create_dir_all(&good).unwrap();
         std::fs::write(
@@ -315,7 +317,7 @@ mod tests {
         let broken = scene.join("v003 2026-11-05");
         std::fs::create_dir_all(&broken).unwrap();
         std::fs::write(broken.join(MANIFEST), b"not json").unwrap();
-        let found = scan(dir.path(), ep);
+        let found = scan(dir.path());
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].manifest.version, 1);
     }

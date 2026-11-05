@@ -316,7 +316,7 @@ From `tasks/export-tab`. Built on branch `export-tab` (worktree `../cutaway-expo
 **Manual checks for Rob**
 
 1. **Resolve and Logic:** open a scene's FCPXML, once from the recordings and once from the stems, and check the lanes, the two room lanes and the markers. Stack the stems of a scene and check they line up.
-2. **The pipeline folder:** on tm-2610 the proposal is `tm-2610/Sound`, so exports land in `Sound/Exports/`, beside `sfx` and `music`. Is that where deliverables belong? (Open question 1.)
+2. **The pipeline folder:** on tm-2610 the proposal is `tm-2610/Sound`, so show exports land in `Sound/Exports/Ep02/`, beside `sfx` and `music`. The default needs no folder: it goes to the episode's own `Exports` (D117). Is that where deliverables belong? (Open question 1.)
 3. **By hand in the real app:** a press of ⌘E, the native popups, Reveal in the Finder and Choose… for the folder. The test script can't send real keys or open native menus.
 4. **Export a scene of Episode 2,** and listen to the stems against the mix.
 5. **The open questions, answered as proposed:** gain and pan flag a scene rather than block it (2), versions per scene and episode only (3), lock after export on by default (4), MP3 for the mix only (5). Say if any should go the other way.
