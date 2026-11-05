@@ -2,6 +2,7 @@
   // The Edit page's control bar, modelled on Logic: inspector and mixer toggles, tools,
   // transport with cycle and a time display, snap, ripple, lock, zoom and the bucket toggle.
   import { app } from '../lib/app.svelte';
+  import { fit } from '../lib/fit';
   import { fmt } from '../lib/format';
   import { TOOLS } from '../lib/tools';
   import Icon from './Icon.svelte';
@@ -9,6 +10,7 @@
   let { onZoom, lcdDetail }: { onZoom: (px: number) => void; lcdDetail: string } = $props();
 
   const WAVE = [1, 2, 4, 8];
+  let more = $state(false);
 
   function toStart() {
     if (app.playing) void app.stop();
@@ -16,7 +18,23 @@
   }
 </script>
 
-<section class="glass cbar" aria-label="Control bar">
+<!-- a fixed scrim can't work here: the bar's backdrop filter would hold it inside the bar -->
+<svelte:window
+  onmousedown={(e) => {
+    if (more && !(e.target as Element).closest('.more')) more = false;
+  }}
+  onkeydown={(e) => e.key === 'Escape' && (more = false)}
+/>
+
+{#snippet toggles()}
+  <button class="btn" class:act={app.snapWords} aria-pressed={app.snapWords} onclick={() => (app.snapWords = !app.snapWords)} title="Snap to words and action lines">Snap<span class="long">: {app.snapWords ? 'words' : 'off'}</span></button>
+  <button class="btn" class:act={app.ripple} aria-pressed={app.ripple} onclick={() => (app.ripple = !app.ripple)} title="Ripple moves everything after a clip (⌥-drag inverts); ⌫ then ripple-deletes dialogue">Ripple</button>
+  <button class="btn" class:act={app.lockScript} aria-pressed={app.lockScript} onclick={() => (app.lockScript = !app.lockScript)} title="Locked: dialogue follows the script order and pauses. Unlocked: dialogue moves freely in time"><Icon name={app.lockScript ? 'lock' : 'unlock'} size={13} />Lock</button>
+  <button class="btn tn" onclick={() => (app.waveGain = WAVE[(WAVE.indexOf(app.waveGain) + 1) % WAVE.length])} title="Waveform height" aria-label="Waveform height">Wave ×{app.waveGain}</button>
+  <input type="range" min={Math.log(2)} max={Math.log(1000)} step="0.01" value={Math.log(app.editPx || 50)} oninput={(e) => onZoom(Math.exp(+(e.currentTarget as HTMLInputElement).value))} aria-label="Zoom" title="Zoom (⌘← ⌘→, Z)" class="zoom" />
+{/snippet}
+
+<section class="glass cbar" aria-label="Control bar" use:fit={{ levels: 4 }} data-testid="control-bar">
   <button class="ib" class:on={app.editInspector} aria-label="Inspector (I)" title="Inspector (I)" aria-pressed={app.editInspector} onclick={() => (app.editInspector = !app.editInspector)}><Icon name="inspector" size={17} stroke={1.8} /></button>
   <button class="ib" class:on={app.mixer} aria-label="Mixer (X)" title="Mixer (X)" aria-pressed={app.mixer} onclick={() => (app.mixer = !app.mixer)}><Icon name="mixer" size={17} stroke={1.8} /></button>
   <span class="sep" aria-hidden="true"></span>
@@ -34,12 +52,14 @@
     <span class="muted ellip small">{lcdDetail}</span>
   </div>
   <span class="flex"></span>
-  <button class="btn" class:act={app.snapWords} aria-pressed={app.snapWords} onclick={() => (app.snapWords = !app.snapWords)} title="Snap to words and action lines">Snap: {app.snapWords ? 'words' : 'off'}</button>
-  <button class="btn" class:act={app.ripple} aria-pressed={app.ripple} onclick={() => (app.ripple = !app.ripple)} title="Ripple moves everything after a clip (⌥-drag inverts); ⌫ then ripple-deletes dialogue">Ripple</button>
-  <button class="btn" class:act={app.lockScript} aria-pressed={app.lockScript} onclick={() => (app.lockScript = !app.lockScript)} title="Locked: dialogue follows the script order and pauses. Unlocked: dialogue moves freely in time"><Icon name={app.lockScript ? 'lock' : 'unlock'} size={13} />Lock</button>
-  <button class="btn tn" onclick={() => (app.waveGain = WAVE[(WAVE.indexOf(app.waveGain) + 1) % WAVE.length])} title="Waveform height" aria-label="Waveform height">Wave ×{app.waveGain}</button>
-  <input type="range" min={Math.log(2)} max={Math.log(1000)} step="0.01" value={Math.log(app.editPx || 50)} oninput={(e) => onZoom(Math.exp(+(e.currentTarget as HTMLInputElement).value))} aria-label="Zoom" title="Zoom (⌘← ⌘→, Z)" class="zoom" />
-  <button class="btn" class:act={app.editBucket} aria-pressed={app.editBucket} onclick={() => (app.editBucket = !app.editBucket)}>Bucket <span class="kb">B</span></button>
+  <div class="roomy">{@render toggles()}</div>
+  <div class="more">
+    <button class="ib" aria-label="More controls" aria-haspopup="menu" aria-expanded={more} title="More" onclick={() => (more = !more)} data-testid="bar-more"><Icon name="more" size={17} /></button>
+    {#if more}
+      <div class="glass pop" role="menu" aria-label="More controls">{@render toggles()}</div>
+    {/if}
+  </div>
+  <button class="btn" class:act={app.bucketOn} aria-pressed={app.bucketOn} onclick={() => app.setBucket(!app.bucketOn)}>Bucket <span class="kb">B</span></button>
 </section>
 
 <style>
@@ -128,12 +148,61 @@
     width: 90px;
     accent-color: var(--button-light);
   }
-  @media (max-width: 1100px) {
-    .lcd {
-      min-width: 0;
-    }
-    .zoom {
-      display: none;
-    }
+  .roomy {
+    display: contents;
+  }
+  .more {
+    position: relative;
+    display: none;
+  }
+  .pop {
+    position: absolute;
+    top: 42px;
+    right: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    min-width: 180px;
+    padding: 8px;
+    border-radius: 14px;
+    background: var(--panel-solid);
+  }
+  .pop .zoom {
+    width: auto;
+  }
+  /* one row, always: the bar steps down instead of folding (lib/fit.ts). 1 tighter, 2 a shorter
+     read-out, 3 the text buttons go into the ⋯ menu, 4 the least that works */
+  .cbar:global([data-fit='1']) .zoom,
+  .cbar:global([data-fit='2']) .zoom {
+    width: 56px;
+  }
+  .cbar:global(:is([data-fit='1'], [data-fit='2'], [data-fit='3'], [data-fit='4'])) .lcd {
+    min-width: 110px;
+    padding: 0 12px;
+    margin: 0 2px;
+  }
+  .cbar:global(:is([data-fit='2'], [data-fit='3'], [data-fit='4'])) .small {
+    display: none;
+  }
+  .cbar:global(:is([data-fit='2'], [data-fit='3'], [data-fit='4'])) .lcd {
+    min-width: 76px;
+  }
+  .cbar:global(:is([data-fit='2'], [data-fit='3'], [data-fit='4'])) .roomy .long,
+  .cbar:global(:is([data-fit='2'], [data-fit='3'], [data-fit='4'])) .kb {
+    display: none;
+  }
+  .cbar:global(:is([data-fit='3'], [data-fit='4'])) .roomy {
+    display: none;
+  }
+  .cbar:global(:is([data-fit='3'], [data-fit='4'])) .more {
+    display: block;
+  }
+  .cbar:global([data-fit='4']) .sep {
+    margin: 0 2px;
+  }
+  .cbar:global([data-fit='4']) .ib {
+    width: 30px;
   }
 </style>

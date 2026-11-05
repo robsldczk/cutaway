@@ -279,6 +279,8 @@ A glass sheet in three steps:
 
 *Changed in implementation (D108, D109):* Export is the fourth page (`4`; ⌘E goes there, and on it exports), one sheet with Range, Export as, Tracks, Format, Also export and Save to. It replaces this panel and the header's Export button. An exported scene locks: a quiet banner on Options, Arrange and Edit, a lock in the scene list, no trim handles, and a refused edit says why at the pointer. From the show home, Export for the show saves to the confirmed pipeline folder.
 
+*Changed in implementation (D116):* below about 1300 px the header and the Edit bar step down instead of wrapping: tighter, no key hints, a ⋯ menu for the secondary tools. The scene rail has no scrollbar: it tightens to fit the height, and only past that gets steppers. Under 1100 px the bucket is an overlay opened with B, which fades away during a drag.
+
 ## Views: one timeline, three pages
 
 Like the Cut and Edit pages in DaVinci Resolve, every page is a different display of the same timeline. There is one source of truth: the episode's timeline in the core document. A change in any page updates all the others immediately.

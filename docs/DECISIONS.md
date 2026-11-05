@@ -857,3 +857,22 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **The search** looks in the show and the two folders above it for `Sound`, `Sounds`, `Audio` or `Ton`, ranking folders in a pipeline (a show file, `*.jetplane.json`, `Episodes`) first, within a budget of folders, and skipping `Episodes` so an episode's own `Sound` isn't taken for it. On tm-2610 it proposes `tm-2610/Sound`, the show's library, and exports would land in `Sound/Exports`, beside `sfx` and `music`. **Rob should check that's the right place** (open question 1).
 - **Never to a guessed path:** nothing writes there until the path is stored, and `set_pipeline_folder` needs `confirm: true`, because an agent could otherwise confirm its own proposal.
 - **A show export** opens each episode in turn, as background jobs do. The Range reads episodes straight from their files, read-only, so looking changes nothing.
+
+### D115 A bucket called Ambience broke the filing sheet (Rob, 2026-11-05)
+- **Rob:** dragging in a sound doesn't work.
+- **Cause:** the sheet for a Finder drop always offers an Ambience chip, and the chips are keyed by name. Episode 2 has a bucket called Ambience, so the key came twice and Svelte stopped rendering the sheet: one chip, an empty name, no guess. The demo has no such bucket, so every test passed, and only a run on a copy of the real episode in the real webview showed it.
+- **Choice:** one chip per name, ignoring case, the fixed chip first. A bucket called Ambience was already out of reach by name: that name means the room.
+- **Ruled out on the way:** bucket drags work on the real data, in every scene, with Snap on and off, and in the real webview. A scene locked by an export refuses a sound, as it should, but the lock came after the report.
+- **Still silent:** a sound dropped on the dialogue cards, left of the spine, does nothing and says nothing. Left as it is for Rob to decide.
+- **Also fixed:** a pipeline folder that is itself called `Exports` no longer gets `Exports/Exports`.
+
+### D116 Bars step down instead of folding (Rob, 2026-11-05)
+- **Rob:** the layout and tool bars should work on smaller screens and not fold into each other, and the scrollbar on the left is ugly: think of something else.
+- **What was wrong:** the header wrapped to two or three rows over the page below about 1300 px, and on Arrange ran past the window. The Edit bar ended up behind it. The scene rail disappeared under 1000 px and the bucket under 1100 px, so scenes and sounds were out of reach.
+- **`lib/fit.ts`:** a bar steps down until it fits, by measuring. Breakpoints can't do it: how wide the header is depends on the page, the Dev tab and the names in it. It measures on resize, when its children change size, and in the next frame after its contents change. Never during Svelte's update: reading a size there forces a style pass, and Arrange's column then committed its move early and lost its slide.
+- **Header:** one row. Tighter, no key hints, a ⋯ menu for Size, Settings, Keyboard shortcuts and History, short labels, and Follow into the menu last. Snap and Follow keep their words: alone, each is the same dot.
+- **Edit bar:** tighter, a shorter read-out, then Snap, Ripple, Lock, Wave and zoom into a ⋯ menu.
+- **Scene rail:** no scrollbar. It sits between the header and the transport, and the numbers tighten until every scene shows: 16 scenes fit a 700 px window. Past the smallest size that reads, it pages, with steppers at its ends that are there only while something is out of sight, a fade on the cut edge, the wheel, and the current scene kept in view. The other options were a hidden scrollbar alone, which gives no sign of more, and a popup list, which costs a click every time.
+- **Bucket under 1100 px:** an overlay, shut until asked for (B, or the tab on the edge), that fades away during a drag so the field is free. Its open state is separate from the wide window's, so resizing doesn't throw one over the timeline. Arrange gains the tab that Edit had.
+- **The lock banner** moved below the Edit bar, which it was lying on.
+

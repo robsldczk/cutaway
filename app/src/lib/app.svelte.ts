@@ -140,6 +140,10 @@ class AppState {
   roomPick = $state<{ scene: string; night?: boolean } | null>(null);
   // Edit page (Logic-style control bar)
   editBucket = $state(true);
+  /** Under 1100 px there's no room beside the timeline: the bucket is an overlay, shut until
+   *  asked for, and it steps aside during a drag. */
+  narrow = $state(typeof window !== 'undefined' && window.innerWidth <= 1100);
+  private bucketOver = $state(false);
   /** What the docked bucket's search looks through. */
   bucketSearch = $state<'sounds' | 'characters'>('sounds');
   editInspector = $state(false);
@@ -275,6 +279,15 @@ class AppState {
     setTimeout(() => {
       if (this.blocked === note) this.blocked = null;
     }, 3600);
+  }
+
+  get bucketOn(): boolean {
+    return this.narrow ? this.bucketOver : this.editBucket;
+  }
+
+  setBucket(on: boolean) {
+    if (this.narrow) this.bucketOver = on;
+    else this.editBucket = on;
   }
 
   /** The scene on screen, when it's locked. */

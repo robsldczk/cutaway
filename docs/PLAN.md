@@ -683,6 +683,17 @@ Bottom up, each step green before the next:
 
 Risks: the reverb must be linear for the null to hold (it is: one Room per return, same start frame); MP3 can't hold a stem to the sample (mix only); a show export writes into a Syncthing share, so it never goes to a guessed path and tests only ever touch temp copies.
 
+### Small windows (Rob, 2026-11-05; D116)
+
+The header folds into two or three rows over the page below about 1300 px, the Edit bar ends up behind it, the scene rail disappears under 1000 px and the bucket under 1100 px. The rail's scrollbar is ugly.
+
+- [x] **`fit`:** a bar steps itself down until it fits, measured before paint. Breakpoints can't do it: the header's width depends on the page, the Dev tab and the names in it.
+- [x] **Header:** one row always. Tighter, no key hints, a ⋯ menu for the secondary tools, then icons.
+- [x] **Edit bar:** the same, with its text buttons into a ⋯ menu.
+- [x] **Bucket under 1100 px:** an overlay opened with B, stepping aside during a drag, on Arrange and Edit.
+- [x] **Scene rail:** always there, between the header and the transport. No scrollbar: the numbers tighten to fit the height; only past that, steppers at its ends.
+- [x] **Tests:** every page at five sizes: one header row, nothing past the window, nothing overlapping.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -755,3 +766,4 @@ Risks: the reverb must be linear for the null to hold (it is: one Room per retur
 - 2026-11-05 The arrows walk the bucket chips, Enter takes the one lit and Shift completes (D106). ⌘D duplicates sounds on Arrange and Edit, one undo step (D107).
 - 2026-11-05 Export page and scene locks (D108–D114) on branch `export-tab` (worktree `../cutaway-export-tab`, because another session worked in the main folder): the fourth page after the mockup, aligned stems that null against the mix (better than −100 dB), individual clips, mix only, FCPXML only, WAV/FLAC/MP3, versions and manifests on disk, a lock the bus enforces on every command, show exports to a confirmed pipeline folder, all of it in the CLI and MCP. Verified in Playwright and in the real webview on temp demos; not run on the real tm-2610. Rob's checks are in RUN_REPORT.
 - 2026-11-05 `export-tab` fast-forwarded into `dev` and pushed. The pull request `dev` -> `main` is not opened: `gh` has no login on this machine. Rob opens it, or runs `gh auth login` and asks again.
+- 2026-11-05 Finder drops fixed (D115): a bucket called Ambience gave the filing sheet two chips with one key, which stopped it rendering. Found on a copy of the real Episode 2 in the real webview; the demo has no such bucket. Small windows (D116): the header and the Edit bar step down instead of folding, the scene rail fits itself with no scrollbar, the bucket is an overlay under 1100 px. Checked at six sizes in Playwright and at 900×600 in the real webview.

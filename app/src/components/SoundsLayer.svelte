@@ -8,6 +8,7 @@
   import { call } from '../lib/bridge';
   import { charColor, rgba } from '../lib/colors';
   import { dropzone } from '../lib/drag.svelte';
+  import Icon from './Icon.svelte';
   import { clamp, fmt, shortName } from '../lib/format';
   import { depthAt, groups, layoutBalls, type Field, type Shown } from '../lib/sounds/balls';
   import { soundKey } from '../lib/sounds/keymap';
@@ -104,7 +105,7 @@
 
   // ---- layout ----
 
-  const panelShown = $derived(app.editBucket && stageW > 1100);
+  const panelShown = $derived(app.bucketOn && !app.narrow);
   const rightEdge = $derived(stageW - (panelShown ? 400 : 28));
   const field = $derived<Field>({ x0: spineX + 126, width: Math.max(120, rightEdge - spineX - 214), y: (t) => map.y(t) });
   const laneX = (l: number) => spineX + 22 + l * 5;
@@ -1090,7 +1091,11 @@
   {/key}
 {/if}
 
-{#if app.editBucket}<SceneBucket given={listed} reload={loadBuckets} {eyes} off={!on} />{/if}
+{#if app.bucketOn}
+  <SceneBucket given={listed} reload={loadBuckets} {eyes} off={!on} />
+{:else if on}
+  <button class="glass btab" aria-label="Show bucket (B)" onclick={() => app.setBucket(true)} data-testid="bucket-tab"><Icon name="chevron-left" size={14} /><span>Bucket</span></button>
+{/if}
 
 <style>
   .snd {
@@ -1536,5 +1541,25 @@
     .rarc {
       animation: none !important;
     }
+  }
+  .btab {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 8px;
+    border-radius: 14px 0 0 14px;
+    background: var(--bar-strong);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+  .btab span {
+    writing-mode: vertical-rl;
   }
 </style>

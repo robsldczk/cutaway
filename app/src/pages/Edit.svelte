@@ -883,7 +883,7 @@
     });
   });
   const left = $derived(app.editInspector ? 284 : 20);
-  const right = $derived(app.editBucket ? 404 : 60);
+  const right = $derived(app.bucketOn && !app.narrow ? 404 : 60);
   const partText = (l: ItemView, i: number) => lineText(l, i);
   const flat = Array.from({ length: 60 }, (_, i) => 0.18 + 0.1 * Math.abs(Math.sin(i * 1.7)));
   const firstKept = (l: ItemView) => kept(l)[0]?.index ?? -1;
@@ -1108,10 +1108,10 @@
   </section>
 {/if}
 
-{#if app.editBucket}
+{#if app.bucketOn}
   <SceneBucket />
 {:else}
-  <button class="glass btab" aria-label="Show bucket (B)" onclick={() => (app.editBucket = true)}><Icon name="chevron-left" size={14} /><span>Bucket</span></button>
+  <button class="glass btab" aria-label="Show bucket (B)" onclick={() => app.setBucket(true)}><Icon name="chevron-left" size={14} /><span>Bucket</span></button>
 {/if}
 
 <style>

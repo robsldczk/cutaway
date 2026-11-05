@@ -185,11 +185,6 @@ textarea {
     display: none !important;
   }
 }
-@media (max-width: 1000px) {
-  .rail {
-    display: none !important;
-  }
-}
 
 /* ---- Round 2 (Import, Edit control bar) ---- */
 .tn {

@@ -64,7 +64,7 @@ export function onKey(e: KeyboardEvent) {
   else if (k === 'p' || k === 'P') void app.applyPassage();
   else if (k === 'u' || k === 'U') app.drawer = app.drawer === 'unmatched' ? null : 'unmatched';
   else if ((k === 'b' || k === 'B') && e.shiftKey) app.toggleFullBucket();
-  else if ((k === 'b' || k === 'B') && (app.page === 'edit' || (app.page === 'arrange' && app.soundsOn))) app.editBucket = !app.editBucket;
+  else if ((k === 'b' || k === 'B') && (app.page === 'edit' || (app.page === 'arrange' && app.soundsOn))) app.setBucket(!app.bucketOn);
   else if ((k === 's' || k === 'S') && app.page === 'arrange') app.toggleSounds();
   else if (app.page === 'import') handled = false;
   else if (k === 'b' || k === 'B') app.drawer = app.drawer === 'bucket' ? null : 'bucket';

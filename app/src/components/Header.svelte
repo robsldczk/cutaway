@@ -1,6 +1,7 @@
 <script lang="ts">
   import { app, type Page } from '../lib/app.svelte';
   import { brand } from '../lib/brand';
+  import { fit } from '../lib/fit';
   import Icon from './Icon.svelte';
 
   const base: { id: Page; label: string; key: string }[] = [
@@ -17,11 +18,22 @@
   const wide = $derived(app.page === 'import' || app.page === 'edit' || app.page === 'export' || app.page === 'dev');
   const ready = $derived(!!app.view);
   let menu = $state(false);
+  let more = $state(false);
+  /** What the header holds: when it changes, it measures itself again. */
+  const contents = $derived(`${app.page}|${app.dev}|${app.soundsOn}|${app.importTab}|${sc?.id}|${app.status?.name}`);
+
+  /** Runs a ⋯ menu item, and closes the menu. */
+  function pick(f: () => void) {
+    more = false;
+    f();
+  }
   /** The show the open episode lives in (studio mode). */
   const show = $derived(app.status?.show ?? null);
 </script>
 
-<header class="hdr" class:wide class:fit={app.page === 'arrange'} data-keeps-sound>
+<svelte:window onkeydown={(e) => e.key === 'Escape' && (more = false)} />
+
+<header class="hdr" class:wide data-keeps-sound use:fit={{ levels: 5, watch: contents }} data-testid="header">
   <div class="title">
     <div class="epm">
       <button class="ep" aria-haspopup="menu" aria-expanded={menu} title={app.status?.path ?? brand.displayName} onclick={() => (menu = !menu)}>{#if show}<span class="showname">{show.name}</span>{/if}{app.view?.episode ?? app.status?.name ?? brand.displayName}<Icon name="chevron" size={10} stroke={2.4} /></button>
@@ -47,7 +59,7 @@
         <select aria-label="Scene" value={sc.id} onchange={(e) => app.loadScene((e.currentTarget as HTMLSelectElement).value)}>
           {#each app.view?.scenes ?? [] as s (s.id)}<option value={s.id}>Sc. {s.number} · {s.place}</option>{/each}
         </select>
-        Sc. {sc.number} · {sc.place}<Icon name="chevron" size={10} stroke={2.4} />
+        <span class="ellip">Sc. {sc.number} · {sc.place}</span><Icon name="chevron" size={10} stroke={2.4} />
       </label>
       <button class="icb lock" aria-label={app.sceneLocked ? `Unlock scene ${sc.number}` : `Lock scene ${sc.number}`} aria-pressed={!!app.sceneLocked} title={app.sceneLocked ? 'Unlock this scene' : "Lock this scene's timing"} onclick={() => (app.sceneLocked ? (app.unlocking = sc.id) : app.lockScene(sc.id))} data-testid="header-lock"><Icon name={app.sceneLocked ? 'lock' : 'unlock'} size={13} /></button>
     {:else if sc && app.page !== 'import' && app.page !== 'dev' && app.page !== 'export'}<span class="muted2 where" title={sc.heading}>Sc. {sc.number} · {sc.place}{sc.time_of_day ? ` · ${sc.time_of_day}` : ''}</span>{/if}
@@ -65,23 +77,40 @@
     {#if app.page === 'arrange'}
       <button class="pillbtn sounds" class:on={app.soundsOn} aria-pressed={app.soundsOn} onclick={() => app.toggleSounds()} title="Sounds beside the dialogue" data-testid="sounds-toggle">
         <svg width="22" height="14" viewBox="0 0 22 14" aria-hidden="true"><circle cx="4" cy="9" r="3.5" fill="rgb(var(--bucket-1-rgb))" /><circle cx="11" cy="5" r="4" fill="rgb(var(--bucket-2-rgb))" /><circle cx="18" cy="9" r="3" fill="rgb(var(--bucket-3-rgb))" /></svg>
-        Sounds <span class="kb">S</span>
+        <span class="lbl">Sounds <span class="kb">S</span></span>
       </button>
     {/if}
     {#if app.page === 'arrange' && app.soundsOn}
       <button class="pillbtn follow" class:on={app.soundSnap} aria-pressed={app.soundSnap} onclick={() => app.setSoundSnap(!app.soundSnap)} title={app.soundSnap ? 'Sounds catch on lines, pauses and directions. Hold ⌥ while dragging to let go for one move, or click to turn it off.' : 'Sounds go exactly where you put them. Click to catch on lines, pauses and directions.'} data-testid="snap-toggle">Snap</button>
     {/if}
     {#if app.page === 'options' || app.page === 'arrange' || app.page === 'edit'}
-      <button class="pillbtn follow" class:on={app.follow} aria-pressed={app.follow} onclick={() => app.setFollow(!app.follow)} title={app.follow ? 'The current box moves with the playhead. Click to keep it where you put it.' : 'The current box stays where you put it. Click to move it with the playhead.'} data-testid="follow">Follow</button>
+      <button class="pillbtn follow roomier" class:on={app.follow} aria-pressed={app.follow} onclick={() => app.setFollow(!app.follow)} title={app.follow ? 'The current box moves with the playhead. Click to keep it where you put it.' : 'The current box stays where you put it. Click to move it with the playhead.'} data-testid="follow">Follow</button>
     {/if}
     {#if app.page === 'options' || app.page === 'arrange'}
-      <label class="size">Size<input type="range" min="0.8" max="1.3" step="0.05" bind:value={app.scale} aria-label="Box size" /></label>
+      <label class="size roomy"><span class="word">Size</span><input type="range" min="0.8" max="1.3" step="0.05" bind:value={app.scale} aria-label="Box size" /></label>
     {/if}
-    <button class="icb round" onclick={() => (app.overlay = 'settings')} aria-label="Settings" title="Settings">
+    <button class="icb round roomy" onclick={() => (app.overlay = 'settings')} aria-label="Settings" title="Settings">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
     </button>
-    <button class="icb round" onclick={() => (app.overlay = 'help')} aria-label="Keyboard shortcuts">?</button>
-    <button class="pillbtn" onclick={() => (app.overlay = 'history')}>History</button>
+    <button class="icb round roomy" onclick={() => (app.overlay = 'help')} aria-label="Keyboard shortcuts">?</button>
+    <button class="pillbtn roomy" onclick={() => (app.overlay = 'history')}>History</button>
+    <div class="more">
+      <button class="icb round" aria-label="More" aria-haspopup="menu" aria-expanded={more} title="More" onclick={() => (more = !more)} data-testid="header-more"><Icon name="more" size={18} /></button>
+      {#if more}
+        <div class="scrim0" role="presentation" onclick={() => (more = false)}></div>
+        <div class="glass pop right" role="menu" aria-label="More">
+          {#if app.page === 'options' || app.page === 'arrange' || app.page === 'edit'}
+            <button class="in-more" role="menuitemcheckbox" aria-checked={app.follow} onclick={() => pick(() => app.setFollow(!app.follow))}>Follow the playhead{#if app.follow}<Icon name="check" size={14} />{/if}</button>
+          {/if}
+          {#if app.page === 'options' || app.page === 'arrange'}
+            <label class="msize">Size<input type="range" min="0.8" max="1.3" step="0.05" bind:value={app.scale} aria-label="Box size" /></label>
+          {/if}
+          <button role="menuitem" onclick={() => pick(() => (app.overlay = 'settings'))}>Settings</button>
+          <button role="menuitem" onclick={() => pick(() => (app.overlay = 'help'))}>Keyboard shortcuts</button>
+          <button role="menuitem" onclick={() => pick(() => (app.overlay = 'history'))}>History</button>
+        </div>
+      {/if}
+    </div>
   </div>
 </header>
 
@@ -95,38 +124,71 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    flex-wrap: wrap;
     z-index: 10;
   }
   .hdr.wide {
     left: 28px;
     right: 28px;
   }
-  /* Arrange has the most buttons: the scene's name gives way, not the row */
-  @media (min-width: 1180px) {
-    .hdr.fit {
-      flex-wrap: nowrap;
-    }
-    .hdr.fit .title {
-      flex: 1 1 0;
-      min-width: 0;
-    }
-    .hdr.fit .switch,
-    .hdr.fit .right {
-      flex: none;
-    }
-    .hdr.fit .ep {
-      white-space: nowrap;
-    }
-    .hdr.fit .where {
-      min-width: 0;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
+  /* one row, always: the bar steps down instead of wrapping (lib/fit.ts). 1 tighter, 2 no key
+     hints, 3 the secondary tools go into the ⋯ menu, 4 short labels, 5 the least that works */
+  .hdr:global([data-fit='1']) .right,
+  .hdr:global([data-fit='2']) .right {
+    gap: 8px;
+  }
+  .hdr:global([data-fit='1']) .size input,
+  .hdr:global([data-fit='2']) .size input {
+    width: 72px;
+  }
+  .hdr:global([data-fit='1']) .word,
+  .hdr:global([data-fit='2']) .word {
+    display: none;
+  }
+  .hdr:global(:is([data-fit='2'], [data-fit='3'], [data-fit='4'], [data-fit='5'])) .switch .kb {
+    display: none;
+  }
+  .hdr:global(:is([data-fit='2'], [data-fit='3'], [data-fit='4'], [data-fit='5'])) .switch button {
+    padding: 0 14px;
+  }
+  .hdr:global(:is([data-fit='3'], [data-fit='4'], [data-fit='5'])) .right {
+    gap: 6px;
+  }
+  .hdr:global(:is([data-fit='3'], [data-fit='4'], [data-fit='5'])) .roomy {
+    display: none;
+  }
+  .hdr:global(:is([data-fit='3'], [data-fit='4'], [data-fit='5'])) .more {
+    display: block;
+  }
+  .hdr:global(:is([data-fit='4'], [data-fit='5'])) .pillbtn {
+    padding: 0 12px;
+  }
+  /* the balls say Sounds; the name stays for screen readers */
+  .hdr:global(:is([data-fit='4'], [data-fit='5'])) .lbl {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .hdr:global(:is([data-fit='4'], [data-fit='5'])) .showname {
+    display: none;
+  }
+  .hdr:global([data-fit='5']) .roomier {
+    display: none;
+  }
+  .hdr:global([data-fit='5']) .in-more {
+    display: flex;
+  }
+  .hdr:global([data-fit='5']) .switch button {
+    padding: 0 10px;
+  }
+  .hdr:global([data-fit='5']) .title {
+    min-width: 96px;
   }
   .scene {
     position: relative;
+    flex: 0 1 auto;
+    min-width: 0;
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -143,13 +205,52 @@
     cursor: default;
   }
   .title {
+    flex: 1 1 0;
+    min-width: 200px;
     display: flex;
     align-items: baseline;
     gap: 10px;
     font-size: var(--fs-ui);
+    white-space: nowrap;
+  }
+  .where {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .more {
+    position: relative;
+    display: none;
+  }
+  .in-more {
+    display: none;
+  }
+  .pop.right {
+    left: auto;
+    right: 0;
+    top: 46px;
+    min-width: 220px;
+  }
+  .pop .in-more {
+    justify-content: space-between;
+    align-items: center;
+  }
+  .msize {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .msize input {
+    width: 110px;
+    accent-color: var(--text-strong);
   }
   .epm {
     position: relative;
+    flex: none;
   }
   .ep {
     display: inline-flex;
@@ -218,6 +319,7 @@
     color: var(--text-3);
   }
   .dot {
+    flex: none;
     width: 6px;
     height: 6px;
     border-radius: 50%;
@@ -228,6 +330,7 @@
     background: var(--warn);
   }
   .switch {
+    flex: none;
     display: flex;
     padding: 4px;
     border-radius: var(--radius-pill);
@@ -257,7 +360,10 @@
     gap: 8px;
   }
   .right {
+    flex: 1 0 0;
+    min-width: max-content;
     display: flex;
+    justify-content: flex-end;
     gap: 12px;
     align-items: center;
   }

@@ -136,11 +136,11 @@
   </button>
 {/snippet}
 
-<aside class="glass panel" class:beside={!!eyes} class:off aria-hidden={off} inert={off} data-own-keys aria-label="Bucket for scene {app.view?.scene.number ?? ''}">
+<aside class="glass panel" class:beside={!!eyes} class:off class:over={app.narrow} aria-hidden={off} inert={off} data-own-keys aria-label="Bucket for scene {app.view?.scene.number ?? ''}">
   <div class="hd">
     <span class="t">Bucket · Sc. {app.view?.scene.number ?? ''}</span>
     <button class="btn" onclick={() => app.toggleFullBucket()}>Full bucket <span class="kb">⇧B</span></button>
-    <button class="ib" aria-label="Hide bucket (B)" title="Hide (B)" onclick={() => (app.editBucket = false)}><Icon name="chevron-right" /></button>
+    <button class="ib" aria-label="Hide bucket (B)" title="Hide (B)" onclick={() => app.setBucket(false)}><Icon name="chevron-right" /></button>
   </div>
   <div class="seg mode" role="group" aria-label="Search">
     <button class="tab" class:on={!people} aria-pressed={!people} onmousedown={(e) => e.preventDefault()} onclick={() => searchIn('sounds')} data-testid="search-sounds">Sounds</button>
@@ -468,9 +468,14 @@
     font-size: 12px;
     padding: 4px;
   }
-  @media (max-width: 1100px) {
-    .panel {
-      display: none;
-    }
+  /* no room beside the timeline: it lies over it, and steps aside for a drag */
+  .panel.over {
+    z-index: 30;
+    width: min(372px, calc(100% - 32px));
+    transition: opacity 0.16s var(--ease-move);
+  }
+  :global(body.sound-drag) .panel.over {
+    opacity: 0;
+    pointer-events: none;
   }
 </style>

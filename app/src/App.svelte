@@ -30,12 +30,16 @@
 
   let root: HTMLDivElement | undefined = $state();
   let innerWidth = $state(1440);
+  $effect(() => {
+    app.narrow = innerWidth <= 1100;
+  });
   let wAcc = 0;
   let wLast = 0;
 
   function onWheel(e: WheelEvent) {
     if (app.overlay || app.page === 'edit' || app.page === 'import' || app.page === 'export' || app.page === 'dev') return;
     const t = e.target as HTMLElement;
+    if (t.closest('.rail')) return; // the scene list scrolls itself
     // the opened sound's handles are sliders for the keyboard; the wheel still scrubs there
     if (t.closest('[role="slider"]:not([data-part])') || t.closest('aside') || t.tagName === 'INPUT') return;
     e.preventDefault();

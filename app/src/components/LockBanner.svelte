@@ -15,7 +15,7 @@
 </script>
 
 {#if s?.lock}
-  <div class="lock glass" role="status" data-testid="lock-banner" data-keeps-sound>
+  <div class="lock glass" class:low={app.page === 'edit'} role="status" data-testid="lock-banner" data-keeps-sound>
     <Icon name="lock" size={12} />
     <span class="ellip">{lockLine(s.number, s.lock, since)}</span>
     <button onclick={() => (app.unlocking = s.id)}>Unlock</button>
@@ -39,6 +39,10 @@
     background: var(--panel);
     font-size: 12px;
     color: var(--text-3);
+  }
+  /* the Edit page's control bar sits where it would */
+  .lock.low {
+    top: 128px;
   }
   button {
     flex: none;
