@@ -624,6 +624,11 @@ pub struct PerformanceSearchP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct DuplicateSoundsP {
+    pub placement_ids: Vec<String>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct MappingOpenP {
     /// The line whose take is being fixed …
     #[serde(default)]
@@ -982,6 +987,7 @@ registry! {
     "set_sound_pan", SoundPanP, Write, true, "Set a sound's pan, -1 left to +1 right.";
     "set_sound_depth", SoundDepthP, Write, true, "Set how far back a sound sits in its scene's room, 0 close to 1 far: wetter, quieter and darker as it goes back.";
     "slip_sound", SlipSoundP, Write, true, "Slip the audio inside a sound's window: a new source in point, same place and length.";
+    "duplicate_sounds", DuplicateSoundsP, Write, true, "Copy placed sounds, one undo step. A copy lands right after its sound, a selection after its last sound with its spacing kept. Gives the new ids.";
     "remove_sound", PlacementP, Write, true, "Take a placed sound off the timeline. Undoable.";
     "batch_sounds", BatchSoundsP, Write, true, "Several sound edits as one undo step (a multi-select move, gain or depth change); if one fails, none applies. Each edit is {op: move|trim|fades|gain|pan|depth|slip|remove, ...the fields of that method}.";
     "scene_rooms", NoParams, Read, true, "Each scene's room: size, damping, wet, what they come to (decay, pre-delay) and how many sounds play in it.";
@@ -1737,6 +1743,10 @@ impl Service {
             "set_sound_depth" => self.sound_edit::<SoundDepthP>(params),
             "slip_sound" => self.sound_edit::<SlipSoundP>(params),
             "remove_sound" => self.sound_edit::<PlacementP>(params),
+            "duplicate_sounds" => {
+                let p: DuplicateSoundsP = parse(params)?;
+                Ok(self.exec(&Command::DuplicateSounds { placement_ids: p.placement_ids })?.result)
+            }
             "batch_sounds" => crate::sound_edit::batch(self, parse(params)?),
             "scene_rooms" => Ok(serde_json::to_value(crate::sound_edit::rooms(self)?)?),
             "set_scene_room" => crate::sound_edit::set_room(self, parse(params)?),

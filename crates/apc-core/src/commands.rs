@@ -421,6 +421,11 @@ pub enum Command {
     DeleteLine {
         line_id: String,
     },
+    /// Copies sounds, right after themselves: a selection keeps its spacing and follows on from
+    /// its last sound. A copy stands at its own time, on a free layer.
+    DuplicateSounds {
+        placement_ids: Vec<String>,
+    },
     /// Changes a take where it stands: its stretch and what it says. Its number, favorite and
     /// notes stay. New marks make it `Marked`; new text alone `Corrected`, its edges as they were.
     EditTake {
@@ -513,6 +518,7 @@ impl Command {
             Command::AddTake { .. } => "add_take",
             Command::AddLine { .. } => "add_line",
             Command::DeleteLine { .. } => "delete_line",
+            Command::DuplicateSounds { .. } => "duplicate_sounds",
             Command::EditTake { .. } => "edit_take",
             Command::DeleteTake { .. } => "delete_take",
         }
@@ -1263,6 +1269,9 @@ impl Command {
                 &pacing,
             ),
             Command::DeleteLine { line_id } => delete_line(tx, line_id, &pacing),
+            Command::DuplicateSounds { placement_ids } => {
+                duplicate_sounds(tx, placement_ids, &pacing)
+            }
             Command::EditTake { take } => edit_take(tx, take),
             Command::DeleteTake { take_id } => delete_take(tx, take_id),
             Command::SetLaneMix { mix } => {
@@ -1967,6 +1976,54 @@ fn add_take(tx: &mut Tx, take: &Take) -> Result<Value> {
     b.dropped = false;
     tx.put(&b)?;
     Ok(json!({ "take_id": take.id, "take_no": take_no }))
+}
+
+fn duplicate_sounds(
+    tx: &mut Tx,
+    ids: &[String],
+    pacing: &crate::timeline::Pacing,
+) -> Result<Value> {
+    let sounds = ids
+        .iter()
+        .map(|id| placement(tx, id))
+        .collect::<Result<Vec<Placement>>>()?;
+    let Some(first) = sounds.first() else {
+        return Err(CoreError::invalid("no sounds to duplicate"));
+    };
+    if sounds.iter().any(|p| p.scene_id != first.scene_id) {
+        return Err(CoreError::invalid("the sounds are in different scenes"));
+    }
+    let scene = tx
+        .doc()
+        .scenes
+        .get(&first.scene_id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("scene", &first.scene_id))?;
+    let layout = layout_scene(tx.doc(), &scene, pacing);
+    let starts: Vec<f64> = sounds.iter().map(|p| placement_start(&layout, p)).collect();
+    let from = starts.iter().copied().fold(f64::INFINITY, f64::min);
+    let to = sounds
+        .iter()
+        .zip(&starts)
+        .map(|(p, s)| s + p.len_s)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let mut copies = Vec::with_capacity(sounds.len());
+    for (p, start) in sounds.iter().zip(&starts) {
+        let mut c = Placement {
+            id: new_id("pl"),
+            // a cue has its sound; a copy is one more, standing at its own time
+            cue_id: None,
+            anchor: None,
+            at_s: ms(start + to - from),
+            offset_s: 0.0,
+            ..p.clone()
+        };
+        sounds::check_new(tx.doc(), &mut c)?;
+        c.layer = free_layer(tx.doc(), &c, pacing);
+        tx.put(&c)?;
+        copies.push(c.id);
+    }
+    Ok(json!({ "ids": copies }))
 }
 
 fn edit_take(tx: &mut Tx, take: &Take) -> Result<Value> {
@@ -3442,6 +3499,113 @@ mod tests {
             .map(|t| t.id.as_str())
             .collect();
         assert_eq!(ids, ["other"]);
+    }
+
+    /// Sounds on the SFX lane at the times given, each `len_s` long.
+    fn sounds_at(bus: &mut CommandBus, at: &[(&str, f64, f64)]) -> String {
+        let scene = bus.doc().scenes.values().next().unwrap().id.clone();
+        for (id, at_s, len_s) in at {
+            let p: Placement = serde_json::from_value(json!({
+                "id": id, "scene_id": scene, "asset_id": "x", "lane": "sfx",
+                "at_s": at_s, "len_s": len_s, "gain_db": -3.0, "pan": 0.5, "depth": 0.25,
+            }))
+            .unwrap();
+            bus.execute_fn("seed", &Value::Null, |tx| {
+                tx.put(&p)?;
+                Ok(Value::Null)
+            })
+            .unwrap();
+        }
+        scene
+    }
+
+    fn copies(r: &crate::Executed) -> Vec<String> {
+        serde_json::from_value(r.result["ids"].clone()).unwrap()
+    }
+
+    #[test]
+    fn a_duplicate_follows_its_sound_and_keeps_how_it_was_set() {
+        let (_d, mut bus) = setup();
+        sounds_at(&mut bus, &[("p", 2.0, 1.5)]);
+        let before = bus.doc().clone();
+        let r = bus
+            .execute(&Command::DuplicateSounds {
+                placement_ids: vec!["p".into()],
+            })
+            .unwrap();
+        let id = &copies(&r)[0];
+        let c = &bus.doc().placements[id];
+        assert_eq!(c.at_s, 3.5);
+        assert_eq!((c.len_s, c.gain_db, c.pan, c.depth), (1.5, -3.0, 0.5, 0.25));
+        assert_eq!(
+            c.layer, 0,
+            "it doesn't overlap, so it needs no layer of its own"
+        );
+        assert_ne!(c.added, bus.doc().placements["p"].added);
+        bus.undo().unwrap();
+        assert_eq!(bus.doc(), &before);
+    }
+
+    #[test]
+    fn a_selection_keeps_its_spacing_and_one_undo_takes_it_all() {
+        let (_d, mut bus) = setup();
+        sounds_at(&mut bus, &[("p", 2.0, 1.0), ("q", 4.0, 1.0)]);
+        let r = bus
+            .execute(&Command::DuplicateSounds {
+                placement_ids: vec!["p".into(), "q".into()],
+            })
+            .unwrap();
+        let ids = copies(&r);
+        let at: Vec<f64> = ids.iter().map(|i| bus.doc().placements[i].at_s).collect();
+        assert_eq!(at, [5.0, 7.0]);
+        bus.undo().unwrap();
+        assert_eq!(bus.doc().placements.len(), 2);
+    }
+
+    #[test]
+    fn a_copy_of_an_anchored_sound_stands_at_its_own_time_off_the_cue() {
+        let (_d, mut bus) = setup();
+        let scene = sounds_at(&mut bus, &[("p", 0.0, 1.0)]);
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            let mut p = tx.doc().placements["p"].clone();
+            p.anchor = Some(Anchor {
+                line_id: "b".into(),
+                word: None,
+                edge: Edge::Start,
+            });
+            p.offset_s = 0.25;
+            p.cue_id = Some("c".into());
+            tx.put(&p)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        let sc = bus.doc().scenes[&scene].clone();
+        let pacing = crate::timeline::Pacing::default();
+        let doc = bus.doc().clone();
+        let start = placement_start(&layout_scene(&doc, &sc, &pacing), &doc.placements["p"]);
+        let r = bus
+            .execute(&Command::DuplicateSounds {
+                placement_ids: vec!["p".into()],
+            })
+            .unwrap();
+        let c = &bus.doc().placements[&copies(&r)[0]];
+        assert!(c.anchor.is_none() && c.cue_id.is_none());
+        assert!((c.at_s - (start + 1.0)).abs() < 0.002, "{} {start}", c.at_s);
+    }
+
+    #[test]
+    fn nothing_to_copy_is_refused_and_changes_nothing() {
+        let (_d, mut bus) = setup();
+        sounds_at(&mut bus, &[("p", 2.0, 1.0)]);
+        let none = Command::DuplicateSounds {
+            placement_ids: vec![],
+        };
+        assert!(bus.execute(&none).is_err());
+        let gone = Command::DuplicateSounds {
+            placement_ids: vec!["p".into(), "nope".into()],
+        };
+        assert!(bus.execute(&gone).is_err());
+        assert_eq!(bus.doc().placements.len(), 1);
     }
 
     #[test]
