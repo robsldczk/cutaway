@@ -21,7 +21,7 @@ pub fn write_wav(path: &Path, sample_rate: u32, channels: u16, interleaved: &[f3
 }
 
 /// Writes a WAV at a bit depth: 16 or 24-bit PCM, or 32-bit float. Samples past full scale clip,
-/// except in float. No dither at 16 bits: a silent stem has to stay digital silence (D109).
+/// except in float. No dither at 16 bits: a silent stem has to stay digital silence (D111).
 pub fn write_wav_bits(
     path: &Path,
     sample_rate: u32,

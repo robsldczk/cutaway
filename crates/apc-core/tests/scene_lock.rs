@@ -1,8 +1,9 @@
-//! A locked scene's timing holds still whatever asks to move it (D106): the bus checks the
+//! A locked scene's timing holds still whatever asks to move it (D108): the bus checks the
 //! result of every command, so nothing here names the commands it covers.
 
 use apc_core::commands::{ClipEdge, Command};
 use apc_core::store::EpisodeStore;
+use apc_core::timeline::locked_timing;
 use apc_core::*;
 use serde_json::{json, Value};
 
@@ -268,6 +269,24 @@ fn a_lock_is_one_undo_step() {
     assert!(bus.doc().scenes["s1"].lock.is_none());
     bus.redo().unwrap();
     assert!(bus.doc().scenes["s1"].lock.is_some());
+}
+
+#[test]
+fn redo_cant_bring_back_a_timing_edit_past_a_lock() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut bus = bus(dir.path());
+    let gap = Command::SetGap {
+        line_id: "b".into(),
+        gap_s: Some(2.0),
+    };
+    bus.execute(&gap).unwrap();
+    bus.undo().unwrap();
+    let print = |bus: &CommandBus| locked_timing(bus.doc());
+    lock(&mut bus, "s1");
+    let held = print(&bus);
+    assert_eq!(held.len(), 1);
+    assert!(bus.redo().unwrap().is_none(), "the lock ended the redo");
+    assert_eq!(print(&bus), held);
 }
 
 #[test]

@@ -1,14 +1,15 @@
 // UI state. Document state comes only from the core (view models); every change is a
 // command sent through the bridge. Local state here is selection, page, playhead, overlays.
 import { call, BridgeError } from './bridge';
-import type { DragSound, EditView, ItemView, Job, SceneView, ShowView, SoundFace, SoundKey, SoundPreview, Status } from './types';
+import type { ExportScene, ExportSettings, ExportStatus } from './export';
+import type { DragSound, EditView, ItemView, Job, SceneSummary, SceneView, ShowView, SoundFace, SoundKey, SoundPreview, Status } from './types';
 
 const soundId = (key: SoundKey) => key.asset_id ?? key.remote_id ?? key.clip?.id ?? '';
 
-export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'dev';
+export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'export' | 'dev';
 export type ImportTab = 'files' | 'sounds' | 'rooms';
 export type Tool = 'pointer' | 'split' | 'fade' | 'gain' | 'marquee';
-export type Overlay = null | 'help' | 'editor' | 'mapping' | 'delete-line' | 'settings' | 'history' | 'export';
+export type Overlay = null | 'help' | 'editor' | 'mapping' | 'delete-line' | 'settings' | 'history';
 
 /** What the mapping editor is for: a new take of a line, or a new line after an item. */
 export type MappingTarget = { kind: 'take'; line_id: string } | { kind: 'line'; after: string | null };
@@ -173,6 +174,20 @@ class AppState {
   openBucket = $state<string | null>(null);
   /** The buckets' preview player: the sound last auditioned, playing or not. */
   preview = $state<SoundPreview | null>(null);
+  /** What's been exported, by scene id: for tooltips and "changed since". */
+  exported = $state<Record<string, ExportScene>>({});
+  /** The Export page's choices, kept while the episode is open. */
+  exportSettings = $state<ExportSettings | null>(null);
+  /** ⌘E on the Export page. */
+  exportUi: { run(): void } | null = null;
+  /** The scene asked about before unlocking. */
+  unlocking = $state<string | null>(null);
+  /** The show home's export sheet. */
+  showExport = $state(false);
+  /** A locked scene refused an edit: said where the edit was tried. */
+  blocked = $state<{ text: string; x: number; y: number } | null>(null);
+  /** Where the pointer last pressed, and when. */
+  pointer = { x: 0, y: 0, at: 0 };
   /** The open show (studio mode): its home shows when no episode is open. */
   show = $state<ShowView | null>(null);
   /** The show's backdrop (a data URL), loaded once per show. */
@@ -245,9 +260,52 @@ class AppState {
     try {
       return await f();
     } catch (e) {
-      this.say(e instanceof BridgeError ? e.message : String(e));
+      if (e instanceof BridgeError && e.code === 'scene_locked') this.refuse(e.message);
+      else this.say(e instanceof BridgeError ? e.message : String(e));
       return undefined;
     }
+  }
+
+  /** Says a locked scene's refusal at the pointer, when the edit came from it, or by the
+   *  scene's banner when it came from the keyboard. */
+  private refuse(text: string) {
+    const recent = performance.now() - this.pointer.at < 1500;
+    const note = { text, x: recent ? this.pointer.x : window.innerWidth / 2, y: recent ? this.pointer.y : 96 };
+    this.blocked = note;
+    setTimeout(() => {
+      if (this.blocked === note) this.blocked = null;
+    }, 3600);
+  }
+
+  /** The scene on screen, when it's locked. */
+  get sceneLocked(): SceneSummary | null {
+    const s = this.view?.scenes.find((x) => x.id === this.sceneId);
+    return s?.lock ? s : null;
+  }
+
+  /** What's been exported, for the scene list's tooltips and the lock banner. */
+  async loadExports() {
+    try {
+      const s = await call<ExportStatus>('export_status');
+      this.exported = Object.fromEntries(s.scenes.map((x) => [x.id, x]));
+    } catch {
+      /* the next look tries again; nothing here stops an edit */
+    }
+  }
+
+  async lockScene(id: string) {
+    await this.method('lock_scene', { scene: id });
+    await this.loadExports();
+  }
+
+  async unlockScene(id: string) {
+    await this.method('unlock_scene', { scene: id, confirm: true });
+    await this.loadExports();
+  }
+
+  /** Opens a version's folder in the Finder. */
+  reveal(folder: string) {
+    void this.run(() => call('reveal_export', { folder }));
   }
 
   async boot() {
@@ -273,6 +331,7 @@ class AppState {
     if (this.status && this.status.scenes > 0) {
       await this.loadScene(this.sceneId || '1');
       if (this.status.takes === 0) this.page = 'import';
+      void this.loadExports();
     } else {
       this.view = null;
       this.page = 'import';
@@ -311,6 +370,8 @@ class AppState {
     this.locator = 0;
     this.page = 'options';
     this.importTab = 'files';
+    this.exported = {};
+    this.exportSettings = null;
     this.noProject = true;
   }
 

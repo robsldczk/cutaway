@@ -385,7 +385,7 @@ fn lane_of(doc: &Document, f: &TrackFile) -> Option<(String, String)> {
 
 /// The scene's FCPXML: the dry character lanes and the two room lanes, on the original recordings,
 /// the exported clips or the rendered stems. Without rendered room tracks there's no room lane:
-/// FCPXML only renders nothing (D111).
+/// FCPXML only renders nothing (D113).
 fn scene_fcpxml(
     t: &Target,
     scene: &Scene,

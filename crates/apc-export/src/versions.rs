@@ -1,13 +1,12 @@
 //! Export versions: nothing is overwritten. Each scene counts up on its own, every version is a
 //! folder with a manifest, and the manifests are the whole history: it survives undo and revert
-//! because it isn't in the document, and it can't disagree with what's on disk (D110).
+//! because it isn't in the document, and it can't disagree with what's on disk (D112).
 //!
 //! ```text
 //! Exports/Ep02/Sc02 Canteen/v003 2026-11-05/  E02_S02_v003_Dialogue.wav … manifest.json
 //! Exports/Ep02/Episode/v002 2026-11-05/       E02_v002.fcpxml … manifest.json
 //! ```
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -221,18 +220,6 @@ impl History {
         self.last_of(scene_id)
             .filter(|r| r.manifest.timeline_hash == hash)
             .map(|r| r.manifest.version)
-    }
-
-    /// Scene id → newest version, for the whole of the history.
-    pub fn latest(&self) -> BTreeMap<String, u32> {
-        let mut m = BTreeMap::new();
-        for r in &self.records {
-            if let Some(id) = &r.manifest.scene_id {
-                let v = m.entry(id.clone()).or_insert(0);
-                *v = r.manifest.version.max(*v);
-            }
-        }
-        m
     }
 }
 

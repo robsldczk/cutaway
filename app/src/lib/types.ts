@@ -133,6 +133,16 @@ export interface ItemView {
   spacer_s: number;
 }
 
+/** Why a scene's timing is held. */
+export interface SceneLock {
+  /** The export it protects; null when locked by hand before any export. */
+  version: number | null;
+  /** The day it was locked, 2026-11-05. */
+  at: string;
+  /** A newer script changed lines inside it while it was locked. */
+  script_changed: boolean;
+}
+
 export interface SceneSummary {
   id: string;
   number: number;
@@ -146,6 +156,7 @@ export interface SceneSummary {
   title: string;
   act: string;
   synopsis: string;
+  lock: SceneLock | null;
 }
 
 export interface CharacterView {

@@ -62,6 +62,16 @@
   --kbd: rgb(var(--veil-rgb) / 0.1);
 
   /* accents */
+  --accent-rgb: 154 134 224;
+  --accent: rgb(var(--accent-rgb));
+  --on-accent: #16131f;
+  --track-dialogue: #f3f1ec;
+  --track-room-voices: rgb(196 186 226);
+  --track-effects: rgb(216 182 87);
+  --track-room-effects: rgb(226 206 150);
+  --track-ambience: rgb(142 197 240);
+  --track-music: rgb(127 196 160);
+  --track-mix: rgb(var(--ink-rgb) / 0.5);
   --locator: rgb(var(--locator-rgb));
   --locator-soft: rgb(var(--locator-rgb) / 0.55);
   --warn: #e6b84c;
@@ -198,6 +208,14 @@
   --ok: #2f7d3a;
   --playhead: #1d2027;
   --overlap: #5b47a0;
+  --accent-rgb: 104 80 190;
+  --on-accent: #ffffff;
+  --track-dialogue: #1d2027;
+  --track-room-voices: rgb(120 100 190);
+  --track-effects: rgb(160 120 20);
+  --track-room-effects: rgb(170 140 70);
+  --track-ambience: rgb(50 120 180);
+  --track-music: rgb(40 130 90);
   --button-light: #1d2027;
   --button-light-active: #1d2027;
   --danger: #a8323f;

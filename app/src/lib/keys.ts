@@ -6,11 +6,14 @@ export function ownArrows(e: KeyboardEvent) {
   return (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.target instanceof Element && e.target.hasAttribute('data-own-arrows');
 }
 
+const PAGE_KEYS = ['1', '2', '3', '4'];
+
 export function onKey(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null;
   // a slider keeps the focus after a drag: its undo must still work, its arrows stay its own
   const sliderUndo = t instanceof HTMLInputElement && t.type === 'range' && (e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z');
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && e.key !== 'Escape' && !sliderUndo) return;
+  const exportKey = (e.metaKey || e.ctrlKey) && (e.key === 'e' || e.key === 'E');
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && e.key !== 'Escape' && !sliderUndo && !exportKey) return;
   if (app.overlay === 'editor' || app.overlay === 'mapping') return;
   if (ownArrows(e)) return;
   // a button reached with Tab does what it says; after a click Space still plays
@@ -28,14 +31,18 @@ export function onKey(e: KeyboardEvent) {
     if (e.shiftKey) void app.redo();
     else void app.undo();
   } else if (mod && (k === 's' || k === 'S')) app.overlay = 'history';
+  else if (exportKey) {
+    if (app.page === 'export') app.exportUi?.run();
+    else if (app.view) app.setPage('export');
+  }
   else if (k === '?') app.overlay = app.overlay === 'help' ? null : 'help';
   else if (k === 'Escape') {
     if (app.overlay) app.overlay = null;
     else if (app.drawer) app.drawer = null;
     else app.passageTo = null;
   } else if (app.overlay) handled = false;
-  else if (app.page === 'import' && !(e.shiftKey && (k === 'b' || k === 'B')) && !['1', '2', '3'].includes(k)) handled = false;
-  else if (app.page === 'dev' && !['1', '2', '3'].includes(k)) handled = false;
+  else if (app.page === 'import' && !(e.shiftKey && (k === 'b' || k === 'B')) && !PAGE_KEYS.includes(k)) handled = false;
+  else if ((app.page === 'dev' || app.page === 'export') && !PAGE_KEYS.includes(k)) handled = false;
   else if (k === ' ' && e.shiftKey) void app.playFromLocator();
   else if (k === ' ') void (app.preview?.playing ? app.stopSound() : app.togglePlay());
   else if (k === 'Enter') void app.playLineInContext();
@@ -64,6 +71,7 @@ export function onKey(e: KeyboardEvent) {
   else if (k === '1' && app.view) app.setPage('options');
   else if (k === '2' && app.view) app.setPage('arrange');
   else if (k === '3' && app.view) app.setPage('edit');
+  else if (k === '4' && app.view) app.setPage('export');
   else if (k === '+' || k === '=') app.scale = Math.min(1.3, Math.round((app.scale + 0.05) * 100) / 100);
   else if (k === '-' || k === '_') app.scale = Math.max(0.8, Math.round((app.scale - 0.05) * 100) / 100);
   else if (k === ',') void app.nudgeGap(-0.1);

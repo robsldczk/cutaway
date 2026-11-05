@@ -205,7 +205,7 @@ pub struct Scene {
     /// The ambience looping under this scene. Without one it plays what its location has (D97).
     #[serde(default)]
     pub tone: Option<SceneTone>,
-    /// Delivered: its timing holds still until it's unlocked (D106).
+    /// Delivered: its timing holds still until it's unlocked (D108).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lock: Option<SceneLock>,
 }

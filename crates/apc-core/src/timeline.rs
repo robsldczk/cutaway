@@ -158,7 +158,7 @@ impl SceneLayout {
 }
 
 /// What a lock holds still in a scene: where everything sits and which audio it is. Levels, pan,
-/// depth, fades and mutes aren't in it, so they stay free (D106). Two equal prints mean the files
+/// depth, fades and mutes aren't in it, so they stay free (D108). Two equal prints mean the files
 /// already delivered still line up.
 pub fn timing_print(doc: &Document, scene: &Scene, pacing: &Pacing) -> String {
     let layout = layout_scene(doc, scene, pacing);

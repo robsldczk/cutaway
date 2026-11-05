@@ -766,10 +766,18 @@ fn a_show_export_goes_only_to_the_confirmed_pipeline_folder() {
     assert!(e.to_string().contains("no pipeline folder"), "{e}");
     assert!(!root.join("Sound/Exports").exists(), "never a guessed path");
 
+    // an agent can't confirm its own proposal: it's the editor's word
     let confirmed = root.join("Sound");
+    let e = sess
+        .call(
+            "set_pipeline_folder",
+            &json!({ "path": confirmed.to_string_lossy() }),
+        )
+        .unwrap_err();
+    assert_eq!(e.code(), "needs_confirm");
     sess.call(
         "set_pipeline_folder",
-        &json!({ "path": confirmed.to_string_lossy() }),
+        &json!({ "path": confirmed.to_string_lossy(), "confirm": true }),
     )
     .unwrap();
     let stored = std::fs::read_to_string(root.join("tm-2610.cutawayshow")).unwrap();
@@ -818,6 +826,25 @@ fn a_show_export_goes_only_to_the_confirmed_pipeline_folder() {
 }
 
 #[test]
+fn a_locked_episode_still_opens_in_its_show() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut sess, root) = show(dir.path());
+    sess.call("open_episode", &json!({ "episode": "Episode 2" }))
+        .unwrap();
+    sess.call("lock_scene", &json!({ "scene": "1" })).unwrap();
+    sess.call("lock_scene", &json!({ "scene": "2" })).unwrap();
+    sess.call("close_project", &json!({})).unwrap();
+    // what opening does on its own (linking folders, relinking sounds) must never be refused
+    sess.call("open_episode", &json!({ "episode": "Episode 2" }))
+        .unwrap();
+    let status = sess.call("project_status", &json!({})).unwrap();
+    assert!(status["warnings"]
+        .to_string()
+        .contains("2 scenes are locked."));
+    assert!(root.exists());
+}
+
+#[test]
 fn the_new_methods_reach_agents_and_unlocking_is_marked_destructive() {
     let all = methods();
     let find = |n: &str| {
@@ -841,4 +868,5 @@ fn the_new_methods_reach_agents_and_unlocking_is_marked_destructive() {
         assert!(find(n).mcp, "{n} is on MCP");
     }
     assert_eq!(find("unlock_scene").access, Access::Destructive);
+    assert_eq!(find("set_pipeline_folder").access, Access::Destructive);
 }

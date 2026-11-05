@@ -885,8 +885,10 @@
 
 {#snippet edges(s: EditSel, fadeIn: number | null, fadeOut: number | null, len: number, sel: boolean, k: string)}
   {#if app.tool === 'pointer'}
-    <span class="eh l" role="slider" tabindex="-1" aria-label="Trim start" aria-valuenow={0} onmousedown={(e) => edgeDown(e, s, 'start')}></span>
-    <span class="eh r" role="slider" tabindex="-1" aria-label="Trim end" aria-valuenow={0} onmousedown={(e) => edgeDown(e, s, 'end')}></span>
+    {#if !app.sceneLocked}
+      <span class="eh l" role="slider" tabindex="-1" aria-label="Trim start" aria-valuenow={0} onmousedown={(e) => edgeDown(e, s, 'start')}></span>
+      <span class="eh r" role="slider" tabindex="-1" aria-label="Trim end" aria-valuenow={0} onmousedown={(e) => edgeDown(e, s, 'end')}></span>
+    {/if}
   {/if}
   {#if sel && (fadeIn != null || fadeOut != null)}
     {@const fe = fadeEdit?.key === k ? fadeEdit : { fade_in_s: fadeIn ?? 0, fade_out_s: fadeOut ?? 0 }}

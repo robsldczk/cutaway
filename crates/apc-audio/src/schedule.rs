@@ -112,7 +112,7 @@ pub enum StemGroup {
 
 impl StemGroup {
     /// By lane name (see [`ScheduledClip::lane`]): sound lanes are lower case, what's left is a
-    /// voice. Room tone sits under a scene like an ambience, and an adlib is a voice (D108).
+    /// voice. Room tone sits under a scene like an ambience, and an adlib is a voice (D110).
     pub fn of_lane(lane: &str) -> StemGroup {
         let numbered = |p: &str| {
             lane.strip_prefix(p)

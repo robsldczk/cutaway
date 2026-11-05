@@ -4,6 +4,7 @@
   import { app } from '../lib/app.svelte';
   import { brand } from '../lib/brand';
   import { call, inTauri, pickPath } from '../lib/bridge';
+  import Export from '../pages/Export.svelte';
   import Icon from './Icon.svelte';
 
   const show = $derived(app.show);
@@ -116,6 +117,9 @@
         <div class="muted hint">
           {#if ep?.file}Project in {dir}{:else}Opening makes its project in {dir}{/if}
         </div>
+        {#if eps.some((e) => e.file)}
+          <button class="btn deliver" onclick={() => (app.showExport = true)} data-testid="show-export">Export for the show…</button>
+        {/if}
       {:else}
         <p class="muted">No episode folders in {show.root}/Episodes yet.</p>
       {/if}
@@ -146,6 +150,7 @@
       {/if}
     </div>
   </div>
+  {#if app.showExport}<Export show onclose={() => (app.showExport = false)} />{/if}
 {/if}
 
 <style>
@@ -301,5 +306,8 @@
   }
   .warn {
     color: var(--warn);
+  }
+  .deliver {
+    margin-top: 14px;
   }
 </style>

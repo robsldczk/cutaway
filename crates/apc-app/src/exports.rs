@@ -11,7 +11,7 @@ use apc_core::config::{ExportPreset, ExportSettings, ProjectConfig, SaveTo};
 use apc_core::project::EpisodePaths;
 use apc_core::show::Show;
 use apc_core::store::EpisodeStore;
-use apc_core::{Document, Scene};
+use apc_core::{CoreError, Document, Scene};
 use apc_export::bounce::{ffmpeg_available, schedule_of};
 use apc_export::package::{self, has_audio, timeline_hash, Target};
 use apc_export::versions::{self, EpisodeTag, ExportRecord, History, ManifestScene};
@@ -150,7 +150,6 @@ pub fn status(svc: &Service) -> Result<Value> {
     Ok(json!({
         "name": svc.name(),
         "episode": ep.folder(),
-        "next_episode_version": h.next_episode(),
         "scenes": scenes,
         "pipeline": svc.paths.show.as_ref().map(pipeline_fields),
         "presets": cfg.export.presets,
@@ -199,10 +198,18 @@ fn settings_of(
 pub fn resolve<'a>(svc: &'a Service, p: &ExportRunP) -> Result<(ExportSettings, Vec<&'a Scene>)> {
     let doc = svc.doc();
     let settings = settings_of(doc, p.preset.as_deref(), p.settings)?;
-    settings.check()?;
+    deliverable(&settings)?;
     exports_dir(&svc.paths, settings.save_to)?;
     let scenes = pick_scenes(doc, p.scenes.as_deref())?;
     Ok((settings, scenes))
+}
+
+/// `check`'s words go straight to the person exporting.
+fn deliverable(s: &ExportSettings) -> Result<()> {
+    s.check().map_err(|e| match e {
+        CoreError::Invalid(m) => AppError::Other(m),
+        e => e.into(),
+    })
 }
 
 fn pick_scenes<'a>(doc: &'a Document, keys: Option<&[String]>) -> Result<Vec<&'a Scene>> {
@@ -420,7 +427,7 @@ pub fn save_preset(svc: &mut Service, p: PresetP) -> Result<Value> {
     if name.is_empty() {
         return Err(AppError::Params("a preset needs a name".into()));
     }
-    p.settings.check()?;
+    deliverable(&p.settings)?;
     let mut presets = svc.config().export.presets;
     presets.retain(|x| x.name != name);
     presets.push(ExportPreset {
@@ -442,12 +449,19 @@ pub fn delete_preset(svc: &mut Service, name: &str) -> Result<Value> {
 
 /// The one-time word on opening an episode with locked scenes, after any other warnings.
 pub fn with_lock_notice(warnings: &[String], doc: &Document) -> Vec<String> {
-    let n = doc.scenes.values().filter(|s| s.lock.is_some()).count();
+    let locks: Vec<_> = doc
+        .scenes
+        .values()
+        .filter_map(|s| s.lock.as_ref())
+        .collect();
+    let exported = locks.iter().all(|l| l.version.is_some());
     let mut out = warnings.to_vec();
-    match n {
-        0 => {}
-        1 => out.push("1 scene is locked because it was exported.".into()),
-        n => out.push(format!("{n} scenes are locked because they were exported.")),
+    match (locks.len(), exported) {
+        (0, _) => {}
+        (1, true) => out.push("1 scene is locked because it was exported.".into()),
+        (1, false) => out.push("1 scene is locked.".into()),
+        (n, true) => out.push(format!("{n} scenes are locked because they were exported.")),
+        (n, false) => out.push(format!("{n} scenes are locked.")),
     }
     out
 }

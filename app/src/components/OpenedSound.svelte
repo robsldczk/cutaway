@@ -263,9 +263,11 @@
   </svg>
   <div class="over" style="top: {HEAD}px; height: {H}px">
     {#each ticks as t (t.t)}<span class="rl tn" style="left: {rulerX + 12}px; top: {t.y.toFixed(1)}px">{t.t}</span>{/each}
-    {@render handle('in', 'Start of the sound', 'bar', `left: ${xl}px; width: ${xr - xl}px; top: ${(y(tIn) - 6).toFixed(1)}px`, s.start_s, Math.max(0, src0), tOut, `${s.start_s.toFixed(2)} seconds`, 'Trim the start')}
-    {@render handle('move', 'Place of the sound, ⌥ arrows slip the audio inside', 'body', `left: ${xl}px; width: ${xr - xl}px; top: ${body.top.toFixed(1)}px; height: ${body.height.toFixed(1)}px`, s.start_s, 0, Math.max(s.start_s, app.view?.duration_s ?? 0), `Starts at ${s.start_s.toFixed(2)} seconds, ${s.in_s.toFixed(2)} into the source`, 'Drag to move · ⌥ drag to slip the sound inside')}
-    {@render handle('out', 'End of the sound', 'bar', `left: ${xl}px; width: ${xr - xl}px; top: ${(y(tOut) - 6).toFixed(1)}px`, tOut, tIn, src1, `${tOut.toFixed(2)} seconds, ${s.len_s.toFixed(2)} long`, 'Trim the end')}
+    {#if !app.sceneLocked}
+      {@render handle('in', 'Start of the sound', 'bar', `left: ${xl}px; width: ${xr - xl}px; top: ${(y(tIn) - 6).toFixed(1)}px`, s.start_s, Math.max(0, src0), tOut, `${s.start_s.toFixed(2)} seconds`, 'Trim the start')}
+      {@render handle('move', 'Place of the sound, ⌥ arrows slip the audio inside', 'body', `left: ${xl}px; width: ${xr - xl}px; top: ${body.top.toFixed(1)}px; height: ${body.height.toFixed(1)}px`, s.start_s, 0, Math.max(s.start_s, app.view?.duration_s ?? 0), `Starts at ${s.start_s.toFixed(2)} seconds, ${s.in_s.toFixed(2)} into the source`, 'Drag to move · ⌥ drag to slip the sound inside')}
+      {@render handle('out', 'End of the sound', 'bar', `left: ${xl}px; width: ${xr - xl}px; top: ${(y(tOut) - 6).toFixed(1)}px`, tOut, tIn, src1, `${tOut.toFixed(2)} seconds, ${s.len_s.toFixed(2)} long`, 'Trim the end')}
+    {/if}
     {@render handle('fadeIn', 'Fade in', 'knob', `left: ${xr}px; top: ${Math.max(yFi, y(tIn) + 10).toFixed(1)}px`, tIn + s.fade_in_s, tIn, tOut, `${s.fade_in_s.toFixed(2)} seconds`, 'Fade in')}
     {@render handle('fadeOut', 'Fade out', 'knob', `left: ${xr}px; top: ${Math.min(yFo, y(tOut) - 10).toFixed(1)}px`, tOut - s.fade_out_s, tIn, tOut, `${s.fade_out_s.toFixed(2)} seconds${s.auto_fade ? ', automatic' : ''}`, 'Fade out')}
     <span class="lab tn" style="left: {xr + 12}px; top: {(y(tIn) - 22).toFixed(1)}px">In</span>

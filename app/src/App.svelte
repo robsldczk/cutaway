@@ -14,7 +14,8 @@
   import Unmatched from './components/Unmatched.svelte';
   import Settings from './components/Settings.svelte';
   import History from './components/History.svelte';
-  import ExportPanel from './components/ExportPanel.svelte';
+  import LockBanner from './components/LockBanner.svelte';
+  import UnlockSheet from './components/UnlockSheet.svelte';
   import Welcome from './components/Welcome.svelte';
   import ShowHome from './components/ShowHome.svelte';
   import Bucket from './components/Bucket.svelte';
@@ -24,14 +25,16 @@
   import Arrange from './pages/Arrange.svelte';
   import Edit from './pages/Edit.svelte';
   import Import from './pages/Import.svelte';
+  import Export from './pages/Export.svelte';
   import Dev from './pages/Dev.svelte';
 
   let root: HTMLDivElement | undefined = $state();
+  let innerWidth = $state(1440);
   let wAcc = 0;
   let wLast = 0;
 
   function onWheel(e: WheelEvent) {
-    if (app.overlay || app.page === 'edit' || app.page === 'import' || app.page === 'dev') return;
+    if (app.overlay || app.page === 'edit' || app.page === 'import' || app.page === 'export' || app.page === 'dev') return;
     const t = e.target as HTMLElement;
     // the opened sound's handles are sliders for the keyboard; the wheel still scrubs there
     if (t.closest('[role="slider"]:not([data-part])') || t.closest('aside') || t.tagName === 'INPUT') return;
@@ -158,6 +161,8 @@
   });
 </script>
 
+<svelte:window bind:innerWidth onpointerdowncapture={(e) => (app.pointer = { x: e.clientX, y: e.clientY, at: performance.now() })} />
+
 <div class="ui stage" bind:this={root} style={tint}>
   <div class="paper" aria-hidden="true"></div>
   {#if app.page === 'options' || app.page === 'arrange'}<div class="hairline" aria-hidden="true"></div>{/if}
@@ -172,9 +177,13 @@
   {:else if app.page === 'dev' && app.status}
     <Dev />
     <Header />
+  {:else if app.page === 'export' && app.status}
+    <Export />
+    <Header />
   {:else if app.view}
     {#if app.page === 'options'}<Options />{:else if app.page === 'arrange'}<Arrange />{:else}<Edit />{/if}
     <Header />
+    {#if app.sceneLocked}<LockBanner />{/if}
     {#if app.page !== 'edit'}
       <SceneRail />
       <Transport />
@@ -191,9 +200,12 @@
   {#if app.overlay === 'help'}<HelpOverlay />{/if}
   {#if app.overlay === 'settings'}<Settings />{/if}
   {#if app.overlay === 'history'}<History />{/if}
-  {#if app.overlay === 'export'}<ExportPanel />{/if}
+  {#if app.unlocking}<UnlockSheet />{/if}
 
   {#if app.toast}<div class="toast" role="status">{app.toast}</div>{/if}
+  {#if app.blocked}
+    <div class="blocked glass" role="alert" data-testid="blocked" style="left: {Math.min(app.blocked.x, innerWidth - 180)}px; top: {app.blocked.y + 14}px">{app.blocked.text}</div>
+  {/if}
   <DragGhost />
   <FileSheet />
 </div>
@@ -235,6 +247,19 @@
   }
   /* bottom centre, above the transport: the top bars (Edit control bar, Sounds' Spot
      button) stay visible while it shows */
+  .blocked {
+    position: absolute;
+    z-index: 60;
+    transform: translateX(-50%);
+    max-width: 320px;
+    padding: 9px 14px;
+    border-radius: var(--radius-btn);
+    background: var(--panel-solid);
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--text-1);
+    pointer-events: none;
+  }
   .toast {
     position: absolute;
     left: 50%;

@@ -212,7 +212,7 @@ impl CommandBus {
     ) -> Result<Executed> {
         for _attempt in 0..3 {
             self.refresh()?;
-            // a new script version may change a locked scene: it flags it instead (D106)
+            // a new script version may change a locked scene: it flags it instead (D108)
             let locks = if name == SCRIPT_IMPORT {
                 Vec::new()
             } else {

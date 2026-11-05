@@ -8,12 +8,13 @@
     { id: 'options', label: 'Options', key: '1' },
     { id: 'arrange', label: 'Arrange', key: '2' },
     { id: 'edit', label: 'Edit', key: '3' },
+    { id: 'export', label: 'Export', key: '4' },
   ];
   const pages = $derived(app.dev ? [...base, { id: 'dev' as Page, label: 'Dev', key: '' }] : base);
   const sc = $derived(app.view?.scene);
   const saving = $derived(app.busy);
   /** Import and Edit have no scene rail: the header starts at the edge (Round 2). */
-  const wide = $derived(app.page === 'import' || app.page === 'edit' || app.page === 'dev');
+  const wide = $derived(app.page === 'import' || app.page === 'edit' || app.page === 'export' || app.page === 'dev');
   const ready = $derived(!!app.view);
   let menu = $state(false);
   /** The show the open episode lives in (studio mode). */
@@ -48,7 +49,8 @@
         </select>
         Sc. {sc.number} · {sc.place}<Icon name="chevron" size={10} stroke={2.4} />
       </label>
-    {:else if sc && app.page !== 'import' && app.page !== 'dev'}<span class="muted2 where" title={sc.heading}>Sc. {sc.number} · {sc.place}{sc.time_of_day ? ` · ${sc.time_of_day}` : ''}</span>{/if}
+      <button class="icb lock" aria-label={app.sceneLocked ? `Unlock scene ${sc.number}` : `Lock scene ${sc.number}`} aria-pressed={!!app.sceneLocked} title={app.sceneLocked ? 'Unlock this scene' : "Lock this scene's timing"} onclick={() => (app.sceneLocked ? (app.unlocking = sc.id) : app.lockScene(sc.id))} data-testid="header-lock"><Icon name={app.sceneLocked ? 'lock' : 'unlock'} size={13} /></button>
+    {:else if sc && app.page !== 'import' && app.page !== 'dev' && app.page !== 'export'}<span class="muted2 where" title={sc.heading}>Sc. {sc.number} · {sc.place}{sc.time_of_day ? ` · ${sc.time_of_day}` : ''}</span>{/if}
     <span class="dot" class:saving title={saving ? 'Saving…' : 'Saved'}></span>
   </div>
   <nav class="glass switch" aria-label="Pages">
@@ -72,7 +74,7 @@
     {#if app.page === 'options' || app.page === 'arrange' || app.page === 'edit'}
       <button class="pillbtn follow" class:on={app.follow} aria-pressed={app.follow} onclick={() => app.setFollow(!app.follow)} title={app.follow ? 'The current box moves with the playhead. Click to keep it where you put it.' : 'The current box stays where you put it. Click to move it with the playhead.'} data-testid="follow">Follow</button>
     {/if}
-    {#if app.page !== 'import' && app.page !== 'edit' && app.page !== 'dev'}
+    {#if app.page === 'options' || app.page === 'arrange'}
       <label class="size">Size<input type="range" min="0.8" max="1.3" step="0.05" bind:value={app.scale} aria-label="Box size" /></label>
     {/if}
     <button class="icb round" onclick={() => (app.overlay = 'settings')} aria-label="Settings" title="Settings">
@@ -80,7 +82,6 @@
     </button>
     <button class="icb round" onclick={() => (app.overlay = 'help')} aria-label="Keyboard shortcuts">?</button>
     <button class="pillbtn" onclick={() => (app.overlay = 'history')}>History</button>
-    <button class="pillbtn" onclick={() => (app.overlay = 'export')} disabled={!ready}>Export</button>
   </div>
 </header>
 

@@ -1,10 +1,16 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte';
+  import { historyTip } from '../lib/export';
+  import Icon from './Icon.svelte';
   let open = $state(false);
   const scenes = $derived(app.view?.scenes ?? []);
   // an act label above the first scene of each act (only in the open list)
   const actStart = (i: number) => !!scenes[i].act && (i === 0 || scenes[i - 1].act !== scenes[i].act);
-  const tip = (s: (typeof scenes)[number]) => [s.title, s.heading, s.synopsis].filter(Boolean).join('\n');
+  const history = (id: string) => {
+    const e = app.exported[id];
+    return e?.history.length ? historyTip(e) : '';
+  };
+  const tip = (s: (typeof scenes)[number]) => [s.title, s.heading, s.synopsis, history(s.id)].filter(Boolean).join('\n');
 </script>
 
 <nav class="glass rail" aria-label="Scenes" class:open>
@@ -13,10 +19,11 @@
   </button>
   {#each scenes as s, i (s.id)}
     {#if open && actStart(i)}<div class="act ellip">{s.act}</div>{/if}
+    <div class="row">
     <button
       class="sc"
       class:cur={s.id === app.sceneId}
-      aria-label="Scene {s.number}{s.title ? `, ${s.title}` : ''}{s.id === app.sceneId ? ', current' : ''}{s.flagged ? `, ${s.flagged} flagged` : ''}"
+      aria-label="Scene {s.number}{s.title ? `, ${s.title}` : ''}{s.id === app.sceneId ? ', current' : ''}{s.flagged ? `, ${s.flagged} flagged` : ''}{s.lock ? ', locked' : ''}"
       title={tip(s)}
       onclick={() => app.loadScene(s.id)}
     >
@@ -26,6 +33,10 @@
       {/if}
       {#if s.flagged}<span class="fl"></span>{/if}
     </button>
+    {#if s.lock || open}
+      <button class="lk" class:on={!!s.lock} aria-label={s.lock ? `Unlock scene ${s.number}` : `Lock scene ${s.number}`} aria-pressed={!!s.lock} title={s.lock ? 'Unlock this scene' : "Lock this scene's timing"} onclick={() => (s.lock ? (app.unlocking = s.id) : app.lockScene(s.id))} data-testid="rail-lock"><Icon name={s.lock ? 'lock' : 'unlock'} size={11} /></button>
+    {/if}
+    </div>
   {/each}
 </nav>
 
@@ -57,6 +68,35 @@
   }
   .toggle:hover {
     background: var(--glass-hover);
+  }
+  .row {
+    position: relative;
+  }
+  .row .sc {
+    width: 100%;
+  }
+  .lk {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    color: var(--text-5);
+  }
+  .rail.open .lk {
+    right: 8px;
+    bottom: 11px;
+  }
+  .lk.on {
+    color: var(--text-2);
+  }
+  .lk:hover {
+    background: var(--glass-hover);
+    color: var(--text-1);
   }
   .sc {
     position: relative;

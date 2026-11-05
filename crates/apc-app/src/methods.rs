@@ -295,6 +295,14 @@ pub struct PresetNameP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct PipelineFolderP {
+    pub path: String,
+    /// Needed: this is where deliverables will land.
+    #[serde(default)]
+    pub confirm: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct RevealP {
     /// A version folder from the export history.
     pub folder: String,
@@ -1014,7 +1022,7 @@ registry! {
     "delete_export_preset", PresetNameP, Write, true, "Remove a saved export preset.";
     "reveal_export", RevealP, Read, false, "Open a version folder of the export history in the Finder.";
     "pipeline_folder", NoParams, Read, true, "The show's confirmed folder for deliverables, and a proposal when it has none. The proposal is never written to.";
-    "set_pipeline_folder", PathP, Write, true, "Confirm the show's folder for deliverables and store it in the show file. Show exports go nowhere else.";
+    "set_pipeline_folder", PipelineFolderP, Destructive, true, "Store the show's folder for deliverables in the show file. Show exports go nowhere else, so the editor decides it: ask them, and never confirm a proposal on your own.";
     "show_export_status", NoParams, Read, true, "The show's episodes and their scenes with length, lock and export history, for a show export.";
     "export_show", ExportShowP, Write, true, "The deliverable: export scenes of the show's episodes to its confirmed pipeline folder. Same folders and versions as an episode export.";
     "start_show_export", ExportShowP, Write, false, "export_show in the background (the UI polls job_status).";
@@ -2192,7 +2200,8 @@ impl Session {
             }
             "pipeline_folder" => crate::exports::pipeline_view(self.need_show()?),
             "set_pipeline_folder" => {
-                let p: PathP = parse(params)?;
+                let p: PipelineFolderP = parse(params)?;
+                need_confirm("set_pipeline_folder", p.confirm)?;
                 let show = self
                     .show
                     .as_mut()

@@ -337,7 +337,7 @@ impl Show {
     }
 
     /// The best guess at the pipeline's sound folder, in the show and the production folders above
-    /// it. Only a proposal: nothing is written there until the editor confirms it (D112).
+    /// it. Only a proposal: nothing is written there until the editor confirms it (D114).
     pub fn propose_pipeline_folder(&self) -> Option<PathBuf> {
         let mut found: Vec<(i32, PathBuf)> = Vec::new();
         let mut budget = PIPELINE_SEARCH_DIRS;
