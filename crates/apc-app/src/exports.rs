@@ -67,14 +67,24 @@ fn pipeline_exports(show: &Show) -> Result<PathBuf> {
             dir.display()
         )));
     }
-    Ok(dir.join("Exports"))
+    Ok(exports_in(&dir))
+}
+
+/// The `Exports` folder inside a pipeline folder, which may be one itself: choosing
+/// `Sound/Exports` shouldn't make `Sound/Exports/Exports`.
+fn exports_in(dir: &Path) -> PathBuf {
+    if dir.file_name().is_some_and(|n| n == "Exports") {
+        dir.to_path_buf()
+    } else {
+        dir.join("Exports")
+    }
 }
 
 /// Every version of the episode, in both destinations.
 fn history(paths: &EpisodePaths, ep: EpisodeTag) -> History {
     let mut records = versions::scan(&paths.exports, ep);
     if let Some(dir) = paths.show.as_ref().and_then(Show::pipeline_dir) {
-        records.extend(versions::scan(&dir.join("Exports"), ep));
+        records.extend(versions::scan(&exports_in(&dir), ep));
     }
     History::new(records)
 }
@@ -556,7 +566,7 @@ pub fn run_show(show: &Show, p: &ExportShowP, progress: &dyn Fn(f64, &str)) -> R
 pub fn reveal(svc: Option<&Service>, show: Option<&Show>, folder: &str) -> Result<Value> {
     let folder = PathBuf::from(folder);
     let mut roots: Vec<PathBuf> = svc.iter().map(|s| s.paths.exports.clone()).collect();
-    roots.extend(show.and_then(Show::pipeline_dir).map(|d| d.join("Exports")));
+    roots.extend(show.and_then(Show::pipeline_dir).map(|d| exports_in(&d)));
     let known = folder.join(versions::MANIFEST).is_file()
         && !folder.components().any(|c| c.as_os_str() == "..")
         && roots.iter().any(|r| folder.starts_with(r));
@@ -573,6 +583,18 @@ pub fn reveal(svc: Option<&Service>, show: Option<&Show>, folder: &str) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pipeline_folder_called_exports_is_used_as_it_is() {
+        assert_eq!(
+            exports_in(Path::new("/x/Sound")),
+            Path::new("/x/Sound/Exports")
+        );
+        assert_eq!(
+            exports_in(Path::new("/x/Sound/Exports")),
+            Path::new("/x/Sound/Exports")
+        );
+    }
 
     #[test]
     fn an_episode_number_comes_from_its_name() {
