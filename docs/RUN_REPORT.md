@@ -425,7 +425,7 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 
 **What wasn't done**
 
-- Older folders aren't renamed. Episode 2 has 12 scene folders in the old form from 12:29, so a scene exported again gets a second folder beside its first.
+- The app doesn't rename older folders. Episode 2's seven with old names were renamed by hand at Rob's word, with the paths inside their FCPXMLs (D135).
 
 **How it was verified**
 
@@ -435,4 +435,4 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 
 **Manual checks for Rob**
 
-1. **Decide about the 12 old folders:** keep them, or have them renamed. Their FCPXMLs point at the originals by default, but check before moving any.
+1. **If a scene's FCPXML was already imported into Resolve** before the rename, its two room stems need relinking there. A fresh import needs nothing.
