@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Welcome · Hero and rows</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&amp;family=Figtree:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D12}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+input{font:inherit;color:inherit}
+.nm{font-weight:600;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.glass{backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.1),inset 0 0 0 1px rgba(255,255,255,0.06),0 30px 80px rgba(0,0,0,0.45)}
+.mut{color:rgba(240,238,232,0.62)}
+.dim{color:rgba(240,238,232,0.42)}
+.ellip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tn{font-variant-numeric:tabular-nums}
+.key{display:inline-flex;align-items:center;height:19px;padding:0 5px;border-radius:5px;background:rgba(255,255,255,0.1);font-size:10.5px;font-weight:600;color:rgba(240,238,232,0.75);white-space:nowrap}
+.btn{height:34px;padding:0 13px;border-radius:10px;display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#F3F1EC;background:rgba(255,255,255,0.08);transition:background .2s}
+.btn:hover{background:rgba(255,255,255,0.13)}
+.pri{background:#9A86E0;color:#16131F}
+.seg{display:inline-flex;padding:3px;border-radius:12px;background:rgba(255,255,255,0.07)}
+.seg button{height:30px;padding:0 16px;border-radius:9px;display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:rgba(240,238,232,0.65);transition:background .25s,color .25s}
+.tile{position:absolute;box-sizing:border-box;border-radius:18px;overflow:hidden;cursor:pointer;transition:transform .35s cubic-bezier(.25,.8,.25,1),box-shadow .3s ease}
+.cov{position:absolute;inset:0;transition:transform .6s cubic-bezier(.25,.8,.25,1)}
+.shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(8,9,12,0) 30%,rgba(8,9,12,0.82) 100%)}
+.dots{display:flex;gap:3px}
+.dots i{display:block;width:12px;height:3px;border-radius:2px}
+.nb{height:20px;padding:0 7px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;background:#9A86E0;color:#16131F}
+.acts{position:absolute;right:10px;bottom:10px;display:flex;gap:6px;transition:opacity .2s,transform .25s}
+.acts span{height:28px;padding:0 11px;border-radius:9px;display:inline-flex;align-items:center;font-size:12px;font-weight:700}
+.dropov{position:absolute;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(11,13,18,0.6);backdrop-filter:blur(6px);pointer-events:none}
+.dropbox{width:520px;height:260px;border-radius:30px;border:2px dashed rgba(154,134,224,0.8);background:rgba(154,134,224,0.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.scrim{position:absolute;inset:0;z-index:50;background:rgba(6,7,10,0.55)}
+.sheet{position:absolute;z-index:51;left:50%;top:50%;width:460px;transform:translate(-50%,-50%);border-radius:24px;padding:22px;box-sizing:border-box;background:rgba(24,26,33,0.94)}
+.inp{width:100%;box-sizing:border-box;height:44px;border-radius:12px;border:0;outline:none;background:rgba(255,255,255,0.07);box-shadow:inset 0 0 0 1.5px rgba(154,134,224,0.8);padding:0 14px;font-size:15px;font-weight:500}
+.chip{height:28px;padding:0 11px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:rgba(240,238,232,0.7);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.12)}
+.chip span{width:8px;height:8px;border-radius:50%}
+.openov{position:absolute;inset:0;z-index:70;overflow:hidden;animation:fin .35s ease}
+@keyframes fin{from{opacity:0}to{opacity:1}}
+.obar{width:220px;height:3px;border-radius:2px;background:rgba(255,255,255,0.15);overflow:hidden;margin-top:18px}
+.obar span{display:block;height:100%;width:0;animation:ofill 2s cubic-bezier(.6,0,.3,1) forwards}
+@keyframes ofill{to{width:100%}}
+.toast{position:absolute;z-index:65;left:50%;bottom:56px;transform:translateX(-50%);padding:10px 16px;border-radius:12px;background:#F3F1EC;color:#14161C;font-size:13px;font-weight:600;white-space:nowrap}
+
+.hero{position:absolute;left:0;right:0;top:0;height:500px;overflow:hidden}
+.hero .cov{transition:opacity .6s ease}
+.hbtn{height:44px;padding:0 18px;border-radius:12px;display:inline-flex;align-items:center;gap:9px;font-size:14.5px;font-weight:700}
+.row{position:absolute;left:64px;display:flex;align-items:baseline;gap:10px}
+</style>
+</helmet>
+<div ref="{{setRoot}}" tabIndex="0" onKeyDown="{{onKey}}" onDragOver="{{onDragOver}}" onDragLeave="{{onDragLeave}}" onDrop="{{onDrop}}" style="position: relative; width: 1440px; height: 900px; overflow: hidden; outline: none; user-select: none; -webkit-user-select: none; font-family: Figtree, system-ui, sans-serif; color: #F0EEE8; background: #0B0D12">
+
+<div class="hero"><div class="cov" style="{{heroCov}}"></div><div style="position: absolute; inset: 0; background: linear-gradient(90deg, rgba(11,13,18,0.92) 0%, rgba(11,13,18,0.55) 45%, rgba(11,13,18,0.1) 100%)"></div><div style="position: absolute; inset: 0; background: linear-gradient(180deg, rgba(11,13,18,0) 55%, #0B0D12 100%)"></div></div>
+<div style="position: absolute; left: 64px; top: 30px; display: flex; align-items: center; gap: 12px"><svg viewBox="0 0 100 100" width="34" height="34" aria-hidden="true" style="overflow: visible; flex: none"><rect x="34" y="27" width="46" height="46" rx="10" fill="#36324A"></rect><rect x="27" y="24.5" width="46" height="51" rx="10.5" fill="#5B5374"></rect><rect x="20" y="22" width="48" height="56" rx="11" stroke="rgba(255,255,255,0.16)" stroke-width="0.8" fill="#9A86E0"></rect><path d="M28 42 H38 M28 52 H36 M28 62 H39" stroke="#16131F" stroke-width="4.5" stroke-linecap="round" fill="none" opacity="0.55"></path><path d="M49.00 40.00 V44.00 M53.00 38.00 V46.00 M57.00 39.00 V45.00 M61.00 40.50 V43.50 M49.00 48.50 V55.50 M53.00 46.50 V57.50 M57.00 49.50 V54.50 M61.00 48.00 V56.00 M49.00 60.50 V63.50 M53.00 58.50 V65.50 M57.00 57.00 V67.00 M61.00 59.50 V64.50 " stroke="#16131F" stroke-width="2.6" stroke-linecap="round" fill="none"></path><path d="M44 31 V70" stroke="#16131F" stroke-width="3.4" stroke-linecap="round" fill="none"></path><circle cx="44" cy="31" r="5" fill="#16131F"></circle></svg><span style="font-size: 19px; font-weight: 800; letter-spacing: -0.02em">Cutaway</span></div>
+<div style="position: absolute; right: 64px; top: 30px; display: flex; gap: 8px"><button class="btn" onClick="{{newEpisode}}">New episode <span class="key">⌘N</span></button><button class="btn" onClick="{{newShow}}">New show <span class="key">⇧⌘N</span></button><button class="btn" onClick="{{openFile}}">Open… <span class="key">⌘O</span></button></div>
+<div style="position: absolute; left: 64px; top: 180px; width: 620px">
+<div class="nm" style="font-size: 11px; color: {{heroCol}}">{{heroKicker}}</div>
+<div class="ellip" style="font-size: 56px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; margin-top: 8px">{{heroTitle}}</div>
+<div style="display: flex; align-items: center; gap: 12px; margin-top: 12px"><span class="dots"><sc-for list="{{heroDots}}" as="d" hint-placeholder-count="5"><i style="{{d.style}}"></i></sc-for></span><span class="mut" style="font-size: 13.5px">{{heroMeta}}</span></div>
+<div style="display: flex; gap: 10px; margin-top: 26px"><button class="hbtn" onClick="{{heroEdit}}" style="background: #F3F1EC; color: #14161C">Edit <span class="key" style="background: rgba(20,22,28,0.12); color: #14161C">↩</span></button><button class="hbtn" onClick="{{heroReview}}" style="background: rgba(154,134,224,0.9); color: #16131F">Review<sc-if value="{{heroHasNotes}}" hint-placeholder-val="{{ true }}"><span style="height: 20px; padding: 0 7px; border-radius: 999px; background: rgba(22,19,31,0.2); font-size: 11.5px; display: inline-flex; align-items: center">{{heroNotes}}</span></sc-if><span class="key" style="background: rgba(22,19,31,0.16); color: #16131F">⌥↩</span></button></div>
+</div>
+<div class="row" style="top: 520px"><span style="font-size: 15px; font-weight: 700">Recent episodes</span></div>
+<div class="row" style="top: 712px"><span style="font-size: 15px; font-weight: 700">Shows</span></div>
+<sc-for list="{{tiles}}" as="c" hint-placeholder-count="12"><div class="tile" onMouseEnter="{{c.enter}}" onClick="{{c.go}}" style="{{c.style}}">
+<sc-if value="{{c.isItem}}" hint-placeholder-val="{{ true }}"><div class="cov" style="{{c.cov}}"></div><div class="shade"></div>
+<sc-if value="{{c.hasNotes}}" hint-placeholder-val="{{ false }}"><span class="nb" style="position: absolute; right: 10px; top: 10px">{{c.notes}}</span></sc-if>
+<div style="position: absolute; left: 14px; right: 12px; bottom: 11px"><div class="nm dim ellip" style="font-size: 9px">{{c.kicker}}</div><div class="ellip" style="font-size: 15px; font-weight: 700; margin-top: 2px">{{c.t}}</div></div></sc-if>
+<sc-if value="{{c.isNew}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px" class="mut"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg><span style="font-size: 13px; font-weight: 600">{{c.t}}</span></div></sc-if>
+</div></sc-for>
+<div class="dim" style="position: absolute; left: 64px; bottom: 22px; font-size: 12px">Hover to preview · click opens in Edit · arrows move · drop files to start</div>
+
+
+<sc-if value="{{dropOn}}" hint-placeholder-val="{{ false }}"><div class="dropov"><div class="dropbox"><svg viewBox="0 0 100 100" width="70" height="70" aria-hidden="true" style="overflow: visible; flex: none"><rect x="34" y="27" width="46" height="46" rx="10" fill="#36324A"></rect><rect x="27" y="24.5" width="46" height="51" rx="10.5" fill="#5B5374"></rect><rect x="20" y="22" width="48" height="56" rx="11" stroke="rgba(255,255,255,0.16)" stroke-width="0.8" fill="#9A86E0"></rect><path d="M28 42 H38 M28 52 H36 M28 62 H39" stroke="#16131F" stroke-width="4.5" stroke-linecap="round" fill="none" opacity="0.55"></path><path d="M49.00 40.00 V44.00 M53.00 38.00 V46.00 M57.00 39.00 V45.00 M61.00 40.50 V43.50 M49.00 48.50 V55.50 M53.00 46.50 V57.50 M57.00 49.50 V54.50 M61.00 48.00 V56.00 M49.00 60.50 V63.50 M53.00 58.50 V65.50 M57.00 57.00 V67.00 M61.00 59.50 V64.50 " stroke="#16131F" stroke-width="2.6" stroke-linecap="round" fill="none"></path><path d="M44 31 V70" stroke="#16131F" stroke-width="3.4" stroke-linecap="round" fill="none"></path><circle cx="44" cy="31" r="5" fill="#16131F"></circle></svg><div style="font-size: 20px; font-weight: 700">Drop to start an episode</div><div class="mut" style="font-size: 13px">Script, recordings or a cover image</div></div></div></sc-if>
+<sc-if value="{{sheetOn}}" hint-placeholder-val="{{ false }}"><div class="scrim" onMouseDown="{{closeSheet}}"></div><div class="sheet glass" onMouseDown="{{stop}}">
+<div style="display: flex; gap: 16px">
+<div style="width: 92px; height: 92px; border-radius: 16px; flex: none; border: 1.5px dashed rgba(255,255,255,0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px" class="dim"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"></rect><path d="M3 16l5-5 4 4 3-3 6 6"></path></svg><span style="font-size: 10.5px">Cover</span></div>
+<div style="flex: 1; min-width: 0"><div style="font-size: 18px; font-weight: 700; margin-bottom: 10px">{{sheetTitle}}</div><input class="inp" ref="{{setInput}}" value="{{name}}" onInput="{{onName}}" placeholder="{{ph}}" aria-label="{{ph}}"></div>
+</div>
+<sc-if value="{{isEpSheet}}" hint-placeholder-val="{{ true }}"><div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px"><sc-for list="{{showChips}}" as="c" hint-placeholder-count="4"><button class="chip" onClick="{{c.pick}}" style="{{c.style}}"><span style="{{c.dot}}"></span>{{c.n}}</button></sc-for></div></sc-if>
+<div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px"><button class="btn" onClick="{{closeSheet}}">Cancel</button><button class="btn pri" onClick="{{create}}">Create <span class="key" style="background: rgba(22,19,31,0.16); color: #16131F">↩</span></button></div>
+</div></sc-if>
+<sc-if value="{{openOn}}" hint-placeholder-val="{{ false }}"><div class="openov"><div style="position: absolute; inset: -40px; filter: blur(30px) brightness(0.6); {{openCov}}"></div><div style="position: absolute; inset: 0; background: rgba(8,9,12,0.35)"></div><div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px"><span style="height: 26px; padding: 0 12px; border-radius: 999px; display: inline-flex; align-items: center; font-size: 12px; font-weight: 700; {{openModeS}}">{{openMode}}</span><div style="font-size: 40px; font-weight: 800; letter-spacing: -0.02em; margin-top: 8px">{{openTitle}}</div><div class="mut" style="font-size: 14px">{{openSub}}</div><div class="obar"><span style="background: {{openBar}}"></span></div></div></div></sc-if>
+<sc-if value="{{toastOn}}" hint-placeholder-val="{{ false }}"><div class="toast">{{toastText}}</div></sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+var STAGES = ['Import', 'Options', 'Arrange', 'Edit', 'Exported'];
+var PURPLE = [154, 134, 224];
+var COV = {
+  tarmac: 'radial-gradient(ellipse 70% 45% at 50% 105%, rgba(255,160,80,0.55), transparent 70%), repeating-linear-gradient(98deg, transparent 0 52px, rgba(255,214,150,0.18) 52px 54px), radial-gradient(circle at 78% 22%, rgba(255,255,255,0.5) 0 1.5px, transparent 2px), radial-gradient(circle at 30% 14%, rgba(255,255,255,0.4) 0 1px, transparent 1.5px), linear-gradient(180deg, #0D1430 0%, #1C2452 55%, #3D2A3C 100%)',
+  through: 'repeating-radial-gradient(circle at 72% 30%, rgba(170,245,235,0.16) 0 2px, transparent 2px 20px), radial-gradient(circle at 72% 30%, rgba(94,184,176,0.65), transparent 50%), linear-gradient(160deg, #0B2627 0%, #12383A 60%, #091719 100%)',
+  night: 'radial-gradient(circle at 18% 72%, rgba(255,200,90,0.75) 0 5px, transparent 6px), radial-gradient(circle at 34% 58%, rgba(255,160,80,0.45) 0 11px, transparent 12px), radial-gradient(circle at 61% 76%, rgba(255,220,140,0.6) 0 4px, transparent 5px), radial-gradient(circle at 82% 52%, rgba(255,180,90,0.35) 0 16px, transparent 17px), radial-gradient(circle at 47% 40%, rgba(255,210,120,0.3) 0 8px, transparent 9px), radial-gradient(ellipse 90% 50% at 50% 100%, rgba(216,182,87,0.3), transparent 70%), linear-gradient(180deg, #110D19 0%, #241A22 70%, #2E2216 100%)',
+  lighthouse: 'radial-gradient(ellipse 22% 70% at 70% 26%, rgba(255,245,200,0.45), transparent 70%), radial-gradient(circle at 70% 26%, rgba(255,250,220,0.9) 0 3px, transparent 4px), repeating-linear-gradient(180deg, rgba(120,170,220,0.12) 0 2px, transparent 2px 12px), linear-gradient(180deg, #0A1525 0%, #13304A 62%, #0A1A2A 100%)'
+};
+var SHOWS0 = [
+  { id: 'tarmac', n: 'TARMAC', c: [154, 134, 224], cover: 'tarmac' },
+  { id: 'through', n: 'Throughline', c: [94, 184, 176], cover: 'through' },
+  { id: 'night', n: 'Night Shift Radio', c: [216, 182, 87], cover: 'night' }
+];
+var EPS0 = [
+  { id: 'e1', show: 'tarmac', ep: 2, t: 'Time Burrito', when: '12 min ago', day: 0, stage: 2, cover: 'tarmac', fx: '' },
+  { id: 'e2', show: 'tarmac', ep: 1, t: 'Pilot', when: 'Yesterday', day: 1, stage: 3, cover: 'tarmac', fx: 'hue-rotate(28deg) brightness(0.85)' },
+  { id: 's1', show: null, ep: 0, t: 'The Lighthouse Keeper', when: 'Tuesday', day: 3, stage: 3, cover: 'lighthouse', fx: '' },
+  { id: 'e3', show: 'through', ep: 1, t: 'Cold Open', when: 'Monday', day: 2, stage: 1, cover: 'through', fx: '' },
+  { id: 'e4', show: 'tarmac', ep: 3, t: 'Lunch Break', when: 'Thursday', day: 4, stage: 0, cover: null, fx: '' },
+  { id: 'e5', show: 'night', ep: 1, t: 'Dead Air', when: 'Oct 21', day: 14, stage: 4, cover: 'night', fx: '' },
+  { id: 'e6', show: 'through', ep: 2, t: 'Static', when: 'Oct 18', day: 17, stage: 2, cover: 'through', fx: 'hue-rotate(-30deg) saturate(1.2)' },
+  { id: 's2', show: null, ep: 0, t: 'Untitled pilot', when: 'Oct 12', day: 24, stage: 0, cover: null, fx: '' },
+  { id: 'e7', show: 'night', ep: 2, t: 'Call Waiting', when: 'Oct 9', day: 26, stage: 1, cover: null, fx: '' },
+  { id: 'e8', show: 'tarmac', ep: 4, t: 'Overtime', when: 'Sep 30', day: 35, stage: 0, cover: null, fx: '' }
+];
+var NOTES = { e1: 6, e2: 2, e5: 1, s1: 3 };
+var SINGLE = { id: 'single', n: 'Single episodes', c: [200, 200, 210] };
+function showOf(shows, ep) { if (!ep.show) return SINGLE; for (var i = 0; i < shows.length; i++) if (shows[i].id === ep.show) return shows[i]; return SINGLE; }
+function showById(shows, id) { if (id === 'single') return SINGLE; for (var i = 0; i < shows.length; i++) if (shows[i].id === id) return shows[i]; return null; }
+function covStyle(key, fx, col) {
+  if (!key) return 'background: radial-gradient(ellipse 80% 70% at 30% 20%, ' + rgba(col, 0.32) + ', transparent 70%), linear-gradient(160deg, ' + rgba(col, 0.16) + ', rgba(255,255,255,0.03))';
+  return 'background: ' + COV[key] + (fx ? '; filter: ' + fx : '');
+}
+function dots(ep, col) { return STAGES.map(function (s, i) { return { style: 'background: ' + (i <= ep.stage ? rgba(col, i === ep.stage ? 1 : 0.55) : 'rgba(255,255,255,0.18)') }; }); }
+function epMeta(ep, shows) { var sh = showOf(shows, ep); return (ep.show ? sh.n + ' · Ep. ' + ep.ep : 'Single episode'); }
+function stageTxt(ep) { return ep.stage === 4 ? 'Exported' : STAGES[ep.stage]; }
+function showNotes(eps, sid) { return eps.filter(function (e) { return e.show === sid; }).reduce(function (a, e) { return a + (NOTES[e.id] || 0); }, 0); }
+function Base2(self, extra) {
+  self.state = Object.assign({ shows: SHOWS0.slice(), eps: EPS0.slice(), mode: 'edit', opening: null, sheet: null, name: '', pick: 'tarmac', toast: null, dropOn: false }, extra || {});
+  self.focusRoot = function () { if (self.root) { try { self.root.focus({ preventScroll: true }); } catch (e) {} } };
+  self.setRoot = function (el) { if (el && self.root !== el) { self.root = el; setTimeout(function () { self.focusRoot(); }, 40); } };
+  self.setInput = function (el) { if (el && self.inp !== el) { self.inp = el; setTimeout(function () { try { el.focus(); el.select(); } catch (e) {} }, 40); } if (!el) self.inp = null; };
+  self.stop = function (e) { e.stopPropagation(); };
+  self.say = function (m) { clearTimeout(self.tT); self.setState({ toast: m }); self.tT = setTimeout(function () { self.setState({ toast: null }); }, 2400); };
+  self.setMode = function (m) { return function () { self.setState({ mode: m }); self.focusRoot(); }; };
+  self.toggleMode = function () { self.setState({ mode: self.state.mode === 'edit' ? 'review' : 'edit' }); };
+  self.openItem = function (kind, id, mode) { clearTimeout(self.oT); self.setState({ opening: { kind: kind, id: id, mode: mode || self.state.mode }, sheet: null }); self.oT = setTimeout(function () { self.setState({ opening: null }); self.focusRoot(); }, 2300); };
+  self.openSheet = function (kind, preset) { self.setState({ sheet: kind, name: preset || '', pick: (self.curShow && self.curShow()) || 'tarmac' }); };
+  self.newEpisode = function () { self.openSheet('episode'); };
+  self.newShow = function () { self.openSheet('show'); };
+  self.openFile = function () { self.say('Opens the file picker for episodes and shows'); };
+  self.closeSheet = function () { self.setState({ sheet: null }); self.focusRoot(); };
+  self.onName = function (e) { self.setState({ name: e.target.value }); };
+  self.pickShow = function (id) { return function () { self.setState({ pick: id }); try { if (self.inp) self.inp.focus(); } catch (e) {} }; };
+  self.create = function () {
+    var s = self.state, nm = (s.name || '').trim();
+    if (s.sheet === 'show') { nm = nm || 'Untitled show'; var sh = { id: 'x' + Date.now(), n: nm, c: [227, 154, 174], cover: null }; self.setState({ shows: s.shows.concat([sh]), sheet: null }); if (self.afterShow) self.afterShow(sh); self.say('Created the show “' + nm + '”'); }
+    else { nm = nm || 'Untitled'; var single = s.pick === 'single', num = single ? 0 : s.eps.filter(function (e) { return e.show === s.pick; }).reduce(function (m, e) { return Math.max(m, e.ep); }, 0) + 1;
+      var ep = { id: 'n' + Date.now(), show: single ? null : s.pick, ep: num, t: nm, when: 'Just now', day: -1, stage: 0, cover: null, fx: '', fresh: true };
+      self.setState({ eps: [ep].concat(s.eps), sheet: null }); if (self.afterEpisode) self.afterEpisode(ep); self.say('Created ' + (single ? 'single episode' : showById(s.shows, s.pick).n + ' · Ep. ' + num) + ' · ' + nm); }
+    self.focusRoot();
+  };
+  self.onKeyBase = function (e) {
+    var s = self.state, k = e.key, inInput = e.target && e.target.tagName === 'INPUT';
+    if (s.opening) { e.preventDefault(); return true; }
+    if (s.sheet) { if (k === 'Escape') { e.preventDefault(); self.closeSheet(); } else if (k === 'Enter') { e.preventDefault(); self.create(); } return true; }
+    if (inInput && !e.metaKey) return false;
+    var lk = (k || '').toLowerCase();
+    if (lk === 'n') { e.preventDefault(); if (e.shiftKey) self.newShow(); else self.newEpisode(); return true; }
+    if (lk === 'o') { e.preventDefault(); self.openFile(); return true; }
+    if (k === 'Tab') { e.preventDefault(); self.toggleMode(); return true; }
+    return false;
+  };
+  self.onDragOver = function (e) { e.preventDefault(); if (!self.state.dropOn) self.setState({ dropOn: true }); };
+  self.onDragLeave = function (e) { if (!e.relatedTarget || !self.root || !self.root.contains(e.relatedTarget)) self.setState({ dropOn: false }); };
+  self.onDrop = function (e) { e.preventDefault(); var fs = [].slice.call((e.dataTransfer && e.dataTransfer.files) || []); self.setState({ dropOn: false }); if (fs.length) self.openSheet('episode', fs[0].name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ')); };
+  self.baseVals = function () {
+    var s = self.state, o = s.opening, title = '', sub = '', cov = '', col = PURPLE;
+    if (o) {
+      if (o.kind === 'show') { var sh = showById(s.shows, o.id); title = sh.n; sub = 'Show'; cov = covStyle(sh.cover, '', sh.c); col = sh.c; }
+      else { var ep = s.eps.filter(function (x) { return x.id === o.id; })[0], shp = showOf(s.shows, ep); title = ep.t; sub = epMeta(ep, s.shows); cov = covStyle(ep.cover, ep.fx, shp.c); col = shp.c; }
+    }
+    var rev = o && o.mode === 'review';
+    return { setRoot: self.setRoot, setInput: self.setInput, stop: self.stop, closeSheet: self.closeSheet, create: self.create, onName: self.onName,
+      onDragOver: self.onDragOver, onDragLeave: self.onDragLeave, onDrop: self.onDrop, newEpisode: self.newEpisode, newShow: self.newShow, openFile: self.openFile,
+      modeEdit: self.setMode('edit'), modeReview: self.setMode('review'), isReview: s.mode === 'review',
+      segE: s.mode === 'edit' ? 'background: rgba(255,255,255,0.18); color: #FFFFFF' : '', segR: s.mode === 'review' ? 'background: rgba(154,134,224,0.85); color: #16131F' : '',
+      dropOn: s.dropOn, sheetOn: !!s.sheet, isEpSheet: s.sheet === 'episode', sheetTitle: s.sheet === 'show' ? 'New show' : 'New episode', name: s.name, ph: s.sheet === 'show' ? 'Show name' : 'Episode title',
+      showChips: s.shows.concat([SINGLE]).map(function (x) { return { n: x.id === 'single' ? 'No show' : x.n, pick: self.pickShow(x.id), dot: 'background: ' + rgba(x.c, 1), style: x.id === s.pick ? 'background: rgba(255,255,255,0.14); box-shadow: inset 0 0 0 1.5px ' + rgba(x.c, 0.9) + '; color: #F3F1EC' : '' }; }),
+      openOn: !!o, openTitle: title, openSub: sub, openCov: cov, openMode: rev ? 'Review · read-only' : 'Edit', openModeS: rev ? 'background: #9A86E0; color: #16131F' : 'background: #F3F1EC; color: #14161C', openBar: rev ? '#9A86E0' : rgba(col, 1),
+      toastOn: !!s.toast, toastText: s.toast || '' };
+  };
+}
+
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    var self = this;
+    Base2(this, { row: 0, col: 1 });
+    this.rows = function () {
+      var s = self.state, eps = s.eps.slice().sort(function (a, b) { return a.day - b.day; }).slice(0, 5).map(function (e) { return { kind: 'ep', ep: e }; });
+      var sh = s.shows.map(function (x) { return { kind: 'show', sh: x }; }).concat([{ kind: 'show', sh: SINGLE }]);
+      return [[{ kind: 'newep' }].concat(eps), [{ kind: 'newshow' }].concat(sh)];
+    };
+    this.cur = function () { var r = self.rows(), it = (r[self.state.row] || [])[self.state.col]; return it && (it.kind === 'ep' || it.kind === 'show') ? it : r[0][1]; };
+    this.curShow = function () { var c = self.cur(); return c.kind === 'ep' ? (c.ep.show || 'single') : c.sh.id; };
+    this.afterEpisode = function () { self.setState({ row: 0, col: 1 }); };
+    this.openCur = function (mode) { var c = self.cur(); if (c.kind === 'ep') self.openItem('ep', c.ep.id, mode); else if (c.sh.id !== 'single') self.openItem('show', c.sh.id, mode); else self.say('Pick one of the single episodes to open'); };
+    this.act = function (it, mode) { if (it.kind === 'newep') self.newEpisode(); else if (it.kind === 'newshow') self.newShow(); else self.openCur(mode); };
+    this.heroEdit = function () { self.openCur('edit'); };
+    this.heroReview = function () { self.openCur('review'); };
+    this.onKey = function (e) {
+      if (self.onKeyBase(e)) return;
+      var r = self.rows(), s = self.state, k = e.key;
+      if (k === 'ArrowRight') { e.preventDefault(); self.setState({ col: Math.min(r[s.row].length - 1, s.col + 1) }); }
+      else if (k === 'ArrowLeft') { e.preventDefault(); self.setState({ col: Math.max(0, s.col - 1) }); }
+      else if (k === 'ArrowDown' || k === 'ArrowUp') { e.preventDefault(); var nr = k === 'ArrowDown' ? 1 : 0; self.setState({ row: nr, col: Math.min(r[nr].length - 1, s.col) }); }
+      else if (k === 'Enter') { e.preventDefault(); self.act(r[s.row][s.col], e.altKey ? 'review' : 'edit'); }
+    };
+  }
+  renderVals() {
+    var self = this, s = this.state, rows = this.rows(), c = this.cur(), tiles = [];
+    rows.forEach(function (row, ri) {
+      row.forEach(function (it, ci) {
+        var on = ri === s.row && ci === s.col, base = 'left: ' + (64 + ci * 216) + 'px; top: ' + (ri ? 744 : 552) + 'px; width: 200px; height: 124px; ';
+        var t = { enter: function () { self.setState({ row: ri, col: ci }); }, go: function () { self.act(it, 'edit'); } };
+        if (it.kind === 'newep' || it.kind === 'newshow') return tiles.push(Object.assign(t, { isItem: false, isNew: true, t: it.kind === 'newep' ? 'New episode' : 'New show', style: base + 'box-shadow: inset 0 0 0 1.5px ' + (on ? 'rgba(243,241,236,0.6)' : 'rgba(255,255,255,0.12)') }));
+        var isEp = it.kind === 'ep', e = it.ep, sh = isEp ? showOf(s.shows, e) : it.sh;
+        var nn = isEp ? (NOTES[e.id] || 0) : (sh.id === 'single' ? 3 : showNotes(s.eps, sh.id));
+        var cnt = isEp ? 0 : s.eps.filter(function (x) { return (x.show || 'single') === sh.id; }).length;
+        tiles.push(Object.assign(t, { isItem: true, isNew: false, cov: isEp ? covStyle(e.cover, e.fx, sh.c) : covStyle(sh.cover, '', sh.c), hasNotes: nn > 0 && on, notes: nn + ' notes',
+          kicker: isEp ? (e.show ? sh.n + ' · Ep. ' + e.ep : 'Single episode') : cnt + ' episodes', t: isEp ? e.t : sh.n,
+          style: base + (on ? 'transform: translateY(-4px); box-shadow: 0 0 0 2px rgba(243,241,236,0.85), 0 20px 40px rgba(0,0,0,0.45)' : 'box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08)') }));
+      });
+    });
+    var isEp = c.kind === 'ep', e = c.ep, sh = isEp ? showOf(s.shows, e) : c.sh, nn = isEp ? (NOTES[e.id] || 0) : (sh.id === 'single' ? 3 : showNotes(s.eps, sh.id));
+    var cnt = isEp ? 0 : s.eps.filter(function (x) { return (x.show || 'single') === sh.id; }).length;
+    return Object.assign(this.baseVals(), { onKey: this.onKey, tiles: tiles, heroEdit: this.heroEdit, heroReview: this.heroReview,
+      heroCov: isEp ? covStyle(e.cover, e.fx, sh.c) : covStyle(sh.cover, '', sh.c), heroCol: rgba(sh.c, 1),
+      heroKicker: isEp ? (e.show ? sh.n + ' · Ep. ' + e.ep : 'Single episode') : (sh.id === 'single' ? 'Standalone' : 'Show'), heroTitle: isEp ? e.t : sh.n,
+      heroMeta: isEp ? stageTxt(e) + ' · edited ' + e.when.toLowerCase() : cnt + ' episodes', heroDots: isEp ? dots(e, [243, 241, 236]) : [],
+      heroHasNotes: nn > 0, heroNotes: nn + ' notes' });
+  }
+}
+
+</script>
+</body>
+</html>
