@@ -75,6 +75,10 @@ pub struct ShowFile {
     /// show, so it holds on the other machines of a sync share. Unset means never exported.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pipeline_folder: Option<String>,
+    /// The shared folder review files go through, when it isn't `Reviews/` in the show. Relative
+    /// to the root when inside the show, so it holds on the other machines of a sync share.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reviews_folder: Option<String>,
 }
 
 /// An open show: its root folder, file and contents.
@@ -215,6 +219,7 @@ impl Show {
                 theme: ShowTheme::default(),
                 aliases: BTreeMap::new(),
                 pipeline_folder: None,
+                reviews_folder: None,
             },
         };
         std::fs::create_dir_all(show.episodes_dir())?;
@@ -386,6 +391,29 @@ impl Show {
     }
 
     /// Cutaway's own files in the library (backdrop, library metadata, trash).
+    /// Where everyone's review files are.
+    pub fn reviews_dir(&self) -> PathBuf {
+        match &self.data.reviews_folder {
+            Some(f) => self.root.join(f),
+            None => self.root.join("Reviews"),
+        }
+    }
+
+    /// Points the review files at another shared folder.
+    pub fn set_reviews_folder(&mut self, folder: &Path) -> Result<()> {
+        if !folder.is_dir() {
+            return Err(CoreError::invalid(format!(
+                "{} isn't a folder",
+                folder.display()
+            )));
+        }
+        let stored = folder
+            .strip_prefix(&self.root)
+            .map(|r| r.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|_| folder.to_string_lossy().into_owned());
+        self.update(|d| d.reviews_folder = Some(stored))
+    }
+
     pub fn cutaway_dir(&self) -> PathBuf {
         self.sound_dir().join(brand::DISPLAY_NAME)
     }

@@ -44,10 +44,13 @@ pub enum Kind {
     Bucket,
     LaneMix,
     Mark,
+    ReviewEvent,
+    ReviewRound,
+    ReviewArrival,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 19] = [
+    pub const ALL: [Kind; 22] = [
         Kind::Setting,
         Kind::ScriptVersion,
         Kind::Scene,
@@ -67,6 +70,9 @@ impl Kind {
         Kind::Bucket,
         Kind::LaneMix,
         Kind::Mark,
+        Kind::ReviewEvent,
+        Kind::ReviewRound,
+        Kind::ReviewArrival,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -90,6 +96,9 @@ impl Kind {
             Kind::Bucket => "bucket",
             Kind::LaneMix => "lane_mix",
             Kind::Mark => "mark",
+            Kind::ReviewEvent => "review_event",
+            Kind::ReviewRound => "review_round",
+            Kind::ReviewArrival => "review_arrival",
         }
     }
 
@@ -1306,6 +1315,9 @@ pub struct Document {
     pub buckets: BTreeMap<String, SoundBucket>,
     pub lane_mix: BTreeMap<String, LaneMix>,
     pub marks: BTreeMap<String, DevMark>,
+    pub review_events: BTreeMap<String, crate::review::ReviewEvent>,
+    pub review_rounds: BTreeMap<String, crate::review::ReviewRound>,
+    pub review_arrivals: BTreeMap<String, crate::review::ReviewArrival>,
 }
 
 /// A character's vocal bucket, in a file from before they were removed. Undo and backups can
@@ -1374,6 +1386,9 @@ dispatch!(
     Bucket => buckets,
     LaneMix => lane_mix,
     Mark => marks,
+    ReviewEvent => review_events,
+    ReviewRound => review_rounds,
+    ReviewArrival => review_arrivals,
 );
 
 impl Document {

@@ -4,6 +4,7 @@
   "cliName": "cutaway",
   "episodeExt": "cutaway",
   "showExt": "cutawayshow",
+  "reviewExt": "cutawayreview",
   "bundleId": "com.cutaway.app",
   "tagline": "Script-matched rough cuts from unslated audio play sessions"
 }

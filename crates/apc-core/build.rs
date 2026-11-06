@@ -19,6 +19,7 @@ fn main() {
         ("CLI_NAME", "cliName"),
         ("EPISODE_EXT", "episodeExt"),
         ("SHOW_EXT", "showExt"),
+        ("REVIEW_EXT", "reviewExt"),
         ("BUNDLE_ID", "bundleId"),
         ("TAGLINE", "tagline"),
     ];

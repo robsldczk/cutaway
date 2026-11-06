@@ -13,6 +13,28 @@ use crate::timeline::{broken_lock, locked_timing};
 /// The command that may change a locked scene.
 const SCRIPT_IMPORT: &str = "import_script_version";
 
+/// What review mode allows: everything that writes a note. Nothing else gets through (D139).
+pub const REVIEW_COMMANDS: &[&str] = &[
+    "add_note",
+    "reply_note",
+    "edit_note",
+    "tag_note",
+    "resolve_note",
+    "reopen_note",
+];
+
+/// A merge of others' events. It's logged, but it isn't anyone's step to undo.
+const MERGE_REVIEW: &str = "merge_review";
+
+/// What the bus lets through.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum BusMode {
+    #[default]
+    Edit,
+    /// Only note commands: the cut can be heard and written about, not changed.
+    Review,
+}
+
 /// One entity change with both sides, so undo and redo are generic.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Change {
@@ -139,6 +161,7 @@ pub struct CommandBus {
     client: String,
     /// Called after every successful write (autosave hook).
     on_write: Option<WriteHook>,
+    mode: BusMode,
 }
 
 impl CommandBus {
@@ -151,7 +174,27 @@ impl CommandBus {
             rev,
             client: client.into(),
             on_write: None,
+            mode: BusMode::Edit,
         })
+    }
+
+    pub fn mode(&self) -> BusMode {
+        self.mode
+    }
+
+    pub fn set_mode(&mut self, mode: BusMode) {
+        self.mode = mode;
+    }
+
+    /// In review mode, what isn't a note is refused here, whichever client sent it.
+    fn check_mode(&self, name: &str) -> Result<()> {
+        if self.mode == BusMode::Review && !REVIEW_COMMANDS.contains(&name) {
+            return Err(CoreError::ReviewOnly(format!(
+                "Review mode only takes notes: {} would change the cut.",
+                name.replace('_', " ")
+            )));
+        }
+        Ok(())
     }
 
     pub fn set_on_write(&mut self, f: WriteHook) {
@@ -210,6 +253,7 @@ impl CommandBus {
         params: &Value,
         f: impl Fn(&mut Tx) -> Result<Value>,
     ) -> Result<Executed> {
+        self.check_mode(name)?;
         for _attempt in 0..3 {
             self.refresh()?;
             // a new script version may change a locked scene: it flags it instead (D108)
@@ -270,12 +314,65 @@ impl CommandBus {
         ))
     }
 
+    /// Writes what others said: into the document at once, but not as a step of this person's
+    /// undo, and the redo steps stay. A reviewer's note can't be undone by an editor's ⌘Z, and
+    /// a merge arriving mid-edit takes nothing away (D137). Allowed in every mode, since it's
+    /// how a review session hears the editor.
+    pub fn merge_review(
+        &mut self,
+        params: &Value,
+        f: impl Fn(&mut Tx) -> Result<()>,
+    ) -> Result<usize> {
+        for _attempt in 0..3 {
+            self.refresh()?;
+            let mut tx = Tx::new(&mut self.doc);
+            if let Err(e) = f(&mut tx) {
+                tx.rollback()?;
+                return Err(e);
+            }
+            let changes = tx.into_changes();
+            if changes.is_empty() {
+                return Ok(0);
+            }
+            match self
+                .store
+                .commit_unlogged(self.rev, &self.client, MERGE_REVIEW, params, &changes)
+            {
+                Ok(CommitOutcome::Done { rev, .. }) => {
+                    self.rev = rev;
+                    return Ok(changes.len());
+                }
+                Ok(CommitOutcome::Conflict) => {
+                    revert_changes(&mut self.doc, &changes)?;
+                    continue;
+                }
+                Err(e) => {
+                    revert_changes(&mut self.doc, &changes)?;
+                    return Err(e);
+                }
+            }
+        }
+        Err(CoreError::Other(
+            "the project kept changing from another client; try again".into(),
+        ))
+    }
+
+    /// The command the next undo would take back, when this mode lets it.
+    fn allowed(&self, target: Option<(i64, String)>) -> Option<(i64, String)> {
+        target.filter(|(_, name)| self.check_mode(name).is_ok())
+    }
+
     pub fn can_undo(&self) -> Result<bool> {
-        Ok(self.store.undo_target()?.is_some())
+        Ok(self.allowed(self.store.undo_target()?).is_some())
     }
 
     pub fn can_redo(&self) -> Result<bool> {
-        Ok(self.store.redo_target()?.is_some())
+        Ok(self.allowed(self.store.redo_target()?).is_some())
+    }
+
+    /// What a logged command changed.
+    pub fn changes_of(&self, seq: i64) -> Result<Vec<Change>> {
+        self.store.log_changes(seq)
     }
 
     pub fn undo(&mut self) -> Result<Option<Stepped>> {
@@ -294,7 +391,8 @@ impl CommandBus {
             } else {
                 self.store.redo_target()?
             };
-            let Some((seq, name)) = target else {
+            // review mode can take back a note, but nothing from before it
+            let Some((seq, name)) = self.allowed(target) else {
                 return Ok(None);
             };
             match self.store.apply_log_entry(self.rev, seq, undo)? {

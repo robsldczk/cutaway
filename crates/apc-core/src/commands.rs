@@ -12,6 +12,7 @@ use crate::error::{CoreError, Result};
 use crate::fountain::ParsedScript;
 use crate::ids::new_id;
 use crate::model::*;
+use crate::review::{ReviewBody, RoundStatus};
 use crate::sounds;
 use crate::timeline::{effective_gap, layout_scene, placement_start, ItemKind, SceneLayout};
 
@@ -473,6 +474,17 @@ pub enum Command {
         #[serde(default)]
         status: Option<SceneStatus>,
     },
+    /// One thing said about the cut: a note, a reply, an edit, a tag, a resolve or a reopen.
+    ReviewNote {
+        event: crate::review::ReviewEvent,
+    },
+    /// Opens scenes for review: keeps which cut they're in and flags them.
+    StartReviewRound {
+        round: crate::review::ReviewRound,
+    },
+    CloseReviewRound {
+        round_id: String,
+    },
     LockScene {
         scene_id: String,
         #[serde(default)]
@@ -573,6 +585,18 @@ impl Command {
             Command::EditTake { .. } => "edit_take",
             Command::DeleteTake { .. } => "delete_take",
             Command::SetSceneStatus { .. } => "set_scene_status",
+            Command::ReviewNote { event } => match event.body {
+                ReviewBody::Note { .. } => "add_note",
+                ReviewBody::Reply { .. } => "reply_note",
+                ReviewBody::Edit { .. } => "edit_note",
+                ReviewBody::Tag { .. } => "tag_note",
+                ReviewBody::Resolve => "resolve_note",
+                ReviewBody::Reopen => "reopen_note",
+                // retractions come with an undo, not as a command
+                ReviewBody::Retract { .. } => "retract_note",
+            },
+            Command::StartReviewRound { .. } => "start_review_round",
+            Command::CloseReviewRound { .. } => "close_review_round",
             Command::LockScene { .. } => "lock_scene",
             Command::UnlockScene { .. } => "unlock_scene",
         }
@@ -1365,6 +1389,30 @@ impl Command {
                 s.status = *status;
                 tx.put(&s)?;
                 Ok(json!({ "status": s.status }))
+            }
+            Command::ReviewNote { event } => {
+                tx.put(event)?;
+                Ok(json!({ "note": event.note, "event": event.id }))
+            }
+            Command::StartReviewRound { round } => {
+                tx.put(round)?;
+                for r in &round.scenes {
+                    let mut s = scene(tx, &r.scene_id)?;
+                    s.status = Some(SceneStatus::Review);
+                    tx.put(&s)?;
+                }
+                Ok(json!({ "round": round.id, "number": round.number }))
+            }
+            Command::CloseReviewRound { round_id } => {
+                let mut r = tx
+                    .doc()
+                    .review_rounds
+                    .get(round_id)
+                    .cloned()
+                    .ok_or_else(|| CoreError::not_found("round", round_id.clone()))?;
+                r.status = RoundStatus::Closed;
+                tx.put(&r)?;
+                Ok(Value::Null)
             }
             Command::LockScene {
                 scene_id,

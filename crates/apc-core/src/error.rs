@@ -20,6 +20,9 @@ pub enum CoreError {
     /// An edit would have moved something in a locked scene. The message names the lock.
     #[error("{0}")]
     SceneLocked(String),
+    /// Review mode changes nothing but notes. The message says what was refused.
+    #[error("{0}")]
+    ReviewOnly(String),
     #[error("{0}")]
     Other(String),
 }

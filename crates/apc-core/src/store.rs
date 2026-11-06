@@ -393,6 +393,59 @@ impl EpisodeStore {
         Ok(CommitOutcome::Done { seq, rev: new_rev })
     }
 
+    /// Writes changes that aren't a step: logged for the record, out of reach of undo, and the
+    /// redo steps stay as they are.
+    pub(crate) fn commit_unlogged(
+        &mut self,
+        expected_rev: i64,
+        client: &str,
+        name: &str,
+        params: &Value,
+        changes: &[Change],
+    ) -> Result<CommitOutcome> {
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let rev: i64 = tx
+            .query_row("SELECT value FROM meta WHERE key='rev'", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .optional()?
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0);
+        if rev != expected_rev {
+            return Ok(CommitOutcome::Conflict);
+        }
+        tx.execute(
+            "INSERT INTO command_log(ts,client,name,params,changes,state) VALUES(?1,?2,?3,?4,'[]','discarded')",
+            params![now_iso(), client, name, serde_json::to_string(params)?],
+        )?;
+        let seq = tx.last_insert_rowid();
+        for c in changes {
+            write_row(
+                &tx,
+                c.kind,
+                &c.id,
+                c.after.as_ref(),
+                c.parent.as_deref(),
+                c.ord,
+            )?;
+        }
+        let new_rev = rev + 1;
+        tx.execute(
+            "INSERT INTO meta(key,value) VALUES('rev',?1) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            [new_rev.to_string()],
+        )?;
+        tx.commit()?;
+        Ok(CommitOutcome::Done { seq, rev: new_rev })
+    }
+
+    /// Forgets the undo history: a private copy starts with none of the editor's steps.
+    pub fn clear_log(&self) -> Result<()> {
+        self.conn.execute("DELETE FROM command_log", [])?;
+        Ok(())
+    }
+
     /// Loads the changes of a log entry.
     pub(crate) fn log_changes(&self, seq: i64) -> Result<Vec<Change>> {
         let s: String =
