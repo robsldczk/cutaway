@@ -208,6 +208,18 @@ pub struct Scene {
     /// Delivered: its timing holds still until it's unlocked (D108).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lock: Option<SceneLock>,
+    /// How far along the editor says it is. `None` until they say (D119).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<SceneStatus>,
+}
+
+/// Where a scene stands, as the editor marks it on the scene rail.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum SceneStatus {
+    InProgress,
+    Review,
+    Finished,
 }
 
 /// Why a scene's timing is held, and since when. See `timeline::timing_print` for what it holds.

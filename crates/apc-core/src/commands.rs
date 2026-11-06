@@ -433,6 +433,13 @@ pub enum Command {
     },
     /// Holds a scene's timing still: from here on the bus refuses whatever would move something
     /// in it. `version` is the export the lock protects; locking again moves it on.
+    /// Marks how far along a scene is; `None` clears the mark. Says nothing about its timing,
+    /// so a locked scene takes it too.
+    SetSceneStatus {
+        scene_id: String,
+        #[serde(default)]
+        status: Option<SceneStatus>,
+    },
     LockScene {
         scene_id: String,
         #[serde(default)]
@@ -528,6 +535,7 @@ impl Command {
             Command::DuplicateSounds { .. } => "duplicate_sounds",
             Command::EditTake { .. } => "edit_take",
             Command::DeleteTake { .. } => "delete_take",
+            Command::SetSceneStatus { .. } => "set_scene_status",
             Command::LockScene { .. } => "lock_scene",
             Command::UnlockScene { .. } => "unlock_scene",
         }
@@ -1269,6 +1277,12 @@ impl Command {
             }
             Command::EditTake { take } => edit_take(tx, take),
             Command::DeleteTake { take_id } => delete_take(tx, take_id),
+            Command::SetSceneStatus { scene_id, status } => {
+                let mut s = scene(tx, scene_id)?;
+                s.status = *status;
+                tx.put(&s)?;
+                Ok(json!({ "status": s.status }))
+            }
             Command::LockScene {
                 scene_id,
                 version,
@@ -3635,5 +3649,25 @@ mod tests {
         assert_eq!(default_take(&[&a, &b, &c]).unwrap().id, "a");
         b.pick = 2;
         assert_eq!(default_take(&[&a, &b, &c]).unwrap().id, "b");
+    }
+
+    #[test]
+    fn scene_status_is_one_undo_step_and_passes_a_lock() {
+        let (_d, mut bus) = setup();
+        let scene = bus.doc().scenes.keys().next().cloned().unwrap();
+        bus.execute(&Command::LockScene {
+            scene_id: scene.clone(),
+            version: None,
+            at: "2026-11-06".into(),
+        })
+        .unwrap();
+        let mark = |status| Command::SetSceneStatus {
+            scene_id: scene.clone(),
+            status,
+        };
+        bus.execute(&mark(Some(SceneStatus::Review))).unwrap();
+        assert_eq!(bus.doc().scenes[&scene].status, Some(SceneStatus::Review));
+        bus.undo().unwrap();
+        assert_eq!(bus.doc().scenes[&scene].status, None);
     }
 }

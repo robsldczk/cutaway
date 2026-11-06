@@ -18,6 +18,10 @@
   --shadow-rgb: 0 0 0;
   --highlight-rgb: 255 255 255;
   --locator-rgb: 159 214 255;
+  /* a scene's mark on the rail */
+  --status-progress-rgb: 112 170 255;
+  --status-review-rgb: 196 148 255;
+  --status-finished-rgb: 110 212 150;
 
   /* stage */
   --stage-bg: #0b0d12;
@@ -165,6 +169,9 @@
   --shadow-rgb: 60 50 30;
   --highlight-rgb: 255 255 255;
   --locator-rgb: 30 120 200;
+  --status-progress-rgb: 36 104 204;
+  --status-review-rgb: 128 72 200;
+  --status-finished-rgb: 28 134 80;
 
   --stage-bg: #f2efe8;
   --stage-glow-1: rgba(120, 136, 210, 0.22);

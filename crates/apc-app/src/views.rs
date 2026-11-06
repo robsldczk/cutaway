@@ -163,6 +163,8 @@ pub struct SceneSummary {
     pub synopsis: String,
     /// Delivered: its timing holds still.
     pub lock: Option<SceneLock>,
+    /// How far along the editor has marked it.
+    pub status: Option<SceneStatus>,
 }
 
 #[derive(Serialize)]
@@ -258,6 +260,7 @@ pub fn scene_summaries(doc: &Document) -> Vec<SceneSummary> {
                 act: s.story.act.clone(),
                 synopsis: s.story.synopsis.clone(),
                 lock: s.lock.clone(),
+                status: s.status,
             }
         })
         .collect()

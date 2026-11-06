@@ -5,7 +5,8 @@
   import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { historyTip } from '../lib/export';
-  import { CELL_MIN, railFit } from '../lib/rail';
+  import { CELL_MIN, railFit, STATUSES, statusOf } from '../lib/rail';
+  import type { SceneStatus, SceneSummary } from '../lib/types';
   import Icon from './Icon.svelte';
   let open = $state(false);
   /** The room between the header and the transport. */
@@ -25,7 +26,7 @@
     const e = app.exported[id];
     return e?.history.length ? historyTip(e) : '';
   };
-  const tip = (s: (typeof scenes)[number]) => [s.title, s.heading, s.synopsis, history(s.id)].filter(Boolean).join('\n');
+  const tip = (s: (typeof scenes)[number]) => [statusOf(s.status)?.label, s.title, s.heading, s.synopsis, history(s.id)].filter(Boolean).join('\n');
   // no scrollbar: the numbers tighten until they all show
   const size = $derived(railFit(scenes.length, slotH - CHROME, open ? OPEN_MIN : CELL_MIN));
 
@@ -39,6 +40,52 @@
     list?.scrollBy({ top: by * list.clientHeight * 0.8, behavior: 'smooth' });
   }
 
+  // ---- a scene's mark: right click, or the context menu key ----
+
+  /** The menu's height, so it doesn't open past the bottom of the rail's room. */
+  const MENU_H = 170;
+  let slot = $state<HTMLDivElement>();
+  let menuEl = $state<HTMLDivElement>();
+  let menu = $state<{ id: string; number: number; status: SceneStatus | null; x: number; y: number } | null>(null);
+
+  function openMenu(e: MouseEvent, s: SceneSummary) {
+    e.preventDefault();
+    const box = slot?.getBoundingClientRect();
+    const rail = (e.currentTarget as HTMLElement).closest('nav')?.getBoundingClientRect();
+    if (!box || !rail) return;
+    // the key has no pointer: it opens beside the scene
+    const y = e.clientY || (e.currentTarget as HTMLElement).getBoundingClientRect().top;
+    menu = { id: s.id, number: s.number, status: s.status, x: rail.right - box.left + 8, y: Math.max(0, Math.min(y - box.top, box.height - MENU_H)) };
+    void tick().then(() => menuEl?.querySelector<HTMLElement>('[aria-checked="true"], button')?.focus());
+  }
+
+  async function mark(status: SceneStatus | null) {
+    const m = menu;
+    menu = null;
+    if (m && m.status !== status) await app.cmd({ cmd: 'set_scene_status', scene_id: m.id, status });
+  }
+
+  function menuKey(e: KeyboardEvent) {
+    const items = [...(menuEl?.querySelectorAll<HTMLElement>('button') ?? [])];
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    if (e.key === 'Escape') menu = null;
+    else if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
+    else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
+    else if (e.key === 'Enter' || e.key === ' ') (document.activeElement as HTMLElement | null)?.click();
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  $effect(() => {
+    if (!menu) return;
+    const away = (e: MouseEvent) => {
+      if (!menuEl?.contains(e.target as Node)) menu = null;
+    };
+    window.addEventListener('mousedown', away, true);
+    return () => window.removeEventListener('mousedown', away, true);
+  });
+
   // the current scene stays in sight, and the steppers follow what's hidden
   $effect(() => {
     void size;
@@ -51,7 +98,7 @@
   });
 </script>
 
-<div class="slot" bind:clientHeight={slotH}>
+<div class="slot" bind:this={slot} bind:clientHeight={slotH}>
 <nav class="glass rail" aria-label="Scenes" class:open style="--cell: {size.cell}px; --cell-gap: {size.gap}px">
   <button class="toggle" onclick={() => (open = !open)} aria-label={open ? 'Collapse scene list' : 'Expand scene list'} title="Scene list">
     {open ? '‹' : '›'}
@@ -60,13 +107,19 @@
   <div class="list" class:above class:below bind:this={list} onscroll={edges}>
   {#each scenes as s, i (s.id)}
     {#if open && actStart(i)}<div class="act ellip">{s.act}</div>{/if}
+    {@const mk = statusOf(s.status)}
     <div class="row" data-scene={s.id}>
     <button
       class="sc"
       class:cur={s.id === app.sceneId}
-      aria-label="Scene {s.number}{s.title ? `, ${s.title}` : ''}{s.id === app.sceneId ? ', current' : ''}{s.flagged ? `, ${s.flagged} flagged` : ''}{s.lock ? ', locked' : ''}"
+      class:marked={!!mk}
+      style={mk ? `--mark: var(${mk.tone})` : undefined}
+      aria-label="Scene {s.number}{s.title ? `, ${s.title}` : ''}{s.id === app.sceneId ? ', current' : ''}{mk ? `, ${mk.label}` : ''}{s.flagged ? `, ${s.flagged} flagged` : ''}{s.lock ? ', locked' : ''}"
       title={tip(s)}
       onclick={() => app.loadScene(s.id)}
+      oncontextmenu={(e) => openMenu(e, s)}
+      data-testid="rail-scene"
+      data-status={s.status}
     >
       <span class="num">{s.number}</span>
       {#if open}
@@ -82,6 +135,22 @@
   </div>
   {#if below}<button class="stepper" aria-label="Later scenes" title="Later scenes" onclick={() => step(1)} data-testid="rail-down"><Icon name="chevron" size={13} stroke={2.4} /></button>{/if}
 </nav>
+{#if menu}
+  <!-- svelte-ignore a11y_interactive_supports_focus (its buttons take the focus) -->
+  <div class="menu" bind:this={menuEl} role="menu" aria-label="Mark scene {menu.number}" style="left: {menu.x}px; top: {menu.y}px" onkeydown={menuKey} data-testid="status-menu" data-own-keys>
+    <div class="mhead muted">Scene {menu.number}</div>
+    {#each STATUSES as o (o.id)}
+      <button role="menuitemradio" aria-checked={menu.status === o.id} onclick={() => mark(o.id)} data-testid="status-{o.id}">
+        <span class="sw" style="background: rgb(var({o.tone}))"></span>{o.label}
+        {#if menu.status === o.id}<Icon name="check" size={12} />{/if}
+      </button>
+    {/each}
+    <button role="menuitemradio" aria-checked={menu.status === null} onclick={() => mark(null)} data-testid="status-none">
+      <span class="sw none"></span>No mark
+      {#if menu.status === null}<Icon name="check" size={12} />{/if}
+    </button>
+  </div>
+{/if}
 </div>
 
 <style>
@@ -211,6 +280,66 @@
     background: var(--glass-active);
     color: var(--text-1);
     font-weight: 600;
+  }
+  /* a scene's mark is the colour of its cell; the current one stays the brightest */
+  .sc.marked {
+    background: rgb(var(--mark) / 0.2);
+    color: rgb(var(--mark));
+    font-weight: 600;
+  }
+  .sc.marked:hover {
+    background: rgb(var(--mark) / 0.3);
+  }
+  .sc.marked.cur {
+    background: rgb(var(--mark) / 0.36);
+    color: var(--text-1);
+    box-shadow: inset 0 0 0 1.5px rgb(var(--mark));
+  }
+  .menu {
+    position: absolute;
+    z-index: 2;
+    min-width: 150px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px;
+    border-radius: 12px;
+    background: var(--panel-solid);
+    box-shadow: var(--glass-shadow), 0 14px 40px rgb(var(--shadow-rgb) / 0.4);
+    pointer-events: auto;
+  }
+  .mhead {
+    padding: 3px 8px 5px;
+    font-size: 11px;
+  }
+  .menu button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 7px;
+    font-size: var(--fs-small);
+    color: var(--text-2);
+    text-align: left;
+  }
+  .menu button:hover,
+  .menu button:focus-visible {
+    background: var(--glass-hover);
+    color: var(--text-1);
+  }
+  .menu button :global(svg) {
+    margin-left: auto;
+  }
+  .sw {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+  }
+  .sw.none {
+    box-shadow: inset 0 0 0 1px var(--text-5);
   }
   .num {
     width: 40px;

@@ -576,6 +576,7 @@ pub fn apply_version(
             room: old.map(|s| s.room).unwrap_or_default(),
             tone: old.and_then(|s| s.tone.clone()),
             lock,
+            status: old.and_then(|s| s.status),
         })?;
     }
     for s in doc.scenes.values() {

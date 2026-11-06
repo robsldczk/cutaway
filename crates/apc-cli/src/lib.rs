@@ -106,6 +106,11 @@ pub enum Cmd {
     Unlock {
         scene: String,
     },
+    /// Mark how far along a scene is: in_progress, review or finished. Without one, clears it.
+    Mark {
+        scene: String,
+        status: Option<String>,
+    },
     /// Every scene's lock and export history.
     Exports,
     /// The show's pipeline folder, or a proposal; --set with --yes confirms one.
@@ -865,6 +870,11 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                     &mut sess,
                     "unlock_scene",
                     json!({ "scene": scene, "confirm": confirm }),
+                ),
+                Cmd::Mark { scene, status } => call(
+                    &mut sess,
+                    "set_scene_status",
+                    json!({ "scene": scene, "status": status }),
                 ),
                 Cmd::Exports => call(&mut sess, "export_status", json!({})),
                 Cmd::Pipeline { set } => match set {

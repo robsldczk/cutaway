@@ -1061,6 +1061,7 @@ pub(crate) mod tests {
             room: Default::default(),
             tone: None,
             lock: None,
+            status: None,
         };
         (d, sc)
     }

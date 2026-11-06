@@ -41,6 +41,7 @@ fn scene(id: &str, number: u32, room: SceneRoom) -> Scene {
         room,
         tone: None,
         lock: None,
+        status: None,
     }
 }
 

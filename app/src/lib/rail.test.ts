@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CELL_MAX, CELL_MIN, railFit } from './rail';
+import { CELL_MAX, CELL_MIN, railFit, STATUSES, statusOf } from './rail';
 
 describe('railFit', () => {
   it('keeps the full size while there is room', () => {
@@ -25,5 +25,13 @@ describe('railFit', () => {
   it('copes with nothing to measure yet', () => {
     expect(railFit(0, 500).paged).toBe(false);
     expect(railFit(16, 0).paged).toBe(false);
+  });
+});
+
+describe('scene status', () => {
+  it('has a label and a colour for each mark, and none for an unmarked scene', () => {
+    expect(statusOf('review')?.label).toBe('Review');
+    expect(STATUSES.map((s) => s.id)).toEqual(['in_progress', 'review', 'finished']);
+    expect(statusOf(null)).toBeNull();
   });
 });

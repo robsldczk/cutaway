@@ -1,6 +1,17 @@
 // How the scene rail fits the window, with no scrollbar: the scenes tighten until they all show.
 // Only when even the tightest can't hold them does the rail page.
 
+import type { SceneStatus } from './types';
+
+/** What a scene can be marked as, and the colour that says so. */
+export const STATUSES: { id: SceneStatus; label: string; tone: string }[] = [
+  { id: 'in_progress', label: 'In progress', tone: '--status-progress-rgb' },
+  { id: 'review', label: 'Review', tone: '--status-review-rgb' },
+  { id: 'finished', label: 'Finished', tone: '--status-finished-rgb' },
+];
+
+export const statusOf = (id: SceneStatus | null | undefined) => STATUSES.find((s) => s.id === id) ?? null;
+
 export const CELL_MAX = 40;
 export const CELL_MIN = 26;
 const GAP = 6;

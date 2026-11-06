@@ -898,3 +898,11 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - Options: a schema 3 migration that deletes the rows. It'd be cleaner in the file, but it can't be taken back in Rob's production file, an older build couldn't open that file any more, and undo steps and backups would bring the rows back anyway.
 - **Left on disk:** files in `Library/Vocals` are never deleted by this. Nothing refers to the unused ones any more, so Rob can delete the folder by hand. On Episode 2 (a copy, read only) that's 188 cuts, 36 MB, in 7 buckets, none of them placed.
 - **Trade-off:** the dead rows stay in the `.cutaway` file. They're small, and a future migration can clear them.
+
+### D119 A scene's mark (Rob, 2026-11-06)
+- **Rob:** mark a scene as in progress, review or finished, so he doesn't go into scenes and get lost. It's the colour of the scene's cell on the left. Unmarked scenes stay neutral, and a right click on the rail sets it.
+- **`Scene.status`:** optional, `in_progress`, `review` or `finished`, left out of the file when unset, so older files and their hashes stay as they are. It survives a new script version like the room does.
+- **`set_scene_status`:** one undo step, on the CLI as `cutaway mark` and on MCP. It says nothing about timing, so a locked scene takes it. A mark and a lock are separate things: "finished" doesn't lock, and a lock doesn't finish.
+- **The colour:** blue, violet and green, as tokens in both themes. Amber was left out because the flagged dot already means that. The current scene keeps its ring, so it still reads when it's marked.
+- **The menu** opens beside the rail with the mark that's set ticked. The context menu key opens it too, and the arrows, Enter and Esc work in it.
+

@@ -157,7 +157,11 @@ export interface SceneSummary {
   act: string;
   synopsis: string;
   lock: SceneLock | null;
+  /** How far along the editor has marked it. */
+  status: SceneStatus | null;
 }
+
+export type SceneStatus = 'in_progress' | 'review' | 'finished';
 
 export interface CharacterView {
   id: string;

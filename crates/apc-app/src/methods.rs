@@ -813,6 +813,14 @@ pub struct SuggestBucketP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct SceneStatusP {
+    pub scene: String,
+    /// `in_progress`, `review` or `finished`; left out, the mark goes.
+    #[serde(default)]
+    pub status: Option<SceneStatus>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct CharacterWetP {
     pub character: String,
     /// 0 dry … 1.
@@ -1015,6 +1023,7 @@ registry! {
     "export_plan", ExportRunP, Read, true, "What an export will write: each scene's next version, its files and their size, and which scenes are unchanged. Nothing is written.";
     "export_scenes", ExportRunP, Write, true, "Export scenes, or the whole episode, as versioned folders: aligned stems (every file exactly as long as the scene, from 0:00, silent ones too), individual clips, mix only or FCPXML only. Never overwrites: each scene counts up on its own. Locks the scenes after it unless lock_after is off.";
     "start_export", ExportRunP, Write, false, "export_scenes in the background (the UI polls job_status).";
+    "set_scene_status", SceneStatusP, Write, true, "Mark how far along a scene is: in_progress, review or finished; leave status out to clear it. It only colours the scene on the rail: timing and locks don't care.";
     "lock_scene", LockSceneP, Write, true, "Lock a scene's timing. Undoable. Takes, trims, gaps, order and moving, trimming, adding or removing sounds are refused until it's unlocked; gain, pan, depth, fades and notes stay free.";
     "unlock_scene", UnlockSceneP, Destructive, true, "Unlock a scene. The files already exported won't match it anymore, and the next export gets the next version. Undoable.";
     "save_export_preset", PresetP, Write, true, "Save export settings under a name; the same name replaces them.";
@@ -1872,6 +1881,11 @@ impl Service {
                     .map(crate::studio::shown_name)
                     .unwrap_or_else(|| crate::studio::proposed_bucket(&p.name));
                 Ok(json!({ "bucket_id": id, "name": name }))
+            }
+            "set_scene_status" => {
+                let p: SceneStatusP = parse(params)?;
+                let scene_id = scene_id(self, Some(&p.scene))?;
+                Ok(self.exec(&Command::SetSceneStatus { scene_id, status: p.status })?.result)
             }
             "set_character_wet" => {
                 let p: CharacterWetP = parse(params)?;
