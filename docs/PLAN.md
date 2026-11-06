@@ -725,6 +725,12 @@ Three requests from one conversation, in this order. Decisions in `DECISIONS.md`
 
 Risks: a filter on a far voice has to sound like distance and not like a closed door, and nobody has listened yet, so the numbers live in one place (`depth.rs`) and get measured on a copy of Episode 2. Right click and ⌥⌘ keys are input a Chromium test can't vouch for, so they go through the real webview too.
 
+### Coming back to where it was left (Rob, 2026-11-06; D131)
+- [x] Spots per episode: page, Import tab, scene, line, playhead, Edit zoom, kept in the webview's storage and written as they change
+- [x] A launch reopens what was open at the end, an episode or a show's home; closing on purpose goes back to the start screen
+- [x] What has gone since falls back: playhead to the end, line to the one at the playhead, scene to the first
+- [x] Checked on a copy of Episode 2 in the real app, with `kill -9` at set times after a move
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -803,3 +809,4 @@ Risks: a filter on a far voice has to sound like distance and not like a closed 
 - 2026-11-06 Arrange round (D119–D126): scene marks on the rail, the room chip off the transport, a longer direction is a bigger block, characters' pan per room with a custom value per scene, glue, a scrubber in the opened sound, two lines side by side, and a panned voice sitting further back with a sensitivity in Settings. `gh` still has no login, so no pull request. Checked in Playwright and in the real webview on a temp demo; not listened to, and nothing was run on Episode 2.
 - 2026-11-06 Episode 2's 37 pinned effects glued at Rob's request (D123): one undoable batch from the CLI, rehearsed on a copy, with the app not holding the file. No sound moved.
 - 2026-11-06 Arrange round 2 (D128–D130): a marker of its own on the blocks while a sound moves, and in the pauses, naming the word; the blocks' time goes through the pieces, so the locator stops drifting on cut lines. A line can stand further back in the room, per line, on a voice's own curve: inverse distance, more room, less low end, softer highs on the direct sound, reflections sooner. ⌘ and ⇧ click select lines; the right click holds depth and copy and paste of attributes. Measured on a copy of Episode 2, driven in the real webview with in-page events on a temp demo. Not listened to, and nothing was run on the real Episode 2.
+- 2026-11-06 Coming back to where it was left (D131): built in another session, which worked on the same request, and checked independently here: check.sh green, Playwright 180/180, and on a copy of Episode 2 in the real app the page, scene and show came back after every `kill -9`, the playhead from 0.8 s after the last move. A Finder double-click during launch is reasoned about, not tried.

@@ -23,6 +23,18 @@ Details: `docs/design/round2-screens.md` (the spec files are read-only in this c
 - Import › Files on TARMAC: drop the fixture folder, check the cards, switch a file's type, link a room file by hand, Redo match, Start analysis.
 - Edit: drag a preview onto SFX 1 near an action line and watch it download and snap; try Split, Fade and Gain on a clip; mute and solo lanes while playing; set a cycle range by dragging in the ruler and press C.
 
+## Coming back to where it was left (D131, 2026-11-06)
+
+**Built:** each episode remembers its page, Import tab, scene, line, playhead and Edit zoom, on this machine. A launch reopens what was open at the end. Closing an episode on purpose goes to the start screen, or the show's home.
+
+**Verified:** `check.sh` green, Playwright 180 of 180. On a copy of Episode 2 inside its show, in the real app: `kill -9` at 0.1, 0.4, 0.8, 1.5 and 3 s after a click on a block. Page, scene and show came back every time; the playhead from 0.8 s on, and at 0.1 and 0.4 s it was the spot before that click. A real quit 0.8 s after a move came back too. **Not tried:** a Finder double-click during launch. The file should win, because the click arrives before the page starts, but that's reasoning.
+
+**Rob, by hand:**
+- Restart the app once: spots only start being kept from a build that has this.
+- Work, quit with ⌘Q, open again. Then try a scene you've changed since.
+- Double-click an episode in the Finder with the app closed: does that episode open, and not the last one?
+- On a second machine the spot is that machine's own. Is that what you want?
+
 ## Timing sounds against the words, lines further back (D128–D130, 2026-11-06)
 
 **Built:** while a sound moves, a marker in its bucket's colour rides on the dialogue blocks, crosses the column in a pause, and the tip names the word. The locator stays put. Lines can move back in the room from a right click, ⌥← / ⌥→, the Edit inspector, the CLI (`cutaway depth`) and MCP (`set_line_depth`). ⌘ and ⇧ click select several lines. Copy and paste attributes (depth, gain, fades) from the menu or ⌥⌘C / ⌥⌘V. The locator no longer drifts on lines with cut words.
