@@ -299,7 +299,7 @@
     size: number;
   }
 
-  /** The marker on the blocks: where this sound is, in its bucket's colour (D127). */
+  /** The marker on the blocks: where this sound is, in its bucket's colour (D128). */
   function cue(t: number, id: string) {
     app.soundCue = { t, tone: byId.get(id)?.tone ?? '--bucket-none-rgb' };
   }

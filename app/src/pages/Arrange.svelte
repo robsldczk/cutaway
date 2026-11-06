@@ -226,13 +226,13 @@
     return fx(it, sourceAt(it, t, takeOf(it)?.source_id) ?? tr.a + t - it.start_s);
   }
 
-  // ---- the moved sound's marker, on the blocks and across the pauses (D127) ----
+  // ---- the moved sound's marker, on the blocks and across the pauses (D128) ----
 
   const speaks = (it: ItemView, t: number) => t >= it.start_s && t <= it.end_s && it.end_s > it.start_s;
   /** No line speaks at that moment: the marker crosses the column at its height. */
   const cueGapY = $derived(app.soundCue && !rows.some((r) => speaks(r.it, app.soundCue!.t)) ? map.y(app.soundCue.t) : null);
 
-  // ---- several lines, and the right click (D128, D129) ----
+  // ---- several lines, and the right click (D129, D130) ----
 
   let menu = $state<{ lineId: string; ids: string[]; x: number; y: number } | null>(null);
 

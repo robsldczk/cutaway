@@ -714,14 +714,14 @@ Seven requests from one list, in this order. Decisions in `DECISIONS.md`.
 - [x] Side by side: drag a line next to another on Arrange, two at most, the second can be offset (D125)
 - [x] A panned voice sits a little further back in the room, with a sensitivity in Settings (D126)
 
-### Arrange round 2: timing sounds against the words, lines further back (Rob, 2026-11-06; D127 onwards)
+### Arrange round 2: timing sounds against the words, lines further back (Rob, 2026-11-06; D128 onwards)
 Three requests from one conversation, in this order. Decisions in `DECISIONS.md`.
-- [ ] Line depth in the document: `BoxState.depth`, `set_clip_depth`, `set_line_depth` for the CLI and MCP, stays with the line when the take changes, passes a lock (D128)
-- [ ] The voice's own curve: direct against room, less low end, softer highs on the direct sound only, reflections arriving sooner; a far line is two clips on the schedule, so the mixer stays stateless (D128)
-- [ ] A marker of its own on the blocks while a sound moves: drag, trim, keys, opened sound, a drop from the bucket; in a pause too; names the word under it. The block's time-to-source mapping goes through the pieces, so the locator stops drifting on cut lines (D127)
-- [ ] Several lines selected on Arrange: ⌘ click, ⇧ click, Esc (D129)
-- [ ] The line's right-click menu: depth slider with named stops, copy and paste attributes; a chip on the block; ⌥←/→ for depth, ⌥⌘C and ⌥⌘V (D128, D129)
-- [ ] Specs, keyboard map, help overlay, RUN_REPORT
+- [x] Line depth in the document: `BoxState.depth`, `set_clip_depth`, `set_line_depth` for the CLI and MCP, stays with the line when the take changes, passes a lock (D129)
+- [x] The voice's own curve: direct against room, less low end, softer highs on the direct sound only, reflections arriving sooner; a far line is two clips on the schedule, so the mixer stays stateless (D129)
+- [x] A marker of its own on the blocks while a sound moves: drag, trim, keys, opened sound, a drop from the bucket; in a pause too; names the word under it. The block's time-to-source mapping goes through the pieces, so the locator stops drifting on cut lines (D128)
+- [x] Several lines selected on Arrange: ⌘ click, ⇧ click, Esc (D130)
+- [x] The line's right-click menu: depth slider with named stops, copy and paste attributes; a chip on the block; ⌥←/→ for depth, ⌥⌘C and ⌥⌘V (D129, D130)
+- [x] Specs, keyboard map, help overlay, RUN_REPORT
 
 Risks: a filter on a far voice has to sound like distance and not like a closed door, and nobody has listened yet, so the numbers live in one place (`depth.rs`) and get measured on a copy of Episode 2. Right click and ⌥⌘ keys are input a Chromium test can't vouch for, so they go through the real webview too.
 
@@ -802,4 +802,4 @@ Risks: a filter on a far voice has to sound like distance and not like a closed 
 - 2026-11-06 Vocal adlibs removed as sounds (D118): no vocal finder in the analysis, no vocal buckets, no Adlibs lane, no character search on the bucket. Adlibs are takes and added lines in the mapping editor. Older files read around what's left, and `Library/Vocals` stays on disk for Rob to delete.
 - 2026-11-06 Arrange round (D119–D126): scene marks on the rail, the room chip off the transport, a longer direction is a bigger block, characters' pan per room with a custom value per scene, glue, a scrubber in the opened sound, two lines side by side, and a panned voice sitting further back with a sensitivity in Settings. `gh` still has no login, so no pull request. Checked in Playwright and in the real webview on a temp demo; not listened to, and nothing was run on Episode 2.
 - 2026-11-06 Episode 2's 37 pinned effects glued at Rob's request (D123): one undoable batch from the CLI, rehearsed on a copy, with the app not holding the file. No sound moved.
-
+- 2026-11-06 Arrange round 2 (D128–D130): a marker of its own on the blocks while a sound moves, and in the pauses, naming the word; the blocks' time goes through the pieces, so the locator stops drifting on cut lines. A line can stand further back in the room, per line, on a voice's own curve: inverse distance, more room, less low end, softer highs on the direct sound, reflections sooner. ⌘ and ⇧ click select lines; the right click holds depth and copy and paste of attributes. Measured on a copy of Episode 2, driven in the real webview with in-page events on a temp demo. Not listened to, and nothing was run on the real Episode 2.

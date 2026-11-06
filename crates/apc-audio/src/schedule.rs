@@ -18,7 +18,7 @@ pub struct ClipSpace {
     pub send_gain: f64,
     /// Roll-off of the clip (dry and send alike).
     pub lowpass_hz: f64,
-    /// Shelves of a line moved back (D128); 0 is no filter.
+    /// Shelves of a line moved back (D129); 0 is no filter.
     #[serde(default)]
     pub low_shelf_db: f64,
     #[serde(default)]

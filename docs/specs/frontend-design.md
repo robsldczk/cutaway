@@ -126,6 +126,7 @@ Reorder lines and spacers, set pauses, trim heads and tails.
 - **Reorder:** drag the grip; a glowing insertion line shows the drop point; ripple is the default. Alt+Up/Down moves the current line.
 - The current row has a brighter gradient and a 1.5 px outline in its shade, and sits on the centre hairline.
 - *Changed in implementation (D78):* the **sounds layer** sits beside the dialogue, shown or hidden with **Sounds** or `S`. The column moves left and narrows; beside it runs the spine (the dialogue as a vertical waveform in character colours), a hairline per sound, and the sounds as balls (size = length, x = depth, y = start). The Edit page's bucket floats on the right, with an eye per bucket. Scrolling moves the playhead continuously, with the column on the centre line. Each gesture is one undo step, a selection moves as one, and a ball is the same clip the Edit page shows. Spec: `tasks/Bokeh · live prototype-html/audioplay-cutter-handover-arrange-sounds.md`.
+- *Changed in implementation (D128–D130):* a sound being moved shows on the blocks with a marker of its own, in its bucket's colour, and across the column in a pause. ⌘ and ⇧ click select several lines. A line's right click holds how far back in the room it stands and Copy and Paste attributes; a line moved back wears a chip and a fainter waveform.
 
 ## Edit page (full editor)
 
@@ -337,6 +338,9 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 | B | Sound bucket |
 | , / . | Shorter / longer pause after the current line (100 ms steps) |
 | Alt+Up / Alt+Down | Move line (Arrange) |
+| ⌘ click, ⇧ click | Select more lines (Arrange, D130) |
+| Option+Left/Right | The line further back or forward in the room, with no sounds selected (Arrange, D129) |
+| ⌥⌘C / ⌥⌘V | Copy / paste a line's attributes (Arrange, D130) |
 | − / + | Box size |
 | 1 / 2 / 3 | Options / Arrange / Edit |
 | ⌘Z / ⌘⇧Z | Undo / redo |

@@ -170,7 +170,7 @@ class AppState {
   soundSel = $state<string[]>([]);
   /** Arrange: the sound open in its vertical editor. */
   soundOpen = $state<string | null>(null);
-  /** Arrange: where the sound being moved sits, for the marker on the blocks (D127). */
+  /** Arrange: where the sound being moved sits, for the marker on the blocks (D128). */
   soundCue = $state<{ t: number; tone: string } | null>(null);
   /** Arrange: lines selected together (⌘ or ⇧ click). Empty is the current line on its own. */
   lineSel = $state<string[]>([]);

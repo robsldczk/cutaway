@@ -180,7 +180,7 @@ pub enum Command {
         line_id: String,
         gain_db: f64,
     },
-    /// How far back in the room a line is spoken, 0 … 1 (D128).
+    /// How far back in the room a line is spoken, 0 … 1 (D129).
     SetClipDepth {
         line_id: String,
         depth: f64,

@@ -42,13 +42,19 @@ let asset = '';
 let bucket = '';
 
 test.beforeAll(async () => {
-  const file = join(mkdtempSync(join(tmpdir(), 'lines-')), 'Door_slam.wav');
+  const file = join(mkdtempSync(join(tmpdir(), 'lines-')), 'Linetest_slam.wav');
   wav(file, 1);
   asset = (await rpc<{ assets: { id: string }[] }>('import_sounds', { paths: [file] })).assets[0].id;
   const have = await rpc<{ buckets: { id: string; name: string }[] }>('buckets', {});
   const sc = await rpc<{ id: string }[]>('list_scenes');
-  bucket = have.buckets.find((b) => b.name === 'Line test sounds')?.id ?? (await rpc<{ bucket_id: string }>('create_bucket', { name: 'Line test sounds', keywords: ['door'], scenes: [sc[0].id] })).bucket_id;
+  bucket = have.buckets.find((b) => b.name === 'Line test sounds')?.id ?? (await rpc<{ bucket_id: string }>('create_bucket', { name: 'Line test sounds', keywords: ['linetest'], scenes: [sc[0].id] })).bucket_id;
   await rpc('bucket_keep', { bucket_id: bucket, asset_id: asset });
+});
+
+// the demo is shared with every other spec
+test.afterAll(async () => {
+  for (const s of await sounds()) await rpc('remove_sound', { placement_id: s.id });
+  await rpc('delete_bucket', { bucket_id: bucket, confirm: true });
 });
 
 test.beforeEach(async () => {

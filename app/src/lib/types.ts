@@ -125,7 +125,7 @@ export interface ItemView {
   comp: CompSegment[];
   edits: WordEdits;
   gain_db: number;
-  /** How far back in the room the line is spoken, 0 … 1 (D128). */
+  /** How far back in the room the line is spoken, 0 … 1 (D129). */
   depth: number;
   low_confidence: boolean;
   adlib: boolean;

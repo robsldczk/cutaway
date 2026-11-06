@@ -872,7 +872,7 @@ pub struct BoxState {
     #[serde(default)]
     pub gain_db: f64,
     /// How far back in the room this line is spoken, 0 (where the character stands) … 1 (far).
-    /// It stays when the take changes: staging belongs to the line (D128).
+    /// It stays when the take changes: staging belongs to the line (D129).
     #[serde(default, skip_serializing_if = "is_close")]
     pub depth: f64,
     /// Split points (Edit page), in source order once laid out.

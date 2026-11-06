@@ -984,3 +984,49 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Never taller than the window:** the columns scroll inside the sheet, and the header and footer stay, so Export is always in view.
 - **Smaller windows step down, as in D116:** below 1200 px the padding tightens, and the stems picture and the tracks' side notes go. The app's smallest window, 900 × 640, still has three columns. Below 860 px, which only a browser on the bridge reaches, it's one column and the page scrolls.
 - **History rows** say Episode or Pipeline, with the full name as a tooltip. The narrower column cut the long name off, and that's the part that tells two rows apart.
+
+### D128 A marker for the sound being moved (Rob, 2026-11-06)
+- **Rob:** when moving sound effects, the scrubber in the dialogue blocks should move too, to time the effect better. It's an indicator of its own, not the locator.
+- **What it is:** `app.soundCue`, a marker in the sound's bucket colour on every block speaking at that moment, so both lines of a pair show it. The locator and the playhead stay where they were, so ⇧ Space still plays from where it did.
+- **What it follows:** the edge being moved: the start on a move, the end on a trim, either on the opened sound. Key nudges show it while the burst lasts, and a drop from the bucket shows it on the way in. Fades and slips move nothing against the words, so they don't.
+- **In a pause** no block speaks: the marker crosses the column at its height, on the same time map as the balls.
+- **The word:** the tip says what it lands on ("on “door”"), unless a snap already names it. The tip stays clear of the bucket however long it gets.
+- **The blocks' time was wrong on cut lines:** the locator went straight from the line's start, but a strip draws the whole take, so anything after a cut word or split sat too early. `lib/lines.ts` now goes through the pieces both ways, for the locator, the playhead, this marker, scrubbing, and I and O. What comes from another recording in a comp keeps the old share of the line.
+
+### D129 A line further back in the room (Rob, 2026-11-06)
+- **Rob:** on selected lines of Arrange, move the character back so they're further in the room: quieter, a bit less high end, as realistic as possible. Per snippet, not per scene, from a right click. Later, on hearing it: moving back should also make them quieter.
+- **`BoxState.depth`,** 0 to 1, default 0 and left out of the file at 0. It's staging, so it stays when the take changes. Per line, for all its parts. `set_clip_depth` is the command, `set_line_depth` the CLI and MCP method for several lines in one undo step. A locked scene takes it: nothing moves.
+- **A voice has its own curve,** `depth::line_mix`, not the sounds' one. In the order they matter:
+  - **Direct against room:** the send goes from the character's own to −3 dB at full depth, whatever the character's wet. The room's Wet still scales it. Episode 2's rooms sit at 0.10 to 0.45, far below the 0.8 D76 was measured at: at −8 dB the Canteen's room stayed 11 dB under the voice, which reads as quieter and not as further away.
+  - **Quieter:** the direct sound follows the inverse distance law, 1 to 6 times the distance. This replaced a straight line in dB after Rob's note: one key press was under 1 dB and "A little back" under 4. The curve is steepest at the start, as it is in a real room.
+  - **Less low end:** a low shelf at 220 Hz, to −7 dB, on direct sound and send. The recordings are close-miked, and that chest is the mic's. It goes in the first steps, so it follows the square root of depth.
+  - **Softer highs, direct sound only:** a high shelf at 3.5 kHz, to −8 dB. Air takes about 1 dB at 8 kHz across 10 m: the loss is the head turning and the walls. A roll-off like the sounds' takes the consonants and puts a door in front of the voice.
+  - **Reflections arrive sooner:** the direct sound arrives up to 60 % of the room's pre-delay late, so it never comes after them.
+- **Two clips:** a line moved back is a direct clip and a send clip on the schedule. The two need different timing and filters, and this way the mixer stays stateless and renders from anywhere. Filters are baked into the clip with the existing roll-off, so they cost nothing at playback. Stems still null.
+- **With the pan:** on top of D126, by multiplying, so where the pan puts a voice stays as it was.
+- **Nobody moved it, nothing changed:** at depth 0 it's the one clip it always was. A character at wet 0 keeps D90's guarantee until a line is moved back: asking for distance asks for a room, so it gets one from −30 dB. Only a scene's room at wet 0 has none, and the menu says the line just gets quieter.
+- **Measured on a copy of Episode 2,** the Canteen (wet 0.24), Paul's line at 92 s, against depth 0:
+
+  | Depth | Direct | Below 200 Hz | Above 5 kHz | Whole line | Room against voice |
+  |---|---|---|---|---|---|
+  | 0 | 0 | 0 | 0 | 0 | −39.2 |
+  | 5 % (one key press) | −2.3 | −3.0 | −2.2 | −2.3 | −36.2 |
+  | 25 % A little back | −7.9 | −9.4 | −8.4 | −7.9 | −26.7 |
+  | 50 % Back | −12.1 | −14.2 | −13.4 | −12.0 | −17.5 |
+  | 80 % Far | −15.5 | −18.0 | −17.8 | −14.8 | −8.0 |
+  | 100 % | −17.2 | −20.1 | −20.2 | −15.1 | −2.1 |
+
+- **Not listened to.** Every constant is in `depth.rs`, for Rob's ears. A quiet, close read will still sound like someone whispering across a room: that's the performance, and no filter changes it.
+- **Not carried into FCPXML,** like the depth of sounds (D76): Resolve gets these lines close and dry. Bounces and stems have it.
+- **Left out:** a line that moves while it's spoken (Rob: not for now). The clip's values are fixed. The room mic as a real distant voice: it carries the other actors and the wrong room.
+- **On the block:** a chip ("Back 40 %") and a fainter waveform. On Edit, a Depth field in the inspector.
+- **⌥← / ⌥→** on Arrange, 5 % a press and a burst is one undo step. ←/→ stay the takes, and sounds keep the same keys when selected.
+
+### D130 Several lines, and copying attributes (Rob, 2026-11-06)
+- **Rob:** multi-select, and copy attributes, for pushing several lines back.
+- **Selecting:** ⌘ click adds or removes a line, starting from the current one; ⇧ click takes the run from the current line. A plain click, an arrow key or Esc lets go. The current line doesn't change, so the column stays still under the mouse. Selections live on Arrange only, and only depth and attributes act on them so far: ⌃M, takes and dragging stay with one line.
+- **Right click:** on a selected line it's for all of them, on any other line for that one, and the selection goes. It doesn't move the column either. The slider sets every line to one value; ⌥← / ⌥→ move a group as one, keeping their differences, and stop at the ends.
+- **Attributes are how a line sounds:** depth, gain and fades. Not the take, trims, pause or pan: those are what it is and when it comes, and pan belongs to the character. For Rob to confirm: gain and fades don't show on Arrange, so the paste item spells out what it will do.
+- **⌥⌘C / ⌥⌘V,** from the menu too. Copy Style's keys on a Mac, and ⌘C stays free. Read by the key's place, because ⌥ makes a Mac type ç and √. A paste is one undo step, and what's copied lasts until the episode closes, across scenes.
+- **No new command:** a paste is a `batch` of the commands that exist.
+

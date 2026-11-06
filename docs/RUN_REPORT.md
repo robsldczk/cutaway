@@ -23,6 +23,19 @@ Details: `docs/design/round2-screens.md` (the spec files are read-only in this c
 - Import › Files on TARMAC: drop the fixture folder, check the cards, switch a file's type, link a room file by hand, Redo match, Start analysis.
 - Edit: drag a preview onto SFX 1 near an action line and watch it download and snap; try Split, Fade and Gain on a clip; mute and solo lanes while playing; set a cycle range by dragging in the ruler and press C.
 
+## Timing sounds against the words, lines further back (D128–D130, 2026-11-06)
+
+**Built:** while a sound moves, a marker in its bucket's colour rides on the dialogue blocks, crosses the column in a pause, and the tip names the word. The locator stays put. Lines can move back in the room from a right click, ⌥← / ⌥→, the Edit inspector, the CLI (`cutaway depth`) and MCP (`set_line_depth`). ⌘ and ⇧ click select several lines. Copy and paste attributes (depth, gain, fades) from the menu or ⌥⌘C / ⌥⌘V. The locator no longer drifts on lines with cut words.
+
+**Verified:** `check.sh` and Playwright green, stems still null with a far line. On a copy of Episode 2 the curve was measured on a real line (table in D129), which changed it twice: the send went up because your rooms are far drier than the first tuning assumed, and the level went to inverse distance after your note. 10 checks in the real webview on a temp demo, with in-page events. **Not listened to**, and no real mouse or keyboard.
+
+**Rob, by ear and by hand:**
+- Restart `tauri dev` if it hasn't picked up the last commit, then move a line back while it plays. Is 25 % "a little back", is 80 % far, and do the words survive?
+- Low end and highs: does it sound further away, or filtered? Every number is in `crates/apc-audio/src/depth.rs`.
+- A quiet, close read pushed back: if it sounds like a whisper across a room, that's the performance, and the line wants a projected take.
+- Drag a door slam across a line: is the marker easy to see on every bucket colour?
+- Paste copies gain and fades too. Is that what you want from "attributes", or depth alone?
+
 ## Bucket chips by keyboard, ⌘D on sounds (D106, D107, 2026-11-05)
 
 **Built:** on a Finder drop the arrows walk the chips, Enter files into the one lit, and Shift alone completes the name. ⌘D copies the selected sounds right after themselves, on Arrange and Edit.

@@ -50,12 +50,15 @@ pub fn voice_mix(wet: f64, pan: f64, amount: f64) -> DepthMix {
     }
 }
 
-/// Level of a line's direct sound at full depth. Less than a sound's −14 dB: quieter is the
-/// weakest cue for distance, and this is the one that costs the words.
-const LINE_DRY_FAR_DB: f64 = -12.0;
+/// How many times further from the listener a line stands at full depth than at 0. The direct
+/// sound follows the inverse distance law from there: it's 6 dB down each time the distance
+/// doubles, so the first steps back are the ones heard most. 6 is −15.6 dB at full depth.
+const LINE_DISTANCE_FAR: f64 = 6.0;
 /// What a line sends to the room at full depth. Far away the room is the same for everybody, so
-/// this doesn't depend on the character's wet setting.
-const LINE_SEND_FAR_DB: f64 = -8.0;
+/// this doesn't depend on the character's wet setting. The room's own wet still scales it: this
+/// is set so that in a room at 0.24, Episode 2's Canteen, room and voice end up about level, as
+/// they do across a real room. Much lower and it only sounds quieter, not further away.
+const LINE_SEND_FAR_DB: f64 = -3.0;
 /// Corner of the low shelf, and what it takes at full depth: a voice recorded close has a chest
 /// that no voice across a room has.
 pub const LINE_LOW_SHELF_HZ: f64 = 220.0;
@@ -68,7 +71,7 @@ const LINE_HIGH_FAR_DB: f64 = -8.0;
 /// listener the reflections come well after the voice; far away they are right behind it.
 const LINE_LAG_FAR: f64 = 0.6;
 
-/// A line moved back in the room, on top of where the character stands (D128).
+/// A line moved back in the room, on top of where the character stands (D129).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LineMix {
     /// Multiplies the direct sound.
@@ -94,7 +97,7 @@ pub fn line_mix(depth: f64, send: f64) -> Option<LineMix> {
     let close_db = (20.0 * send.max(1e-9).log10()).max(VOICE_SEND_MIN_DB);
     let far_db = LINE_SEND_FAR_DB.max(close_db);
     Some(LineMix {
-        dry_gain: gain(LINE_DRY_FAR_DB * d),
+        dry_gain: 1.0 / (1.0 + (LINE_DISTANCE_FAR - 1.0) * d),
         send_gain: gain(close_db + (far_db - close_db) * d),
         // the mic's close bass goes in the first steps back, so this one leads
         low_shelf_db: LINE_LOW_FAR_DB * d.sqrt(),
@@ -205,6 +208,17 @@ mod tests {
             assert!(m.lag > last.lag, "reflections sooner at {i}");
             last = m;
         }
+    }
+
+    #[test]
+    fn going_back_is_clearly_quieter_from_the_first_step() {
+        let db = |d: f64| 20.0 * line_mix(d, voice_send(0.25)).unwrap().dry_gain.log10();
+        assert!(db(0.05) < -1.5, "one key press is heard: {}", db(0.05));
+        assert!(db(0.25) < -6.0, "a little back: {}", db(0.25));
+        assert!(db(0.5) < -10.0, "back: {}", db(0.5));
+        assert!((db(1.0) + 15.56).abs() < 0.01, "six times the distance");
+        // the first quarter is heard more than the last
+        assert!(db(0.25) - db(0.0001) < db(1.0) - db(0.75));
     }
 
     #[test]
