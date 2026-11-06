@@ -731,6 +731,30 @@ Risks: a filter on a far voice has to sound like distance and not like a closed 
 - [x] What has gone since falls back: playhead to the end, line to the one at the playhead, scene to the first
 - [x] Checked on a copy of Episode 2 in the real app, with `kill -9` at set times after a move
 
+### Welcome screen, Shelf B (Rob, 2026-11-06; `tasks/Welcome`, D144 onwards)
+
+The start screen becomes a shelf: a hero for the selected item, a row of recent episodes, a row of shows. A click selects; Edit, Review, ↩ and ⌥↩ open. Worked on branch `welcome`, a worktree, because `tauri dev` was running in the main folder.
+
+Backend (`apc-app/src/welcome.rs`):
+- [ ] `welcome_view`: stage, last edit, open notes and cover per episode, read-only, with what's waiting in the review folder folded in.
+- [ ] `create_episode` and `create_show` with `open: false`.
+- [ ] Covers: `Cover.jpg` in the project, `set_cover`, `cover_image` with a local cache of scaled copies, backdrop as a fallback.
+- [ ] `add_review_to`: a dropped review finds its episodes among what's on the shelf.
+- [ ] `cutaway shelf`, `cutaway cover`.
+
+UI:
+- [ ] `lib/welcome.ts`: rows, selection and moves as plain functions, with unit tests.
+- [ ] The screen: hero, rows, top buttons, footer, empty state, missing items, right-click menu.
+- [ ] New episode and New show sheets.
+- [ ] Keys, including the native menu's routes.
+- [ ] Drops: scripts and recordings, an image on a tile or the hero, a review file.
+- [ ] The opening transition, for as long as the load takes and no longer.
+
+Verify:
+- [ ] Rust tests, unit tests, a Playwright spec, the old specs moved over.
+- [ ] Real webview, on a copy of the real show.
+- [ ] Specs, `DECISIONS.md`, `RUN_REPORT.md`.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)

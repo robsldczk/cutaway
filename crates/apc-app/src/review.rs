@@ -84,9 +84,9 @@ impl ReviewLocal {
     }
 }
 
-type FileStamp = (Option<SystemTime>, u64);
+pub(crate) type FileStamp = (Option<SystemTime>, u64);
 
-fn stamp_of(path: &Path) -> FileStamp {
+pub(crate) fn stamp_of(path: &Path) -> FileStamp {
     match std::fs::metadata(path) {
         Ok(m) => (m.modified().ok(), m.len()),
         Err(_) => (None, 0),
@@ -100,7 +100,7 @@ pub struct Package {
     dir: PathBuf,
 }
 
-fn wal_of(file: &Path) -> PathBuf {
+pub(crate) fn wal_of(file: &Path) -> PathBuf {
     PathBuf::from(format!("{}-wal", file.display()))
 }
 
@@ -1335,7 +1335,7 @@ pub fn history(svc: &Service) -> Result<Value> {
 
 // ---- files ----
 
-fn read_review(path: &Path) -> Result<ReviewFile> {
+pub(crate) fn read_review(path: &Path) -> Result<ReviewFile> {
     let bytes = std::fs::read(path)?;
     Ok(ReviewFile::decode(&bytes)?)
 }
@@ -1554,7 +1554,7 @@ fn merge(svc: &mut Service, file: &ReviewFile, ep: &str, via: ArrivalVia) -> Res
     Ok(got)
 }
 
-fn is_review_file(p: &Path) -> bool {
+pub(crate) fn is_review_file(p: &Path) -> bool {
     p.is_file()
         && p.extension().and_then(|e| e.to_str()) == Some(ext())
         && p.file_name()
@@ -1657,8 +1657,19 @@ fn archive(svc: &Service, from: &Path) -> Result<Option<PathBuf>> {
 
 /// Add review: the same file and the same merge as the shared folder, by hand.
 pub fn add_review(svc: &mut Service, p: AddReviewP) -> Result<Value> {
+    let file = read_review(Path::new(&p.path))?;
+    add_read(svc, &file, &p, true)
+}
+
+/// Add review of a file already read. `keep` archives it: a file about several episodes goes
+/// after the last of them.
+pub(crate) fn add_read(
+    svc: &mut Service,
+    file: &ReviewFile,
+    p: &AddReviewP,
+    keep: bool,
+) -> Result<Value> {
     let path = PathBuf::from(&p.path);
-    let file = read_review(&path)?;
     let ep = episode_id(svc.bus.store())?;
     let own = file.manifest.episodes.iter().any(|e| e.id == ep);
     let read_as = if own {
@@ -1697,14 +1708,14 @@ pub fn add_review(svc: &mut Service, p: AddReviewP) -> Result<Value> {
         })
         .map(|r| format!("round {}", r.number))
         .collect();
-    let m = merge(svc, &file, &read_as, ArrivalVia::File)?;
+    let m = merge(svc, file, &read_as, ArrivalVia::File)?;
     let ids: HashSet<&str> = file.events.iter().map(|e| e.note.as_str()).collect();
     let notes = all_notes(svc);
     let detached = notes
         .iter()
         .filter(|n| ids.contains(n.id.as_str()) && n.detached)
         .count();
-    let archived = archive(svc, &path)?;
+    let archived = if keep { archive(svc, &path)? } else { None };
     let notice = (!lost.is_empty() || detached > 0).then(|| {
         let cut = if lost.is_empty() {
             String::new()

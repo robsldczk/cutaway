@@ -185,6 +185,15 @@ pub enum Cmd {
         #[command(subcommand)]
         cmd: ShowCmd,
     },
+    /// What the welcome screen shows for these episodes and show folders.
+    Shelf {
+        paths: Vec<PathBuf>,
+    },
+    /// Set the cover of a show or an episode (stored as Cover.jpg in its folder).
+    Cover {
+        target: PathBuf,
+        image: PathBuf,
+    },
     /// Create an episode (inside a show with --show).
     New {
         name: String,
@@ -937,6 +946,22 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                     )
                 }
             }
+        }
+        Cmd::Shelf { paths } => {
+            let recents: Vec<Value> = paths
+                .iter()
+                .map(|p| json!({ "path": s(p), "show": apc_app::welcome::is_show_path(p) }))
+                .collect();
+            let mut sess = Session::new("cli");
+            call(&mut sess, "welcome_view", json!({ "recents": recents }))
+        }
+        Cmd::Cover { target, image } => {
+            let mut sess = Session::new("cli");
+            call(
+                &mut sess,
+                "set_cover",
+                json!({ "target": s(target), "image": s(image) }),
+            )
         }
         Cmd::New { name, show, parent } => {
             let mut sess = Session::new("cli");

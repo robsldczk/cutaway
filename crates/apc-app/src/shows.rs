@@ -53,10 +53,11 @@ pub fn view(show: &Show, open: Option<&Service>) -> Value {
 
 /// The backdrop as a data URL (the UI has no file access).
 pub fn backdrop(show: &Show) -> Result<Value> {
-    let Some(rel) = &show.data.theme.backdrop else {
+    let set = show.data.theme.backdrop.as_ref().map(|b| show.root.join(b));
+    // a show with a cover and no backdrop of its own wears its cover
+    let Some(p) = set.or_else(|| crate::welcome::show_cover(show)) else {
         return Ok(json!({ "url": null }));
     };
-    let p = show.root.join(rel);
     let Ok(bytes) = std::fs::read(&p) else {
         return Ok(json!({ "url": null }));
     };

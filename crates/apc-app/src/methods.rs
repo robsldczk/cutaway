@@ -68,6 +68,9 @@ pub struct CreateShowP {
     /// The show's name (defaults to the folder's).
     #[serde(default)]
     pub name: Option<String>,
+    /// Leave it closed: the welcome screen makes a show without going into it.
+    #[serde(default = "yes")]
+    pub open: bool,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -111,6 +114,9 @@ pub struct CreateEpisodeP {
     /// Show folder or show file.
     #[serde(default)]
     pub show: Option<String>,
+    /// Leave it closed: the welcome screen makes an episode without going into it.
+    #[serde(default = "yes")]
+    pub open: bool,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -985,6 +991,10 @@ macro_rules! registry {
 
 registry! {
     "create_show", CreateShowP, Write, true, "Make a folder a show (studio mode): writes <root>/<name>.cutawayshow next to the production's files and adds Episodes/ and Sound/{sfx,music}/ when missing. Nothing that exists is touched. Opens the show.";
+    "welcome_view", crate::welcome::WelcomeViewP, Read, true, "What the welcome screen shows for a list of recent items: each episode's stage, last edit, open notes and cover, and the shows they belong to with all their episodes. Read from the files; nothing is opened or written.";
+    "cover_image", crate::welcome::CoverImageP, Read, false, "An image on disk as a data URL, scaled to at most px.";
+    "set_cover", crate::welcome::SetCoverP, Write, true, "Set the cover of a show or an episode: stored as Cover.jpg in its folder, so it travels with the project. A show with no colours yet takes them from it.";
+    "add_review_to", crate::welcome::ShelfReviewP, Write, true, "Add a .cutawayreview file to the episodes it belongs to, found among the recent items and their shows, without leaving them open.";
     "open_show", ShowPathP, Read, true, "Open a show (its folder or .cutawayshow file): its episodes, library and theme. Then open_episode.";
     "show_view", NoParams, Read, true, "The open show: name, folders, episodes (number, title, has a project) and theme.";
     "show_backdrop", NoParams, Read, false, "The show's backdrop image as a data URL, with its theme colours.";
@@ -2064,7 +2074,8 @@ impl Service {
             "rescan_library" => crate::studio::rescan(self),
             "create_show" | "create_episode" | "open_project" | "create_demo" | "open_show"
             | "show_view" | "show_backdrop" | "set_show_backdrop" | "open_episode" | "close_show"
-            | "migrate_episode" => {
+            | "migrate_episode" | "welcome_view" | "cover_image" | "set_cover"
+            | "add_review_to" => {
                 Err(AppError::Other(format!("{name} is handled by the session")))
             }
             other => Err(AppError::UnknownMethod(other.into())),
@@ -2168,6 +2179,8 @@ pub struct Session {
     show_jobs: crate::jobs::Jobs,
     /// Opened for review: episodes open read-only, from the show's home too.
     review: bool,
+    /// What the welcome screen has read.
+    shelf: crate::welcome::Shelf,
 }
 
 impl Session {
@@ -2178,6 +2191,7 @@ impl Session {
             client: client.to_string(),
             show_jobs: Default::default(),
             review: false,
+            shelf: Default::default(),
         }
     }
 
@@ -2187,10 +2201,7 @@ impl Session {
             svc.close()?;
         }
         self.service = None;
-        let is_show = path.extension().and_then(|e| e.to_str()) == Some(apc_core::brand::SHOW_EXT)
-            || (path.is_dir()
-                && apc_core::project::find_episode_file(path).is_err()
-                && apc_core::show::Show::open(path).is_ok());
+        let is_show = crate::welcome::is_show_path(path);
         self.review = true;
         if is_show {
             let show = apc_core::show::Show::open(path)?;
@@ -2221,10 +2232,7 @@ impl Session {
     /// Opens an episode file or folder, or a show folder or file.
     pub fn with_project(path: &Path, client: &str) -> Result<Self> {
         let mut s = Session::new(client);
-        let is_show = path.extension().and_then(|e| e.to_str()) == Some(apc_core::brand::SHOW_EXT)
-            || (path.is_dir()
-                && apc_core::project::find_episode_file(path).is_err()
-                && apc_core::show::Show::open(path).is_ok());
+        let is_show = crate::welcome::is_show_path(path);
         if is_show {
             s.show = Some(apc_core::show::Show::open(path)?);
         } else {
@@ -2324,10 +2332,28 @@ impl Session {
                     _ => return Err(AppError::Params("give root (or parent and name)".into())),
                 };
                 let show = apc_core::show::Show::create(&root, p.name.as_deref())?;
+                if !p.open {
+                    return Ok(crate::shows::view(&show, None));
+                }
                 self.close_episode_outside(&show.root)?;
                 let v = crate::shows::view(&show, self.service.as_ref());
                 self.show = Some(show);
                 Ok(v)
+            }
+            "welcome_view" => {
+                let p: crate::welcome::WelcomeViewP = parse(params)?;
+                Ok(serde_json::to_value(self.shelf.view(&p.recents))?)
+            }
+            "cover_image" => crate::welcome::cover_image(&parse(params)?),
+            "set_cover" => crate::welcome::set_cover(&parse(params)?),
+            "add_review_to" => {
+                if self.service.is_some() {
+                    return Err(AppError::Params(
+                        "an episode is open: use add_review on it".into(),
+                    ));
+                }
+                let p: crate::welcome::ShelfReviewP = parse(params)?;
+                crate::welcome::add_review(&mut self.shelf, &p, &self.client)
             }
             "open_show" => {
                 let p: ShowPathP = parse(params)?;
@@ -2410,6 +2436,12 @@ impl Session {
                     p.show.as_deref().map(Path::new),
                     &self.client,
                 )?;
+                if !p.open {
+                    let mut svc = svc;
+                    let file = svc.paths.file.to_string_lossy().into_owned();
+                    svc.close()?;
+                    return Ok(json!({ "file": file }));
+                }
                 self.open_service(svc)
             }
             "create_demo" => {

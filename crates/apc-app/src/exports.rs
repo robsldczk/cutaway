@@ -91,6 +91,19 @@ fn history(paths: &EpisodePaths, ep: EpisodeTag) -> History {
     History::new(records)
 }
 
+/// Has anything of this episode been exported, in either destination?
+pub fn any_export(paths: &EpisodePaths, name: &str) -> bool {
+    !versions::scan(&paths.exports).is_empty()
+        || paths
+            .show
+            .as_ref()
+            .and_then(Show::pipeline_dir)
+            .is_some_and(|d| {
+                let ep = episode_tag(name, paths);
+                !versions::scan(&exports_in(&d).join(ep.folder())).is_empty()
+            })
+}
+
 /// Every version of the open episode.
 pub fn episode_history(svc: &Service) -> History {
     history(&svc.paths, episode_tag(&svc.name(), &svc.paths))
