@@ -25,6 +25,31 @@ pub fn voice_send(wet: f64) -> f64 {
     gain(VOICE_SEND_MIN_DB + (VOICE_SEND_MAX_DB - VOICE_SEND_MIN_DB) * wet.min(1.0))
 }
 
+/// How far back a hard-panned voice goes with its setting at full, on the depth scale. Small on
+/// purpose: at the default of half that's 1.4 dB less direct sound and 1.8 dB more room.
+const PAN_BACK_FULL: f64 = 0.2;
+
+/// How far back a voice sits for its pan and `amount` (0 … 1). Squared, so it stays close around
+/// the centre and only the sides go back.
+fn pan_back(pan: f64, amount: f64) -> f64 {
+    if !pan.is_finite() || !amount.is_finite() {
+        return 0.0;
+    }
+    amount.clamp(0.0, 1.0) * PAN_BACK_FULL * pan.clamp(-1.0, 1.0).powi(2)
+}
+
+/// A voice in the room: its send for its wet setting, moved back along the depth curve the further
+/// it's panned. In the centre that's `voice_send` alone, and full level and brightness.
+pub fn voice_mix(wet: f64, pan: f64, amount: f64) -> DepthMix {
+    let close = depth_mix(0.0);
+    let back = depth_mix(pan_back(pan, amount));
+    DepthMix {
+        dry_gain: back.dry_gain,
+        send_gain: voice_send(wet) * back.send_gain / close.send_gain,
+        lowpass_hz: back.lowpass_hz,
+    }
+}
+
 /// What a depth does to a sound.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DepthMix {
@@ -66,6 +91,45 @@ mod tests {
         let a_little = voice_send(0.25);
         assert!(a_little > 0.0 && a_little < depth_mix(0.0).send_gain);
         assert!(voice_send(1.0) > a_little);
+    }
+
+    #[test]
+    fn a_centred_voice_is_exactly_what_it_was() {
+        let m = voice_mix(0.25, 0.0, 1.0);
+        assert_eq!(m.send_gain, voice_send(0.25));
+        assert_eq!((m.dry_gain, m.lowpass_hz), (1.0, LOWPASS_OPEN_HZ));
+    }
+
+    #[test]
+    fn a_panned_voice_goes_back_a_little_and_the_same_on_both_sides() {
+        let (centre, side) = (voice_mix(0.25, 0.0, 0.5), voice_mix(0.25, -1.0, 0.5));
+        assert!(side.send_gain > centre.send_gain, "more room");
+        assert!(side.dry_gain < centre.dry_gain, "less direct sound");
+        assert!(side.lowpass_hz < centre.lowpass_hz, "softer highs");
+        assert_eq!(side, voice_mix(0.25, 1.0, 0.5));
+        let db = |x: f64| 20.0 * x.log10();
+        assert!((db(side.dry_gain) + 1.4).abs() < 0.01, "only a touch");
+        assert!((db(side.send_gain / centre.send_gain) - 1.8).abs() < 0.01);
+    }
+
+    #[test]
+    fn the_sides_go_back_and_the_middle_hardly_does() {
+        let drop = |pan| 1.0 - voice_mix(0.25, pan, 1.0).dry_gain;
+        assert!(drop(0.25) < drop(1.0) / 10.0);
+        let mut last = voice_mix(0.25, 0.0, 1.0);
+        for i in 1..=100 {
+            let m = voice_mix(0.25, i as f64 / 100.0, 1.0);
+            assert!(m.send_gain > last.send_gain && m.dry_gain < last.dry_gain);
+            last = m;
+        }
+    }
+
+    #[test]
+    fn the_setting_scales_it_and_off_is_off() {
+        assert_eq!(voice_mix(0.25, 1.0, 0.0), voice_mix(0.25, 0.0, 0.0));
+        assert!(voice_mix(0.25, 1.0, 1.0).send_gain > voice_mix(0.25, 1.0, 0.5).send_gain);
+        assert_eq!(voice_mix(0.25, f64::NAN, 0.5), voice_mix(0.25, 0.0, 0.5));
+        assert_eq!(voice_mix(0.25, 1.0, 9.0), voice_mix(0.25, 1.0, 1.0));
     }
 
     #[test]

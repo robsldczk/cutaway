@@ -2025,6 +2025,7 @@ impl Service {
             "handle_in_ms": self.config().pacing.handle_in_ms,
             "handle_out_ms": self.config().pacing.handle_out_ms,
             "edge_fade_ms": self.config().pacing.edge_fade_ms,
+            "pan_room": self.config().pacing.pan_room,
             "ai_warning": ai_warning,
             "jobs": self.jobs.list(),
         }))

@@ -149,13 +149,26 @@ pub fn apply_lane_mix(doc: &Document, clips: &mut Vec<ScheduledClip>) {
     }
 }
 
-/// A voice in its scene's room: the direct sound untouched, plus the character's send.
-fn voice_space(doc: &Document, character: Option<&str>) -> Option<ClipSpace> {
-    let send_gain = crate::depth::voice_send(doc.characters.get(character?)?.wet);
-    (send_gain > 0.0).then_some(ClipSpace {
-        dry_gain: 1.0,
-        send_gain,
-        lowpass_hz: crate::depth::LOWPASS_OPEN_HZ,
+/// A voice in its scene's room: the character's send, and the further it's panned, a little
+/// further back. In the centre the direct sound is untouched. A voice at wet 0 stays out of the
+/// room however it's panned. `pan` is what's set in the scene; the lane's own pan counts too.
+fn voice_space(
+    doc: &Document,
+    character: Option<&str>,
+    pan: f64,
+    pacing: &Pacing,
+) -> Option<ClipSpace> {
+    let id = character?;
+    let lane = doc.lane_mix.get(id).map_or(0.0, |m| m.pan);
+    let m = crate::depth::voice_mix(
+        doc.characters.get(id)?.wet,
+        (pan + lane).clamp(-1.0, 1.0),
+        pacing.pan_room,
+    );
+    (m.send_gain > 0.0).then_some(ClipSpace {
+        dry_gain: m.dry_gain,
+        send_gain: m.send_gain,
+        lowpass_hz: m.lowpass_hz,
     })
 }
 
@@ -167,13 +180,14 @@ impl PlaySchedule {
         settings: &MixSettings,
     ) -> Self {
         let layout = layout_scene(doc, scene, pacing);
-        Self::from_layout(doc, scene, &layout, settings)
+        Self::from_layout(doc, scene, &layout, pacing, settings)
     }
 
     pub fn from_layout(
         doc: &Document,
         scene: &Scene,
         layout: &SceneLayout,
+        pacing: &Pacing,
         settings: &MixSettings,
     ) -> Self {
         let levels = if settings.level {
@@ -190,6 +204,7 @@ impl PlaySchedule {
         };
         let mut clips = Vec::new();
         for item in &layout.items {
+            let voice = item.character.as_deref().map_or(0.0, |c| scene.pan_of(c));
             // muted parts keep their time but are not heard; handles are
             for p in item.audio.iter().filter(|p| !p.muted) {
                 clips.push(ScheduledClip {
@@ -202,10 +217,10 @@ impl PlaySchedule {
                     fade_out_s: p.fade_out_s,
                     lane: item.character.clone().unwrap_or_else(|| "dialogue".into()),
                     loop_len_s: None,
-                    pan: item.character.as_deref().map_or(0.0, |c| scene.pan_of(c)),
+                    pan: voice,
                     linear_fade: false,
                     owner: item.item_id.clone(),
-                    space: voice_space(doc, item.character.as_deref()),
+                    space: voice_space(doc, item.character.as_deref(), voice, pacing),
                 });
             }
         }
@@ -221,6 +236,13 @@ impl PlaySchedule {
                 .filter(|p| p.scene_id == scene.id && !p.muted)
             {
                 let start = placement_start(layout, p);
+                // an actor's breath stands where the actor does
+                let pan = (p.pan
+                    + p.character
+                        .as_deref()
+                        .filter(|_| p.lane == Lane::Dialogue)
+                        .map_or(0.0, |c| scene.pan_of(c)))
+                .clamp(-1.0, 1.0);
                 let space = if p.in_room() {
                     let m = depth_mix(p.depth);
                     Some(ClipSpace {
@@ -230,7 +252,7 @@ impl PlaySchedule {
                     })
                 } else if p.lane == Lane::Dialogue {
                     // an actor's breath sits in the room with their lines
-                    voice_space(doc, p.character.as_deref())
+                    voice_space(doc, p.character.as_deref(), pan, pacing)
                 } else {
                     None
                 };
@@ -255,13 +277,7 @@ impl PlaySchedule {
                         Lane::Dialogue => p.character.clone().unwrap_or_else(|| "dialogue".into()),
                     },
                     loop_len_s: file_end.map(|_| p.len_s),
-                    // an actor's breath stands where the actor does
-                    pan: (p.pan
-                        + p.character
-                            .as_deref()
-                            .filter(|_| p.lane == Lane::Dialogue)
-                            .map_or(0.0, |c| scene.pan_of(c)))
-                    .clamp(-1.0, 1.0),
+                    pan,
                     linear_fade: false,
                     owner: p.id.clone(),
                     space,
@@ -542,6 +558,39 @@ mod tests {
             },
         );
         assert_eq!(pan_of(&doc, &scene), 0.5);
+    }
+
+    #[test]
+    fn a_panned_voice_sits_further_back_and_the_setting_turns_it_off() {
+        let (mut doc, mut scene) = sample_doc();
+        doc.characters.insert(
+            "PAUL".into(),
+            serde_json::from_value(serde_json::json!({
+                "id": "PAUL", "label": "Paul", "color_index": 0, "wet": 0.25,
+            }))
+            .unwrap(),
+        );
+        let space_of = |scene: &Scene, pacing: &Pacing| {
+            PlaySchedule::from_scene(&doc, scene, pacing, &MixSettings::default()).clips[0]
+                .space
+                .unwrap()
+        };
+        let centre = space_of(&scene, &flat());
+        assert_eq!(centre.dry_gain, 1.0);
+
+        scene.voice_pan.insert("PAUL".into(), -1.0);
+        let side = space_of(&scene, &flat());
+        assert!(side.dry_gain < centre.dry_gain && side.send_gain > centre.send_gain);
+
+        let off = Pacing {
+            pan_room: 0.0,
+            ..flat()
+        };
+        let plain = space_of(&scene, &off);
+        assert_eq!(
+            (plain.dry_gain, plain.send_gain),
+            (centre.dry_gain, centre.send_gain)
+        );
     }
 
     #[test]

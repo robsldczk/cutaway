@@ -262,6 +262,8 @@ export interface Status {
   handle_in_ms: number;
   handle_out_ms: number;
   edge_fade_ms: number;
+  /** How much a panned voice goes back into the room, 0 … 1. */
+  pan_room: number;
   jobs: Job[];
   /** The show the episode lives in (studio mode), or null for a standalone episode. */
   show: { name: string; root: string; episode: string | null; colors: string[] } | null;

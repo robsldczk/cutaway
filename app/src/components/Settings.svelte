@@ -12,6 +12,7 @@
   let leadIn = $state(app.status?.handle_in_ms ?? 100);
   let tail = $state(app.status?.handle_out_ms ?? 150);
   let edgeFade = $state(app.status?.edge_fade_ms ?? 20);
+  let panRoom = $state(Math.round((app.status?.pan_room ?? 0.5) * 100));
 
   async function setBreath() {
     await app.method('set_config', { key: 'pacing.breath_gap_s', value: +breath });
@@ -61,6 +62,9 @@
     <label for="edgefade">Edge fade</label>
     <div class="ctl"><input id="edgefade" type="range" min="1" max="100" step="1" bind:value={edgeFade} onchange={() => setPacing('edge_fade_ms', edgeFade)} data-testid="edge-fade" /><span class="val">{edgeFade} ms</span></div>
     <span class="hint2">Fades every line in and out over this long, at the outer edge of its lead-in and tail. Longer is softer.</span>
+    <label for="panroom">Pan into the room</label>
+    <div class="ctl"><input id="panroom" type="range" min="0" max="100" step="1" bind:value={panRoom} onchange={() => setPacing('pan_room', panRoom / 100)} data-testid="pan-room-setting" /><span class="val">{panRoom} %</span></div>
+    <span class="hint2">How far a voice panned to the side goes back into the room: a little less direct sound, a little more room. Around the centre it stays dry. Heard and exported.</span>
     <span class="lab">Playback level</span>
     <div class="ctl">
       <label class="chk"><input type="checkbox" checked={app.status?.playback_level ?? true} onchange={(e) => level((e.currentTarget as HTMLInputElement).checked)} data-testid="playback-level" /> level recordings and limit loud peaks</label>

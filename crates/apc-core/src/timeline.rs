@@ -29,6 +29,10 @@ pub struct Pacing {
     pub handle_in_s: f64,
     #[serde(default)]
     pub handle_out_s: f64,
+    /// How much a voice panned away from the centre goes back into the room, 0 not at all … 1
+    /// (heard only: nothing in the layout depends on it).
+    #[serde(default)]
+    pub pan_room: f64,
 }
 
 impl Default for Pacing {
@@ -39,6 +43,7 @@ impl Default for Pacing {
             edge_fade_s: 0.020,
             handle_in_s: 0.100,
             handle_out_s: 0.150,
+            pan_room: crate::config::DEFAULT_PAN_ROOM,
         }
     }
 }

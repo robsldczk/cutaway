@@ -84,3 +84,16 @@ test('pan: a scene takes the room’s value until it gets its own, and goes back
   await expect(pop).toBeHidden();
   await expect(page.getByTestId('pan-button')).toBeFocused();
 });
+
+test('pan: how far a panned voice goes back into the room is a setting', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('current-box')).toBeVisible();
+  const status = () => rpc<{ pan_room: number }>('project_status');
+  expect((await status()).pan_room).toBe(0.5);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const slider = page.getByTestId('pan-room-setting');
+  await setSlider(slider, 20);
+  await expect.poll(async () => (await status()).pan_room).toBe(0.2);
+  await setSlider(slider, 50);
+  await expect.poll(async () => (await status()).pan_room).toBe(0.5);
+});

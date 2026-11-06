@@ -712,7 +712,7 @@ Seven requests from one list, in this order. Decisions in `DECISIONS.md`.
 - [x] Glue: a sound hangs on the moment it was put, Snap only decides where it lands; a switch per sound turns it off (D123)
 - [x] Opened sound: a scrubber that plays the sound alone, I and O trim to it, Enter closes (D124)
 - [ ] Side by side: drag a line next to another on Arrange, two at most, the second can be offset (D125)
-- [ ] A panned voice sits a little further back in the room, with a sensitivity in Settings (D126)
+- [x] A panned voice sits a little further back in the room, with a sensitivity in Settings (D126)
 
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated

@@ -949,3 +949,13 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **I and O** set the sound's in and out at the scrubber, one undo step each, through the same rules as the handles. Glue stays, with a new offset, as with any start trimmed off a target (D82). A locked scene refuses them with a message.
 - **Enter closes,** as Esc does. A button reached with Tab still does what it says.
 
+### D126 A panned voice sits further back (Rob, 2026-11-06)
+- **Rob:** the left-right pan should move people the tiniest bit back into the room, and closer to the centre they're drier. Add the sensitivity to Settings.
+- **How:** panning moves the voice back along the same depth curve the sounds use (`depth::voice_mix`). Three things change together: less direct sound, more send to the room, and slightly softer highs. One curve, so sounds and voices go back in the same way.
+- **The amount:** a hard-panned voice goes back by up to 0.2 on the depth scale. At the default setting of 50 % that's 0.1: 1.4 dB less direct sound, 1.8 dB more room, and highs rolling off from about 16.6 kHz. At 100 %: 2.8 dB, 3.6 dB and 13.7 kHz. These are starting values, set for "the tiniest bit" and not yet listened to.
+- **Squared with the pan,** so the middle stays close and only the sides go back: at a quarter of the way out it's a sixteenth of the effect.
+- **The centre is untouched:** a voice at pan 0 gets the same numbers as before, so existing mixes without pans don't change. This reads "drier towards the centre" as the centre staying where the character's wet puts it, and the sides getting wetter. The other reading, drying the centre below that, would change every existing mix.
+- **Which pan counts:** the whole pan of the voice, the scene's or room's plus the lane's on Edit.
+- **A voice at wet 0** stays out of the room however it's panned, so D90's guarantee holds: nothing at wet 0 gets a send, or a change in tone.
+- **`pacing.pan_room`,** 0 to 1, Settings › Pan into the room. It's per episode like the other settings there, and 0 turns it off. Heard in playback, bounces and stems. It's in `Pacing` because that already reaches both, and it has no effect on timing.
+

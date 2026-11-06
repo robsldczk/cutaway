@@ -91,7 +91,12 @@ pub struct PacingConfig {
     pub handle_in_ms: f64,
     pub handle_out_ms: f64,
     pub room_tone: bool,
+    /// How much a voice panned away from the centre goes back into the room, 0 … 1 (D126).
+    pub pan_room: f64,
 }
+
+/// Half way: a hard-panned voice is just audibly further back.
+pub const DEFAULT_PAN_ROOM: f64 = 0.5;
 
 impl Default for PacingConfig {
     fn default() -> Self {
@@ -102,6 +107,7 @@ impl Default for PacingConfig {
             handle_in_ms: 100.0,
             handle_out_ms: 150.0,
             room_tone: true,
+            pan_room: DEFAULT_PAN_ROOM,
         }
     }
 }
@@ -416,6 +422,7 @@ impl ProjectConfig {
             edge_fade_s: self.pacing.edge_fade_ms.clamp(1.0, 500.0) / 1000.0,
             handle_in_s: self.pacing.handle_in_ms.clamp(0.0, 1000.0) / 1000.0,
             handle_out_s: self.pacing.handle_out_ms.clamp(0.0, 1000.0) / 1000.0,
+            pan_room: self.pacing.pan_room.clamp(0.0, 1.0),
         }
     }
 
