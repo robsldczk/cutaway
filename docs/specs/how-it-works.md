@@ -222,6 +222,7 @@ Inputs: Paul track, room track, Fountain script, plus sentence-level transcript 
 - **Micro-takes:** quick repeats of single words or half sentences create ambiguous takes.
 - **Notes during takes:** direction spoken while the actor is performing.
 - **Ad-libs:** lines that match no script line.
+  *Changed in implementation (D118):* an actor's small sounds aren't collected or cut by the analysis. They're added as takes or lines in the mapping editor.
 - **Script quirks:** proprietary Throughline extensions breaking the Fountain parse.
 
 ## Open items

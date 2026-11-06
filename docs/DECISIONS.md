@@ -198,6 +198,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Checked:** the TARMAC fixture without its transcript files, through the CLI release build: 31 takes on 8 lines, room sync +0.275 s, 2 picks, 1 min 28 s for 2 × 9 min on this Mac (Stage 0 with MacWhisper transcripts: 36 takes on 9 lines).
 
 ### D47 Character vocal buckets, filled by the analysis (Rob, 2026-11-01)
+*Removed by D118.*
 - **Choice:** the main analysis collects each actor's small sounds from their own mic and keeps them in that character's vocal bucket ("Paul · vocals"). Sources: interjections the recogniser heard outside takes (or the takes of a line that is only an interjection, like "Mh-hm…"), and sounds without words between takes that are louder in this mic than in the other actors' mics (+6 dB, not bleed). Tags: mhm, ah, whoa, laugh, effort, huh, sigh from the words; breath (≥ 6 dB under the voice, ≤ 1.5 s), effort (near voice level, ≤ 1.2 s; longer loud sounds without words are left out as probably untranscribed talk), panting (≥ 4 breaths at a steady pace) and running (≥ 6 short steps at a steady pace) from the level. Per character at most 8 of a word kind, 6 breaths, 4 panting and 4 running runs, the clearest first. Ordinary words are not interjections unless stretched ("of" ≠ "oof", "he" ≠ "hehe"); a hyphen split ("Mh" + "hm.") is one sound.
 - **Only the actor's recordings:** a vocal bucket refuses search, generation and keeping outside sounds. Cuts go to `Library/Vocals/<Character>/` as `recorded` assets with 80 ms before and 150 ms after the sound; the source files are untouched. Removing a vocal keeps it out of later analyses.
 - **Placement:** a vocal goes on its character's dialogue lane (`Lane::Dialogue` with the character), so it follows that lane's mute, solo and volume and exports on the actor's track; dropping it on an SFX lane puts it there. Any bucket sound can be dropped on a dialogue lane.
@@ -721,6 +722,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Now:** no labels under balls or merged groups. The selected sound shows on a tab growing out of the transport's top edge, in the transport's own material and curved into it, with its bucket's colour, bucket and length, or "3 sounds selected". It slides up from behind the edge and down again. Screen readers keep each ball's full label.
 
 ### D101 Character search in the bucket (Rob, 2026-11-04)
+*The bar and the drop are removed by D118. `search_performances` and what it finds stay, for the mapping editor (D104).*
 - **Rob:** bucket search gets a sound mode and a character mode. Character mode searches the performances for words or grunts: type "paul huh" and it shows where he might have done that, pre-clipped. Adjust the trim, drag it in.
 - **The bar:** Sounds and Characters switches above it, each with its own query, on the docked bucket (Arrange and Edit). The mode stays across pages. The first word or words are read as a name, by label or alias, with or without "The". With no name it searches everyone; a name alone lists that character's vocal sounds. Names show as chips until one is typed.
 - **What it searches:** the cached transcript of each actor's own mic, all of it, takes and between takes, across the episode. `search_performances`, a read method, so the CLI and MCP have it too. Nothing is stored.
@@ -734,6 +736,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **On Episode 2's transcripts** (a copy): "paul huh" gives 12, "paul grunt" 3, "paul breath" 332, the best 30 shown. Not listened to.
 
 ### D102 Adlibs have their own track (Rob, 2026-11-04)
+*Removed by D118.*
 - **Rob:** a character's adlib dragged out of a bucket is an adlib. It goes on an adlib track, and on Arrange it looks like a sound effect. It goes there and not somewhere else.
 - **`Lane::Adlib`:** one track for the whole cast, stacking in layers when adlibs overlap, as SFX does (`adlib1`, `adlib2` in the mixer). `Placement::character` keeps whose voice it is. It replaces the dialogue lane as a vocal's home (the placement part of the vocals decision) and D80's "vocal sounds stay on the Edit page".
 - **What counts as an adlib:** a sound kept in a character's vocal bucket, or a clip from the character search (D101).
@@ -884,3 +887,14 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Nothing to choose for the default:** Save to starts on Episode exports, and a folder is asked for only when the pipeline is picked. The popup no longer repeats `Ep02`.
 - **Versions already in `Exports/Ep02/` aren't counted:** the layout lasted hours and the only real export was deleted by hand.
 
+### D118 Vocal adlibs aren't sounds any more (Rob, 2026-11-06)
+- **Rob:** the vocal adlibs per person get exported into `Library/Vocals`. Remove having them as SFX, now that takes can go in between the script lines (D104).
+- **Gone:** the analysis no longer looks for vocals or cuts anything. Also gone: the vocal buckets ("Paul · vocals"), `Lane::Adlib` and the Adlibs lane on Edit, adlib balls on Arrange, `ADLIB` lanes and the `dialogue.Adlibs` role in FCPXML, the Adlibs stem, and the Sounds and Characters switch on the docked bucket with its drop (`place_from_bucket`'s `clip`). That drop was the other thing writing to `Library/Vocals`, and it could only make an adlib. Options: keep the search there and drop into a take, but the mapping editor already does that with the waveform in front of it.
+- **Stays:** `ScriptLine::adlib`, a line added by hand or from the unmatched bin. That's the replacement. `search_performances` stays too, with the grunt finder in `apc-analysis::vocals`: it's how a grunt with no words is found in the mapping editor. A sound dropped on a character's dialogue lane stays as well (D47): it's any bucket sound, nothing is cut for it.
+- **Older files, read around rather than rewritten:** no schema change, no migration.
+  - A placement with `"lane": "adlib"` reads as `Lane::Dialogue` with its character (a serde alias). It stays audible, on that character's lane, and now plays outside the room.
+  - A bucket row with a `character` isn't taken into the document. That's in `Document::put_value`, so a load, an undo and a backup all go through it.
+  - A `recorded` asset nothing uses is left out when a document loads, so the cuts don't fill Library and search. One placed, kept in a bucket or used as a room tone stays.
+  - Options: a schema 3 migration that deletes the rows. It'd be cleaner in the file, but it can't be taken back in Rob's production file, an older build couldn't open that file any more, and undo steps and backups would bring the rows back anyway.
+- **Left on disk:** files in `Library/Vocals` are never deleted by this. Nothing refers to the unused ones any more, so Rob can delete the folder by hand. On Episode 2 (a copy, read only) that's 188 cuts, 36 MB, in 7 buckets, none of them placed.
+- **Trade-off:** the dead rows stay in the `.cutaway` file. They're small, and a future migration can clear them.

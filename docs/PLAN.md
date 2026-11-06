@@ -665,6 +665,15 @@ Decisions: D102.
 - [x] Arrange: vocal buckets in the panel, adlibs as balls. Edit: an Adlibs lane.
 - [x] Tests, docs, RUN notes.
 
+### Vocal adlibs aren't sounds any more (Rob, 2026-11-06)
+
+Decisions: D118.
+
+- [x] The analysis stops collecting vocals; nothing writes to `Library/Vocals`.
+- [x] `Lane::Adlib`, the vocal buckets and the bucket's character search go, in the core, both exports and the UI.
+- [x] Older files read without them, with nothing rewritten.
+- [x] Tests, docs.
+
 ### Export page (Rob, 2026-11-05; `tasks/export-tab`, D108 onwards)
 
 Branch `export-tab` (worktree `../cutaway-export-tab`, because another session works in the main folder on `dev`). The handover and mockup are the brief; where they meet the app, the app wins and the conflict goes in DECISIONS.
@@ -768,3 +777,4 @@ The header folds into two or three rows over the page below about 1300 px, the E
 - 2026-11-05 `export-tab` fast-forwarded into `dev` and pushed. The pull request `dev` -> `main` is not opened: `gh` has no login on this machine. Rob opens it, or runs `gh auth login` and asks again.
 - 2026-11-05 Finder drops fixed (D115): a bucket called Ambience gave the filing sheet two chips with one key, which stopped it rendering. Found on a copy of the real Episode 2 in the real webview; the demo has no such bucket. Small windows (D116): the header and the Edit bar step down instead of folding, the scene rail fits itself with no scrollbar, the bucket is an overlay under 1100 px. Checked at six sizes in Playwright and at 900×600 in the real webview.
 - 2026-11-05 The default export goes straight into the episode's `Exports` (D117), with no `Ep02` level and no folder to choose. A custom folder makes its own `Exports/Ep02/`.
+- 2026-11-06 Vocal adlibs removed as sounds (D118): no vocal finder in the analysis, no vocal buckets, no Adlibs lane, no character search on the bucket. Adlibs are takes and added lines in the mapping editor. Older files read around what's left, and `Library/Vocals` stays on disk for Rob to delete.

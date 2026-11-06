@@ -107,7 +107,7 @@ TARMAC/                              show
   - the show's library in `Sound/sfx/` and `Sound/music/`, whose first-level folders are the buckets (*Changed in implementation, D74:* sounds also reach buckets by file name, loose SFX have a bucket of their own, and a confirmed clean up may move loose SFX into folders);
   - Cutaway's own files in `Sound/Cutaway/`: `backdrop.jpg`, and `library.json` with licences and provider ids.
 - **Library index:** the library is scanned, not registered, and the hash index is a local cache.
-- **Vocals** stay in the episode's own `Library/Vocals/`.
+- **Vocals** stay in the episode's own `Library/Vocals/`. *Changed in implementation (D118):* nothing is cut into it any more; an older episode's files stay until they're deleted by hand.
 - The SQLite show file and the `Library/{SFX,Ambience,Music}` show layout above are gone.
 
 - **Standalone episode:** an episode can also exist on its own without a show. It then keeps a local library in the same structure.
