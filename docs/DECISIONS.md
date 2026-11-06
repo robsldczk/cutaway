@@ -1077,3 +1077,12 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Loudness applies once, to the whole file,** so the scenes keep their balance. **Known and left as it is:** it's a gain, not a limiter (D110), so one loud peak anywhere holds back the whole episode. Episode 2 stops at −23.8 LUFS when −16 is asked for, and the page says so. Reaching −16 needs a limiter, or that peak turned down.
 - **In memory:** the whole mix is held once, about 1.4 GB an hour at 48 kHz in 32-bit floats. Episode 2's 9:22 peaked at 886 MB and took 28 s in a debug build.
 - **History** now lists the episode's versions too (`Ep. v004`), which it never showed: with no scene versions, the file would have had no Reveal.
+
+### D135 `_` separates, `-` holds together (Rob, 2026-11-06)
+- **Rob:** `Sc03_Colonels-Office`. Things that belong together get a hyphen, and separators are underscores. Replaces D132's `_` between words: `Sc03_Colonels_Office` couldn't say where the number ended and the place began, except by position.
+- **One rule for every name an export writes.** A part of a name is one `token`, its words joined by hyphens: `Sc01_Time-Spring-Command/v002_2026-11-06`, `E02_S03_v002_Dialogue_THE-COLONEL.wav`. So D132's "file names don't change" no longer holds for a character of two words, who was `THE_COLONEL` and read as two parts. Single-word names come out as they did.
+- **An apostrophe belongs to its word** in file names too (`O’BRIEN` is `OBRIEN`), which they had been breaking into two. Punctuation in a row is one hyphen, not several (`Dr. Who/2` is `Dr-Who-2`, it was `Dr__Who_2`).
+- **A file's character keeps its accents, a folder's place folds to ASCII,** as D132 decided. Rob's rule is about the separators.
+- **A sound's lane** lost the step that removed its underscores, since a token no longer has any.
+- **Older versions stay where they are,** as in D132. Rob exported all of Episode 2 at 12:29, before this, so the next export of a scene opens a second folder beside the first: `Sc03_Colonels_Office/v001…` and `Sc03_Colonels-Office/v002…`. History reads the manifests, so it lists both and the numbers carry on: checked on a copy of Episode 2.
+- **Out of reach, as before:** `Episodes/Episode 2/Sound/` above `Exports` is the show's own layout. Labels on screen (`Sc03 v002`) aren't file names and keep their space.

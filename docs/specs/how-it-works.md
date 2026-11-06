@@ -128,7 +128,7 @@ Rules:
 
 Comped or edited boxes export as several clips on the same role track, with crossfades.
 
-*Changed in implementation (D108–D114, D132, D134):* an export is a version folder per scene (`Exports/Sc02_Canteen/v003_2026-11-05/` in the episode's folder; `Exports/Ep02/Sc02_Canteen/…` in a pipeline folder, D117) with a manifest, never overwritten. Folder names are ASCII with no spaces. One file is the range as a single mix, in an episode version (`Exports/Episode/v004_2026-11-05/`), scene after scene with a 2 s pause. Stems are every track at the full length of the scene, from one render path, and add up to the mix. Loudness applies to the mix alone. An exported scene locks its timing in the command bus.
+*Changed in implementation (D108–D114, D132, D134, D135):* an export is a version folder per scene (`Exports/Sc02_Canteen/v003_2026-11-05/` in the episode's folder; `Exports/Ep02/Sc02_Canteen/…` in a pipeline folder, D117) with a manifest, never overwritten. Folder names are ASCII with no spaces; in every name an export writes, `_` separates the parts and `-` holds a part together (`Sc03_Colonels-Office`, `E02_S03_v002_Dialogue_THE-COLONEL.wav`). One file is the range as a single mix, in an episode version (`Exports/Episode/v004_2026-11-05/`), scene after scene with a 2 s pause. Stems are every track at the full length of the scene, from one render path, and add up to the mix. Loudness applies to the mix alone. An exported scene locks its timing in the command bus.
 
 ## Tech stack
 

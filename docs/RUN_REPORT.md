@@ -415,3 +415,24 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 2. **Sweep with the real mouse.** The test events can't show how a press across the boxes feels, or that WebKit starts no text selection on the way.
 3. **Listen to the joins.** The pause is 2 s of digital silence. It may want room tone, or another length.
 4. **Open the one file's FCPXML in Resolve** beside the WAV, and check they line up to the end.
+
+## Names: `_` separates, `-` holds together (2026-11-06, D135)
+
+**What changed**
+
+- Every name an export writes follows one rule: `Sc03_Colonels-Office/v002_2026-11-06`, `E02_S03_v002_Dialogue_THE-COLONEL.wav`.
+- Remembering the spot needed no work: D131 already does it. See the plan's log.
+
+**What wasn't done**
+
+- Older folders aren't renamed. Episode 2 has 12 scene folders in the old form from 12:29, so a scene exported again gets a second folder beside its first.
+
+**How it was verified**
+
+- `check.sh` green on its second run. The first stopped on `plays_and_reports_the_playhead` in `apc-audio`, at a load of 36: it waits on the wall clock for audio that runs on the device's, as the test fixed in `e96d35d` did. It passed 8 of 8 alone and has nothing to do with names. Left as it is.
+- Playwright's resume and export specs, 20 of 20.
+- On a copy of Episode 2: Scenes 1 and 3 exported with one file per character, into the new names, as v002 after the v001 in the old folders. History lists both.
+
+**Manual checks for Rob**
+
+1. **Decide about the 12 old folders:** keep them, or have them renamed. Their FCPXMLs point at the originals by default, but check before moving any.
