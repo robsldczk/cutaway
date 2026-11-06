@@ -320,3 +320,41 @@ From `tasks/export-tab`. Built on branch `export-tab` (worktree `../cutaway-expo
 3. **By hand in the real app:** a press of ⌘E, the native popups, Reveal in the Finder and Choose… for the folder. The test script can't send real keys or open native menus.
 4. **Export a scene of Episode 2,** and listen to the stems against the mix.
 5. **The open questions, answered as proposed:** gain and pan flag a scene rather than block it (2), versions per scene and episode only (3), lock after export on by default (4), MP3 for the mix only (5). Say if any should go the other way.
+
+## Arrange round (2026-11-06, D119–D126)
+
+**Built**
+
+| | |
+|---|---|
+| Scene marks | Right click on the rail: in progress, review, finished, or no mark. The mark is the cell's colour. |
+| Room chip | Off the Arrange transport. Room settings… is now in the pan pop-out. |
+| Directions | The block grows with its time from the first tenth of a second, and the edge stays under the mouse. |
+| Character pan | Pan icon in the Arrange transport. A value per room, a custom one per scene, an arrow back to the room's. |
+| Pan into the room | A panned voice sits a little further back. Settings › Pan into the room, 50 % by default. |
+| Glue | A sound hangs on the exact moment it was put, snapped or not. Glue in the opened sound turns it off for that sound. |
+| Opened sound | A scrubber, Space plays the sound alone, I and O trim to the scrubber, Enter closes. |
+| Side by side | Drag a line by its grip onto the right half of another. Two at most, with a draggable offset on the second. |
+
+All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP (`set_scene_status`, `set_beside`, `set_sound_glue`, `set_character_pan`, `scene_pans`).
+
+**Not built**
+
+- Sounds already pinned in a file aren't converted to glue (D123). They stay pinned until they're moved on Arrange or their Glue is turned on.
+- Audible scrubbing is stepped, restarting the sound at most every 90 ms. The preview player has no varispeed.
+- FCPXML carries no pan, so the pans reach stems and bounces but not Resolve through it.
+
+**How it was verified**
+
+- `check.sh` green. Playwright 156 of 156, three full runs in a row. New in `app/tests/arrange-round.spec.ts` and `sounds-layer.spec.ts`.
+- In the real app (WKWebView through Tauri, in-page mouse and key events, on a temp demo with audio off): the rail menu, the pan pop-out, the drag into a pair, the offset, the scrubber, Space, I, Glue and Enter.
+- The audio is tested as numbers: what `PlaySchedule` hands the mixer. **Nothing has been listened to, and nothing was run on Episode 2.**
+
+**Manual checks for Rob**
+
+1. **Listen to Pan into the room** at 0, 50 and 100 %. The numbers in D126 are starting values for "the tiniest bit".
+2. **A real right click and a real drag** in the app: the test events can't show whether the native menu stays away, or how the drag feels.
+3. **Scrub a sound by ear,** to judge the 90 ms steps on the real device.
+4. **Side by side on a real scene:** half a column is narrow beside the sounds, so check the cards read well with long lines.
+5. **Decide about Episode 2's pinned sounds** (D123): they can be glued in one undoable batch if you want that.
+
