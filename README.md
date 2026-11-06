@@ -6,14 +6,70 @@ The product name lives in `brand.json` (see `docs/specs/architecture.md`, *Namin
 
 ## Quick start
 
+### What you need
+
+| Tool | Version | Notes |
+|---|---|---|
+| Rust | Current stable, through [rustup](https://rustup.rs) | |
+| Node.js | 22 | Same as CI |
+| Tauri's system dependencies | | macOS: Xcode Command Line Tools (`xcode-select --install`). Windows: Microsoft C++ Build Tools and WebView2. See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) |
+
+Cutaway runs on macOS and Windows; CI builds and tests both. Linux is not a target.
+
+The first build needs a network connection: it downloads the Rust crates and the ONNX Runtime used for speech recognition.
+
+### Run the app
+
 ```sh
-scripts/check.sh                                  # fmt, clippy, tests, UI lint and typecheck
-cargo run -p apc-cli -- --help                    # the `cutaway` CLI
-cargo run -p apc-cli -- demo /tmp/cutaway-demo --analyze   # a synthetic session to play with
-cd app && npm install && npm run tauri dev        # the desktop app
+git clone https://github.com/robsldczk/cutaway.git
+cd cutaway/app
+npm install
+npm run tauri dev
 ```
 
-Headless pipeline on a real session:
+The first build compiles the whole Rust workspace, which takes about 2 minutes on a recent Apple Silicon Mac and longer on slower machines. Later builds are incremental.
+
+The app opens on the welcome screen. To try it without any recordings, click **Demo session** and choose a folder: it builds a synthetic episode, analyzes it and opens it. Once the welcome screen lists projects, the same option is at **Show → Demo Session…**.
+
+You can also make the demo from the command line and open it directly, from the repo root:
+
+```sh
+cargo run -p apc-cli -- demo /tmp/cutaway-demo --analyze
+cd app && CUTAWAY_PROJECT=/tmp/cutaway-demo/Demo/Demo.cutaway npm run tauri dev
+```
+
+Keep `--analyze`: without it the episode has no takes, and the take controls stay empty.
+
+### Optional extras
+
+The app runs without any of these. Each one adds a feature.
+
+| Extra | What it adds | Without it |
+|---|---|---|
+| [ffmpeg](https://ffmpeg.org) on your `PATH` | MP3 and FLAC exports | Exports are WAV only |
+| [Claude Code](https://claude.com/claude-code) (`claude` on your `PATH`) | AI notes, picks and spotting | Built-in rules. `CUTAWAY_AI_PROVIDER=mock` forces them |
+| Parakeet speech model (~490 MB) | Local transcription of your own recordings | Nothing to set up: it downloads once, the first time an analysis needs it. Files with `<audio>.json` transcript sidecars skip it, and the demo doesn't use it |
+| Epidemic Sound and ElevenLabs API keys | Sound search and generation | Those services stay off. Add keys in Settings → Connections, or set `EPIDEMIC_SOUND_API_KEY` and `ELEVENLABS_API_KEY` |
+
+### Check your setup
+
+```sh
+scripts/check.sh    # fmt, clippy, tests, UI lint and typecheck (on Windows, run it from Git Bash)
+```
+
+`fixtures/` holds unreleased production material and isn't in the repo, so a fresh clone has no test recordings. Tests that need them skip with a message.
+
+### Use it from the command line
+
+Build the `cutaway` CLI and put it on your `PATH`:
+
+```sh
+cargo build --release -p apc-cli
+export PATH="$PWD/target/release:$PATH"
+cutaway --help
+```
+
+On a real session:
 
 ```sh
 cutaway new Ep02 --parent ~/Shows               # or: cutaway show new TARMAC, then cutaway new Ep02 --show ~/Shows/TARMAC
@@ -26,9 +82,12 @@ cutaway report                                  # match report (Markdown)
 cutaway export fcpxml                           # Exports/Ep02.fcpxml for Resolve / Logic
 ```
 
-Local Parakeet transcription is behind a cargo feature: `cargo run -p apc-cli --features parakeet -- align` (downloads the model, ~490 MB, on first use). Without it, transcripts are read from `<audio>.json` sidecars next to each file.
+To build without speech recognition, and so without the ONNX Runtime download: `cargo build -p apc-cli --no-default-features`. Transcripts then come only from the `<audio>.json` sidecars.
 
-AI interpretation (notes, picks, spotting) uses the Claude Code CLI (`claude`) when it is installed, otherwise built-in rules. `CUTAWAY_AI_PROVIDER=mock` forces the rules.
+### If something goes wrong
+
+- **`cutaway` opens the desktop app instead of the CLI (macOS):** `tauri build` writes `Cutaway` into the same `target/` folder as the CLI's `cutaway`, and the default macOS disk ignores case. Run `rm target/debug/cutaway && cargo build -p apc-cli`, using `target/release` and `--release` if you built a release. `npm run tauri dev` doesn't cause this.
+- **The first build hangs or fails while fetching `sherpa-onnx`:** that's the ONNX Runtime download. Check your network and build again.
 
 ## Using Cutaway from Claude (MCP)
 
