@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Export page</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&amp;family=Figtree:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D12}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.glass{backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.09),inset 0 0 0 1px rgba(255,255,255,0.06),0 30px 80px rgba(0,0,0,0.45)}
+.mut{color:rgba(240,238,232,0.62)}
+.dim{color:rgba(240,238,232,0.42)}
+.tn{font-variant-numeric:tabular-nums}
+.tab{height:36px;padding:0 16px;border-radius:999px;font-size:13px;font-weight:500;color:rgba(240,238,232,0.68)}
+.tabon{background:rgba(240,238,232,0.92);color:#14161C;font-weight:600}
+.form{display:grid;grid-template-columns:132px minmax(0,1fr);column-gap:20px;row-gap:18px;align-items:start}
+.lab{font-size:13px;color:rgba(240,238,232,0.62);text-align:right;padding-top:7px}
+.seg{display:inline-flex;padding:2px;border-radius:9px;background:rgba(255,255,255,0.07)}
+.seg span{height:28px;padding:0 14px;border-radius:7px;display:inline-flex;align-items:center;font-size:13px;font-weight:500;color:rgba(240,238,232,0.7)}
+.seg span.on{background:rgba(255,255,255,0.2);color:#FFFFFF;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,0.3)}
+.pop{height:32px;padding:0 10px 0 12px;border-radius:8px;display:inline-flex;align-items:center;gap:10px;font-size:13px;font-weight:500;color:#F3F1EC;background:rgba(255,255,255,0.08);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08)}
+.pop svg{opacity:.6}
+.chip{height:28px;padding:0 8px 0 11px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#F3F1EC;background:rgba(255,255,255,0.08)}
+.chk{display:flex;align-items:center;gap:9px;font-size:13px;color:#F3F1EC;height:26px}
+.box{width:16px;height:16px;border-radius:5px;flex:none;display:flex;align-items:center;justify-content:center}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.cap{font-size:12px;color:rgba(240,238,232,0.5);line-height:1.45;margin-top:7px}
+.btn{height:34px;padding:0 16px;border-radius:9px;display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#F3F1EC;background:rgba(255,255,255,0.08)}
+.pri{background:#9A86E0;color:#16131F}
+.key{display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;background:rgba(22,19,31,0.16);font-size:10.5px;font-weight:600}
+.line{height:1px;background:rgba(255,255,255,0.07);grid-column:1 / -1}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; font-family: Figtree, system-ui, sans-serif; color: #F0EEE8; background: radial-gradient(ellipse 40% 45% at 50% 45%, rgba(46,58,110,0.3), transparent 70%), #0B0D12">
+
+<header style="position: absolute; top: 20px; left: 28px; right: 28px; display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: baseline; gap: 10px; font-size: 13px; width: 300px"><span style="font-weight: 600">TARMAC Ep. 2</span><span class="mut">Time Burrito</span></div>
+<nav aria-label="Pages" style="display: flex; padding: 4px; border-radius: 999px; background: rgba(255,255,255,0.05); box-shadow: inset 0 1px 0 rgba(255,255,255,0.09), inset 0 0 0 1px rgba(255,255,255,0.05)"><button class="tab">Options</button><button class="tab">Arrange</button><button class="tab">Edit</button><button class="tab tabon">Export</button></nav>
+<div style="width: 300px"></div>
+</header>
+
+<section class="glass" aria-label="Export" style="position: absolute; left: 400px; top: 92px; width: 640px; box-sizing: border-box; border-radius: 26px; background: rgba(22,24,31,0.8); padding: 30px 34px 26px">
+<div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 26px"><span style="font-size: 22px; font-weight: 700; letter-spacing: -0.01em">Export</span><span class="mut" style="font-size: 13px">TARMAC · Ep. 2 Time Burrito</span></div>
+
+<div class="form">
+<div class="lab">Range</div>
+<div>
+<div class="seg"><span>Whole episode</span><span class="on">Scenes</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px">
+<span class="chip"><span class="dim tn" style="font-weight: 500">Sc. 2</span>Canteen<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(240,238,232,0.55)" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></span>
+<span class="chip"><span class="dim tn" style="font-weight: 500">Sc. 3</span>Corridor<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(240,238,232,0.55)" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></span>
+<span class="chip" style="background: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14); color: rgba(240,238,232,0.7); padding: 0 11px">Add scene</span>
+</div>
+<div class="cap tn">2 of 6 scenes · 4:17 · Sc. 2 was exported yesterday as v002</div>
+<div class="chk" style="margin-top: 6px"><span class="box" style="background: #9A86E0"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#16131F" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span><span>Lock these scenes after export</span><span class="dim" style="font-size: 12px">timing can’t change</span></div>
+</div>
+
+<div class="line"></div>
+
+<div class="lab">Export as</div>
+<div>
+<span class="pop">Aligned stems<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9l5-5 5 5M7 15l5 5 5-5"></path></svg></span>
+<div style="display: flex; align-items: center; gap: 14px; margin-top: 10px">
+<svg width="64" height="40" viewBox="0 0 64 40" aria-hidden="true" style="flex: none"><path d="{{stack}}" stroke-width="3" stroke-linecap="round" fill="none" stroke="rgba(240,238,232,0.7)"></path><path d="M2 1 V39 M62 1 V39" stroke="rgba(154,134,224,0.9)" stroke-width="1.5" stroke-dasharray="2 2"></path></svg>
+<span class="cap" style="margin-top: 0">One file per track and scene, each from 0:00 to the end of the scene, so they line up when stacked. Other choices: individual clips, mix only, FCPXML only.</span>
+</div>
+</div>
+
+<div class="lab">Tracks</div>
+<div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px">
+<sc-for list="{{tracks}}" as="t" hint-placeholder-count="8"><div class="chk"><span class="box" style="{{t.boxS}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#16131F" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" style="{{t.tick}}" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span><span class="dot" style="{{t.dot}}"></span><span style="{{t.nameS}}">{{t.n}}</span><span class="dim" style="font-size: 12px">{{t.sub}}</span></div></sc-for>
+</div>
+<div class="cap">Voices and effects stay dry. Their room reverb goes to the two room tracks.</div>
+</div>
+
+<div class="line"></div>
+
+<div class="lab">Format</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<span class="pop">WAV · 48 kHz · 24-bit<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9l5-5 5 5M7 15l5 5 5-5"></path></svg></span>
+<span class="pop">Mix at −16 LUFS<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9l5-5 5 5M7 15l5 5 5-5"></path></svg></span>
+</div>
+
+<div class="lab">Also export</div>
+<div style="display: flex; flex-direction: column">
+<sc-for list="{{extras}}" as="t" hint-placeholder-count="3"><div class="chk"><span class="box" style="{{t.boxS}}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#16131F" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" style="{{t.tick}}" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span><span style="{{t.nameS}}">{{t.n}}</span><span class="dim" style="font-size: 12px">{{t.sub}}</span></div></sc-for>
+</div>
+
+<div class="lab">Save to</div>
+<div><span class="pop">Episode exports · Ep02<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9l5-5 5 5M7 15l5 5 5-5"></path></svg></span><div class="cap tn">Saved as Sc02 v003 and Sc03 v001. Versions count up on their own, nothing is overwritten.</div></div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 10px; margin-top: 28px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.07)">
+<span class="mut tn" style="font-size: 12.5px; flex: 1">18 files · about 780 MB</span>
+<button class="btn">Save preset</button>
+<button class="btn pri">Export <span class="key">⌘E</span></button>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+class Component extends DCLogic {
+  renderVals() {
+    function item(n, sub, dot, on) { return { n: n, sub: sub, dot: dot ? 'background: ' + dot : 'display: none', boxS: on ? 'background: #9A86E0' : 'box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.3)', tick: on ? '' : 'display: none', nameS: on ? 'color: #F3F1EC' : 'color: rgba(240,238,232,0.55)' }; }
+    var tracks = [
+      item('Dialogue', 'dry', '#F3F1EC', true), item('Room · voices', 'reverb', rgba([196, 186, 226], 1), true),
+      item('Effects', 'dry', rgba([216, 182, 87], 1), true), item('Room · effects', 'reverb', rgba([226, 206, 150], 1), true),
+      item('Ambience', '', rgba([142, 197, 240], 1), true), item('Music', '', rgba([127, 196, 160], 1), true),
+      item('Full mix', '', 'rgba(243,241,236,0.5)', true), item('Split dialogue', 'by character', null, false)
+    ];
+    var extras = [item('FCPXML', 'for Resolve and Logic', null, true), item('Subtitles', 'SRT', null, true), item('Cut list', 'CSV', null, false)];
+    var stack = '';
+    for (var i = 0; i < 7; i++) { var y = 3 + i * 5.6; stack += 'M6 ' + y.toFixed(1) + ' H58 '; }
+    return { tracks: tracks, extras: extras, stack: stack };
+  }
+}
+</script>
+</body>
+</html>

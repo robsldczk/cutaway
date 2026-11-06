@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Review · Who is reviewing</title>
+<script src="./vendor/react.js"></script>
+<script src="./vendor/react-dom.js"></script>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&amp;family=Figtree:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0D12}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.script{font-family:'Courier Prime','Courier New',monospace}
+.nm{font-weight:600;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.glass{backdrop-filter:blur(22px) saturate(140%);-webkit-backdrop-filter:blur(22px) saturate(140%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.09),inset 0 0 0 1px rgba(255,255,255,0.06),0 20px 60px rgba(0,0,0,0.4)}
+.mut{color:rgba(240,238,232,0.62)}
+.dim{color:rgba(240,238,232,0.42)}
+.ellip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tn{font-variant-numeric:tabular-nums}
+.key{display:inline-flex;align-items:center;height:19px;padding:0 5px;border-radius:5px;background:rgba(255,255,255,0.09);font-size:10.5px;font-weight:600;color:rgba(240,238,232,0.7);white-space:nowrap}
+.rv{height:24px;padding:0 10px;border-radius:999px;display:inline-flex;align-items:center;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(154,134,224,0.2);color:#C9BDF2;box-shadow:inset 0 0 0 1px rgba(154,134,224,0.5)}
+.schip{height:30px;padding:0 12px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:rgba(240,238,232,0.65)}
+.schip b{font-weight:600}
+.cnt{min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;background:rgba(154,134,224,0.85);color:#16131F;font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.av{width:26px;height:26px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:rgba(255,255,255,0.14);color:#F3F1EC}
+.btn{height:32px;padding:0 13px;border-radius:9px;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#F3F1EC;background:rgba(255,255,255,0.08)}
+.pri{background:#9A86E0;color:#16131F}
+.ctx{position:absolute;left:24px;right:24px;bottom:16px;height:76px;border-radius:22px;background:rgba(20,22,29,0.82);z-index:8}
+.play{position:absolute;left:16px;top:16px;width:44px;height:44px;border-radius:50%;background:#F3F1EC;color:#14161C;display:flex;align-items:center;justify-content:center}
+.map{position:absolute;left:206px;width:980px;top:14px;height:50px}
+.ovr{position:absolute;left:0;right:0;top:0;height:4px}
+.ovr i{position:absolute;top:0;height:4px;border-radius:2px}
+.chp{position:absolute;top:14px;height:34px;border-radius:9px;overflow:hidden;box-sizing:border-box}
+.chp span{position:absolute;left:8px;top:2px;font-size:10px;font-weight:700;letter-spacing:.06em;color:rgba(240,238,232,0.7)}
+.chp em{position:absolute;right:8px;top:2px;font-style:normal;font-size:10px;color:rgba(240,238,232,0.45)}
+.pin{position:absolute;top:6px;width:16px;height:16px;margin-left:-8px;border-radius:50% 50% 50% 2px;transform:rotate(-45deg);background:#9A86E0;box-shadow:0 0 0 2px #14161C;font-size:0}
+.ph{position:absolute;top:8px;bottom:-4px;width:2px;margin-left:-1px;background:#F3F1EC;box-shadow:0 0 8px rgba(243,241,236,0.8)}
+.side{position:absolute;right:24px;top:76px;width:384px;bottom:104px;box-sizing:border-box;border-radius:24px;background:rgba(20,22,29,0.78);display:flex;flex-direction:column;overflow:hidden}
+.cm{border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.tc{font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;background:rgba(154,134,224,0.18);color:#C9BDF2}
+.quote{font-family:'Courier Prime',monospace;font-size:12.5px;color:rgba(240,238,232,0.75);padding-left:9px}
+.tag{height:20px;padding:0 8px;border-radius:999px;display:inline-flex;align-items:center;font-size:11px;font-weight:600;background:rgba(255,255,255,0.07);color:rgba(240,238,232,0.7)}
+.chk{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center}
+.segc{display:inline-flex;padding:2px;border-radius:9px;background:rgba(255,255,255,0.07)}
+.segc span{height:24px;padding:0 10px;border-radius:7px;display:inline-flex;align-items:center;font-size:12px;font-weight:500;color:rgba(240,238,232,0.62)}
+.segc span.on{background:rgba(255,255,255,0.18);color:#FFFFFF;font-weight:600}
+.field{min-height:56px;border-radius:12px;padding:10px 12px;box-sizing:border-box;background:rgba(255,255,255,0.06);box-shadow:inset 0 0 0 1.5px rgba(154,134,224,0.7);font-size:13.5px;color:#F3F1EC}
+.caret{display:inline-block;width:1.5px;height:16px;background:#C9BDF2;vertical-align:-3px;margin-left:1px}
+.tagsel{height:24px;padding:0 9px;border-radius:999px;display:inline-flex;align-items:center;font-size:11.5px;font-weight:600;color:rgba(240,238,232,0.7);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.14)}
+
+.ghost{position:absolute;border-radius:15px;filter:blur(6px);opacity:.5}
+.sheet{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:500px;border-radius:26px;padding:28px;box-sizing:border-box;background:rgba(24,26,33,0.9)}
+.inp{height:46px;border-radius:12px;padding:0 14px;display:flex;align-items:center;box-sizing:border-box;background:rgba(255,255,255,0.07);box-shadow:inset 0 0 0 1.5px rgba(154,134,224,0.9);font-size:16px;font-weight:500}
+.rc{height:30px;padding:0 12px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:rgba(240,238,232,0.72);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.14)}
+.sc{height:28px;padding:0 10px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;background:rgba(154,134,224,0.16);color:#E4DDFA}
+</style>
+</helmet>
+<div style="position: relative; width: 1440px; height: 900px; overflow: hidden; font-family: Figtree, system-ui, sans-serif; color: #F0EEE8; background: radial-gradient(ellipse 40% 45% at 35% 45%, rgba(46,58,110,0.3), transparent 70%), #0B0D12">
+
+<sc-for list="{{ghosts}}" as="g" hint-placeholder-count="8"><div class="ghost" style="{{g.style}}"></div></sc-for>
+<div style="position: absolute; inset: 0; background: rgba(8,9,12,0.55)"></div>
+<section class="sheet glass" aria-label="Who is reviewing">
+<span class="rv">Review</span>
+<div style="font-size: 24px; font-weight: 700; letter-spacing: -0.01em; margin-top: 14px">Who’s reviewing?</div>
+<div class="mut" style="font-size: 13px; margin-top: 4px">Your notes carry this name, so Rob knows who asked for what.</div>
+<div class="nm dim" style="font-size: 10px; margin: 22px 0 8px">Name</div>
+<div class="inp">Anna Weber<span class="caret" style="height: 18px"></span></div>
+<div class="nm dim" style="font-size: 10px; margin: 18px 0 8px">Role</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="rc" style="background: rgba(255,255,255,0.18); color: #FFFFFF; box-shadow: none">Director</span><span class="rc">Producer</span><span class="rc">Writer</span><span class="rc">Actor</span><span class="rc">Client</span><span class="rc">Other</span></div>
+<div class="nm dim" style="font-size: 10px; margin: 18px 0 8px">Scenes in this review</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="sc">Sc. 2 Canteen</span><span class="sc">Sc. 3 Corridor</span><span class="sc">Sc. 5 Tarmac</span><span class="dim" style="font-size: 12px; align-self: center; margin-left: 4px">picked by Rob · cut v004</span></div>
+<div style="display: flex; align-items: center; gap: 9px; margin-top: 20px; font-size: 13px"><span style="width: 16px; height: 16px; border-radius: 5px; background: #9A86E0; display: flex; align-items: center; justify-content: center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#16131F" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Remember me on this computer</div>
+<div style="display: flex; align-items: center; gap: 10px; margin-top: 24px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,0.07)"><span class="dim" style="font-size: 12px; flex: 1">Last here: Jonas Brandt · Producer</span><button class="btn pri" style="height: 38px; padding: 0 16px">Start review <span class="key" style="background: rgba(22,19,31,0.16); color: #16131F">↩</span></button></div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function mkr(seed) { var a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) | 0; var t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+var CH = { Paul: [224, 138, 90], Sara: [94, 184, 176], Norbert: [157, 180, 106], Colonel: [160, 143, 208] };
+var NOTE = [154, 134, 224];
+var DUR = 72, NOW = 46.0;
+var LINES = [
+  { who: 'Paul', t0: 14.0, t1: 18.9, text: 'I put this in the time spring two weeks ago.' },
+  { who: 'Norbert', t0: 20.1, t1: 22.0, text: '…you sure you wanna eat that?' },
+  { who: 'Paul', t0: 23.0, t1: 29.6, text: 'Two weeks elapsed for US, but for this burrito, the transfer was instant.' },
+  { who: 'Paul', t0: 30.8, t1: 34.4, text: 'That’s just time slop. Non-toxic.' },
+  { who: 'Norbert', t0: 41.0, t1: 41.9, text: '…and?' },
+  { who: 'Paul', t0: 44.2, t1: 49.8, text: 'Mh-hm… mh-hm. The first time burrito is EDIBLE!' },
+  { who: 'Colonel', t0: 50.3, t1: 50.9, text: 'Ha!' },
+  { who: 'Sara', t0: 53.5, t1: 59.6, text: 'Paul, this is huge. We can send things besides nuclear waste through time.' }
+];
+var NOTES = [
+  { n: 1, who: 'Anna Weber', ini: 'AW', role: 'Director', a: 16.9, b: 18.9, line: 0, w0: 7, w1: 9, text: 'Take 3 had more surprise here. Can we try it?', tag: 'Performance', open: true, reply: { who: 'Rob', ini: 'RS', text: 'Swapped to take 3. Have a listen.' } },
+  { n: 2, who: 'Anna Weber', ini: 'AW', role: 'Director', a: 29.8, b: null, line: 2, w0: 12, w1: 12, text: 'This pause feels too long.', tag: 'Timing', open: true },
+  { n: 3, who: 'Jonas Brandt', ini: 'JB', role: 'Producer', a: 32.6, b: 34.4, line: 3, w0: 4, w1: 4, text: 'Needs a squelch under this. The burrito sound.', tag: 'Sound', open: true },
+  { n: 4, who: 'Jonas Brandt', ini: 'JB', role: 'Producer', a: 41.4, b: null, line: 4, w0: 0, w1: 0, text: 'Love this read. Keep it.', tag: 'Performance', open: false },
+  { n: 5, who: 'Anna Weber', ini: 'AW', role: 'Director', a: 53.5, b: 59.6, line: 7, w0: 0, w1: 12, text: 'Music sting could come in on “huge”.', tag: 'Music', open: true }
+];
+var DRAFT = { a: 48.6, b: 49.8, line: 5, w0: 7, w1: 7 };
+var SCENES = [['Sc. 1', 'Hangar', 161, false, 0], ['Sc. 2', 'Canteen', 72, true, 5], ['Sc. 3', 'Corridor', 65, true, 2], ['Sc. 4', 'Lab', 260, false, 0], ['Sc. 5', 'Tarmac', 178, true, 1], ['Sc. 6', 'Hangar, night', 107, false, 0]];
+function fmt(t) { var m = Math.floor(t / 60), s = t - m * 60; return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s.toFixed(1); }
+function words(l) {
+  var ws = l.text.split(' '), tot = l.text.replace(/ /g, '').length, acc = 0;
+  return ws.map(function (w) { var a = l.t0 + (l.t1 - l.t0) * acc / tot; acc += w.length; return { w: w, a: a, b: l.t0 + (l.t1 - l.t0) * acc / tot }; });
+}
+function noteAt(li, wi) { for (var i = 0; i < NOTES.length; i++) { var n = NOTES[i]; if (n.line === li && wi >= n.w0 && wi <= n.w1) return n; } return null; }
+function scenesVals() {
+  return SCENES.filter(function (s) { return s[3]; }).map(function (s, i) {
+    return { n: s[0], name: s[1], cnt: s[4], style: i === 0 ? 'background: rgba(255,255,255,0.12); color: #F3F1EC; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18)' : '' };
+  });
+}
+function notesVals(sel) {
+  return NOTES.map(function (n) {
+    var l = LINES[n.line], ws = words(l), q = n.b == null ? 'after “' + ws[n.w1].w.replace(/[.,!?]$/, '') + '”' : '“' + ws.slice(n.w0, n.w1 + 1).map(function (x) { return x.w; }).join(' ') + '”';
+    if (q.length > 46) q = q.slice(0, 44) + '…”';
+    var on = n.n === sel;
+    return { n: n.n, who: n.who, ini: n.ini, role: n.role, tc: fmt(n.a) + (n.b != null ? ' to ' + fmt(n.b).slice(3) : ''), quote: q, speaker: l.who.toUpperCase(), text: n.text, tag: n.tag,
+      qS: 'box-shadow: inset 2px 0 0 ' + rgba(CH[l.who], 1), spS: 'color: ' + rgba(CH[l.who], 1),
+      style: (on ? 'background: rgba(154,134,224,0.12); box-shadow: inset 0 0 0 1.5px rgba(154,134,224,0.6)' : '') + (n.open ? '' : '; opacity: 0.55'),
+      chkS: n.open ? 'box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.3)' : 'background: #9A86E0', tickS: n.open ? 'display: none' : '',
+      kind: n.b == null ? 'Marker' : 'Range',
+      hasReply: !!n.reply, rWho: n.reply ? n.reply.who : '', rIni: n.reply ? n.reply.ini : '', rText: n.reply ? n.reply.text : '' };
+  });
+}
+function sceneWave(seed, w, cast) {
+  var r = mkr(seed), out = {}, x = 2;
+  while (x < w - 4) { var who = cast[Math.floor(r() * cast.length)], len = 8 + r() * 26, d = ''; var top = [], bot = [];
+    for (var k = 0; k <= 8; k++) { var xx = x + len * k / 8, env = Math.sin(Math.PI * k / 8), h = Math.max(0.5, env * (3 + r() * 6)); top.push((k ? 'L' : 'M') + xx.toFixed(1) + ' ' + (13 - h).toFixed(1)); bot.push('L' + xx.toFixed(1) + ' ' + (13 + h).toFixed(1)); }
+    out[who] = (out[who] || '') + top.join(' ') + ' ' + bot.reverse().join(' ') + ' Z '; x += len + 3 + r() * 10; }
+  var ks = ['Paul', 'Sara', 'Norbert', 'Colonel'];
+  return ks.map(function (k) { return { d: out[k] || '', f: rgba(CH[k], 0.85) }; });
+}
+function ctxVals(W) {
+  var sel = SCENES.filter(function (s) { return s[3]; }), tot = sel.reduce(function (a, s) { return a + s[2]; }, 0), gap = 8, avail = W - gap * (sel.length - 1), x = 0, chaps = [], pins = [], ph = 0;
+  var casts = { 'Sc. 2': ['Paul', 'Norbert', 'Colonel', 'Sara'], 'Sc. 3': ['Sara', 'Norbert'], 'Sc. 5': ['Paul', 'Sara', 'Norbert', 'Colonel'] };
+  sel.forEach(function (s, i) {
+    var w = avail * s[2] / tot, cur = i === 0, wv = sceneWave(i * 31 + 7, w, casts[s[0]]);
+    chaps.push({ n: s[0] + ' ' + s[1], len: fmt(s[2]).slice(0, 5), style: 'left: ' + x.toFixed(1) + 'px; width: ' + w.toFixed(1) + 'px; ' + (cur ? 'background: rgba(255,255,255,0.07); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16)' : 'background: rgba(255,255,255,0.035)'),
+      vb: '0 0 ' + w.toFixed(0) + ' 26', ww: w.toFixed(0), d0: wv[0].d, f0: wv[0].f, d1: wv[1].d, f1: wv[1].f, d2: wv[2].d, f2: wv[2].f, d3: wv[3].d, f3: wv[3].f, op: cur ? 1 : 0.6 });
+    if (cur) { NOTES.forEach(function (n) { pins.push({ n: n.n, style: 'left: ' + (x + w * n.a / s[2]).toFixed(1) + 'px; ' + (n.open ? '' : 'opacity: 0.5') }); }); ph = x + w * NOW / s[2]; }
+    else { var k = i === 1 ? [[20, 6], [48, 7]] : [[112, 8]]; k.forEach(function (p) { pins.push({ n: p[1], style: 'left: ' + (x + w * p[0] / s[2]).toFixed(1) + 'px' }); }); }
+    x += w + gap;
+  });
+  var ovr = [], ox = 0, otot = SCENES.reduce(function (a, s) { return a + s[2]; }, 0);
+  SCENES.forEach(function (s) { var w = W * s[2] / otot; ovr.push({ style: 'left: ' + ox.toFixed(1) + 'px; width: ' + Math.max(1, w - 2).toFixed(1) + 'px; background: ' + (s[3] ? 'rgba(154,134,224,0.85)' : 'rgba(255,255,255,0.12)') }); ox += w; });
+  return { chaps: chaps, pins: pins, phS: 'left: ' + ph.toFixed(1) + 'px', ovr: ovr, now: fmt(NOW), scenes: scenesVals() };
+}
+
+
+class Component extends DCLogic {
+  renderVals() {
+    var ghosts = [], y = 120, cols = [CH.Paul, CH.Norbert, CH.Paul, CH.Paul, CH.Norbert, CH.Paul, CH.Colonel, CH.Sara];
+    cols.forEach(function (c, i) { ghosts.push({ style: 'left: 110px; top: ' + y + 'px; width: 440px; height: 58px; background: linear-gradient(90deg, ' + rgba(c, 0.35) + ', ' + rgba(c, 0.06) + ')' }); y += 82; });
+    ghosts.push({ style: 'left: 664px; top: 180px; width: 460px; height: 90px; background: rgba(255,255,255,0.06)' });
+    ghosts.push({ style: 'left: 664px; top: 420px; width: 460px; height: 120px; background: rgba(154,134,224,0.14)' });
+    ghosts.push({ style: 'left: 1332px; top: 76px; width: 84px; height: 720px; background: rgba(255,255,255,0.05)' });
+    return { ghosts: ghosts };
+  }
+}
+
+</script>
+</body>
+</html>

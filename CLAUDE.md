@@ -15,6 +15,9 @@ Owner: Rob. Read the specs before changing behaviour:
   - Work only on `dev`. If `dev` doesn't exist, create it from `main` and push with `git push -u origin dev`.
   - Never commit to `main`, never push to `main`, never merge into `main`. Rob merges `dev` into `main` through a pull request.
   - Never force push, never rewrite pushed history, never delete branches.
+- **Worktrees:**
+  - Remove a worktree once its branch is merged, including ones made by hand: `git worktree remove <path>`. The branch stays. Swimlane does this for its own cards and sweeps merged ones.
+  - Never share one Cargo target folder between checkouts. Parallel builds wait on each other and overwrite the binary the MCP server runs from.
 - **Commits:**
   - Commit small, coherent steps.
   - Use Conventional Commits: `feat(core): ...`, `fix(aligner): ...`, `test: ...`, `docs: ...`, `chore: ...`.
