@@ -6,6 +6,8 @@ use apc_core::config::ProjectConfig;
 use apc_core::timeline::{layout_scene, placement_start, SceneLayout};
 use apc_core::{Document, Lane, LineKind, Scene};
 
+use crate::bounce::schedule_of;
+
 /// Pause between scenes when several are exported as one timeline.
 pub const SCENE_GAP_S: f64 = 2.0;
 
@@ -97,17 +99,33 @@ fn scenes_in_scope<'a>(doc: &'a Document, scope: &ExportScope) -> Vec<&'a Scene>
 
 impl EpisodeTimeline {
     pub fn build(doc: &Document, scope: &ExportScope) -> Self {
+        Self::spaced(doc, scope, |_, layout| layout.duration_s)
+    }
+
+    /// The scenes as one file plays them. A scene waits for the one before it to end, its last
+    /// sound and the room ringing after it, which can be well past the last line. So nothing
+    /// runs under the next scene, and a scene of sounds alone keeps its place.
+    pub fn joined(doc: &Document, scope: &ExportScope) -> Self {
+        Self::spaced(doc, scope, |scene, _| schedule_of(doc, scene).end_s())
+    }
+
+    fn spaced(
+        doc: &Document,
+        scope: &ExportScope,
+        length: impl Fn(&Scene, &SceneLayout) -> f64,
+    ) -> Self {
         let cfg = ProjectConfig::from_doc(doc);
         let pacing = cfg.pacing();
         let mut tl = EpisodeTimeline::default();
         let mut offset = 0.0;
         for scene in scenes_in_scope(doc, scope) {
             let layout = layout_scene(doc, scene, &pacing);
-            if layout.duration_s <= 0.0 {
+            let length = length(scene, &layout);
+            if length <= 0.0 {
                 continue;
             }
             tl.add_scene(doc, scene, &layout, offset);
-            offset += layout.duration_s + SCENE_GAP_S;
+            offset += length + SCENE_GAP_S;
         }
         // a last line's tail can ring past its scene's layout
         let rung = tl.scenes.iter().map(|s| s.end_s).fold(0.0, f64::max);

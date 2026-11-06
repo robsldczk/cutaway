@@ -143,7 +143,8 @@ pub struct ExportConfig {
     pub presets: Vec<ExportPreset>,
 }
 
-/// What an export writes: one file per track, one per clip, the mix, or only the timeline.
+/// What an export writes: one file per track, one per clip, a mix per scene, one mix of the whole
+/// range, or only the timeline.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ExportMode {
@@ -151,6 +152,8 @@ pub enum ExportMode {
     Stems,
     Clips,
     Mix,
+    /// The range as one mix, scene after scene, in an episode version of its own.
+    OneFile,
     Fcpxml,
 }
 
@@ -282,6 +285,11 @@ impl ExportSettings {
         self.mode != ExportMode::Fcpxml
     }
 
+    /// One mix for the whole range, or one per scene: there are no tracks to choose.
+    pub fn mixes_only(&self) -> bool {
+        matches!(self.mode, ExportMode::Mix | ExportMode::OneFile)
+    }
+
     /// FCPXML only always writes the FCPXML, whatever "Also export" says.
     pub fn writes_fcpxml(&self) -> bool {
         self.fcpxml || self.mode == ExportMode::Fcpxml
@@ -292,9 +300,9 @@ impl ExportSettings {
         if self.mode == ExportMode::Fcpxml {
             return Ok(());
         }
-        if self.codec == AudioCodec::Mp3 && self.mode != ExportMode::Mix {
+        if self.codec == AudioCodec::Mp3 && !self.mixes_only() {
             return Err(CoreError::invalid(
-                "MP3 pads its start and end, so it can't hold a stem or clip to the sample: choose WAV or FLAC, or Mix only",
+                "MP3 pads its start and end, so it can't hold a stem or clip to the sample: choose WAV or FLAC, or Mix only or One file",
             ));
         }
         if self.codec == AudioCodec::Flac && self.bit_depth == 32 {
@@ -322,7 +330,7 @@ impl ExportSettings {
             || t.music
             || t.mix
             || t.split_dialogue;
-        if self.mode != ExportMode::Mix && !any {
+        if !self.mixes_only() && !any {
             return Err(CoreError::invalid("no tracks are ticked"));
         }
         Ok(())

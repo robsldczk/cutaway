@@ -123,7 +123,8 @@ fn track_files(s: &ExportSettings, sched: &PlaySchedule) -> Vec<TrackFile> {
     let room_voices = file(t.room_voices, "RoomVoices", Track::RoomVoices);
     let room_effects = file(t.room_effects, "RoomEffects", Track::RoomEffects);
     match s.mode {
-        ExportMode::Fcpxml => Vec::new(),
+        // a one-file export is one mix of all its scenes, and has a path of its own
+        ExportMode::Fcpxml | ExportMode::OneFile => Vec::new(),
         ExportMode::Mix => vec![TrackFile {
             suffix: "Mix".into(),
             track: Track::Mix,
@@ -195,6 +196,24 @@ fn level_mix(
     let warning = (wanted > room)
         .then(|| format!("The mix stops at {reached:.1} LUFS: {target:.0} would clip its peaks."));
     Ok((gain_db, Some(reached), warning))
+}
+
+/// Takes a rendered mix to its loudness target, or says when it clips without one. Gives the
+/// gain and what it measures after it.
+fn finish_mix(
+    buf: &mut [f32],
+    s: &ExportSettings,
+    warnings: &mut Vec<String>,
+) -> Result<(Option<f64>, Option<f64>)> {
+    if let Some(target) = s.loudness {
+        let (gain, lufs, warning) = level_mix(buf, s.sample_rate, target)?;
+        warnings.extend(warning);
+        return Ok((Some(gain), lufs));
+    }
+    if buf.iter().any(|v| v.abs() > 1.0) && s.bit_depth != 32 {
+        warnings.push("The mix goes over full scale and clips.".to_string());
+    }
+    Ok((None, None))
 }
 
 /// An exported clip of a scene: which clip, its file name, and the stretch of its source.
@@ -583,14 +602,7 @@ pub fn write_scene(
             progress(i as f64 / steps, &f.suffix);
             let mut buf = render(&f.track, &sched, &set, frames)?;
             if f.track == Track::Mix {
-                if let Some(target) = s.loudness {
-                    let (gain, lufs, warning) = level_mix(&mut buf, rate, target)?;
-                    mix_gain_db = Some(gain);
-                    mix_lufs = lufs;
-                    warnings.extend(warning);
-                } else if buf.iter().any(|v| v.abs() > 1.0) && s.bit_depth != 32 {
-                    warnings.push("The mix goes over full scale and clips.".to_string());
-                }
+                (mix_gain_db, mix_lufs) = finish_mix(&mut buf, &s, &mut warnings)?;
             }
             let name = format!("{stem}_{}", f.suffix);
             let path = write_audio(dir, &name, &buf, rate, 2, &s)?;
@@ -688,6 +700,33 @@ fn write_clip(t: &Target, c: &TimelineClip, f: &ClipFile, dir: &Path) -> Result<
     listed(&path, "clip", Some((frames, info.sample_rate)))
 }
 
+/// The timeline files of an episode version, on the original recordings.
+fn episode_files(
+    t: &Target,
+    tl: &EpisodeTimeline,
+    dir: &Path,
+    stem: &str,
+) -> Result<Vec<ManifestFile>> {
+    let s = t.settings;
+    let mut files = Vec::new();
+    if s.writes_fcpxml() {
+        let xml = fcpxml::write(t.doc, t.paths, tl, t.title);
+        files.push(text_file(dir, format!("{stem}.fcpxml"), "fcpxml", &xml)?);
+    }
+    if s.subtitles {
+        files.push(text_file(
+            dir,
+            format!("{stem}.srt"),
+            "srt",
+            &srt::write(tl, true),
+        )?);
+    }
+    if let Some(format) = s.cut_list {
+        files.push(cut_list(t, tl, format, dir, stem)?);
+    }
+    Ok(files)
+}
+
 /// The whole-episode version: which scene versions it holds, and the episode's timeline files.
 pub fn write_episode(t: &Target, version: u32, scenes: &[ManifestScene]) -> Result<ExportRecord> {
     let s = t.settings;
@@ -698,22 +737,7 @@ pub fn write_episode(t: &Target, version: u32, scenes: &[ManifestScene]) -> Resu
     let stem = t.ep.episode_stem(version);
     let tl = EpisodeTimeline::build(t.doc, &ExportScope::All);
     let manifest = into_folder(&folder, |dir| {
-        let mut files = Vec::new();
-        if s.writes_fcpxml() {
-            let xml = fcpxml::write(t.doc, t.paths, &tl, t.title);
-            files.push(text_file(dir, format!("{stem}.fcpxml"), "fcpxml", &xml)?);
-        }
-        if s.subtitles {
-            files.push(text_file(
-                dir,
-                format!("{stem}.srt"),
-                "srt",
-                &srt::write(&tl, true),
-            )?);
-        }
-        if let Some(format) = s.cut_list {
-            files.push(cut_list(t, &tl, format, dir, &stem)?);
-        }
+        let files = episode_files(t, &tl, dir, &stem)?;
         let manifest = Manifest {
             schema: MANIFEST_SCHEMA,
             version,
@@ -732,6 +756,114 @@ pub fn write_episode(t: &Target, version: u32, scenes: &[ManifestScene]) -> Resu
             mix_lufs: None,
             warnings: Vec::new(),
             scenes: scenes.to_vec(),
+        };
+        std::fs::write(dir.join(MANIFEST), serde_json::to_vec_pretty(&manifest)?)?;
+        Ok(manifest)
+    })?;
+    Ok(ExportRecord { manifest, folder })
+}
+
+/// The timeline of a one-file export: the scenes that have anything in them, in script order.
+fn joined_timeline(doc: &Document, scenes: &[&Scene]) -> EpisodeTimeline {
+    let ids = scenes.iter().map(|s| s.id.clone()).collect();
+    EpisodeTimeline::joined(doc, &ExportScope::Scenes(ids))
+}
+
+/// What the scenes of a one-file export are together: the same scenes as they were hash the same.
+fn joined_hash(doc: &Document, scenes: &[&Scene]) -> Result<String> {
+    let mut h = blake3::Hasher::new();
+    for scene in scenes {
+        h.update(timeline_hash(doc, scene)?.as_bytes());
+    }
+    Ok(h.finalize().to_hex().to_string())
+}
+
+/// Where a scene starts in a one-file export, in frames.
+fn start_frame(start_s: f64, rate: u32) -> usize {
+    (start_s * f64::from(rate)).round() as usize
+}
+
+/// The one file's length in frames: each scene from its place on the timeline.
+fn joined_frames(doc: &Document, tl: &EpisodeTimeline, scenes: &[&Scene], rate: u32) -> usize {
+    tl.scenes
+        .iter()
+        .filter_map(|m| {
+            let scene = scenes.iter().find(|s| s.id == m.scene_id)?;
+            Some(start_frame(m.start_s, rate) + frames_of(&schedule_of(doc, scene), rate))
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// Several scenes as one mix, scene after scene, as an episode version of its own. Each scene
+/// renders as its own mix does and lands where the timeline has it, so the subtitles and the
+/// FCPXML beside it fit the file. Loudness applies once, to the whole: the scenes keep their
+/// balance. `scenes` are the ones with something in them; they get no versions of their own.
+pub fn write_one_file(
+    t: &Target,
+    scenes: &[&Scene],
+    version: u32,
+    locked: bool,
+    progress: &dyn Fn(f64, &str),
+) -> Result<ExportRecord> {
+    preflight(&t.settings)?;
+    let s = t.settings;
+    let rate = s.sample_rate;
+    let folder = t
+        .base
+        .join(EPISODE_FOLDER)
+        .join(version_folder(version, &t.date()));
+    let stem = t.ep.episode_stem(version);
+    let tl = joined_timeline(t.doc, scenes);
+    let frames = joined_frames(t.doc, &tl, scenes, rate);
+    let manifest = into_folder(&folder, |dir| {
+        let set = source_set(t.doc, t.paths, rate);
+        let mut mix = vec![0.0f32; frames * 2];
+        let total = scenes.len().max(1) as f64;
+        for (i, mark) in tl.scenes.iter().enumerate() {
+            let Some(scene) = scenes.iter().find(|x| x.id == mark.scene_id) else {
+                continue;
+            };
+            progress(i as f64 / total, &scene.label());
+            let sched = schedule_of(t.doc, scene);
+            let buf = render(&Track::Mix, &sched, &set, frames_of(&sched, rate))?;
+            let start = start_frame(mark.start_s, rate) * 2;
+            for (out, v) in mix[start..].iter_mut().zip(&buf) {
+                *out += *v;
+            }
+        }
+        progress(1.0, "Mix");
+        let mut warnings = Vec::new();
+        let (mix_gain_db, mix_lufs) = finish_mix(&mut mix, &s, &mut warnings)?;
+        let name = format!("{stem}_Mix");
+        let path = write_audio(dir, &name, &mix, rate, 2, &s)?;
+        let mut files = vec![listed(&path, "Mix", Some((frames as u64, rate)))?];
+        files.extend(episode_files(t, &tl, dir, &stem)?);
+        let manifest = Manifest {
+            schema: MANIFEST_SCHEMA,
+            version,
+            date: t.now.to_rfc3339(),
+            app_version: t.app_version.into(),
+            settings: s,
+            destination: s.save_to,
+            scene_id: None,
+            scene_number: None,
+            heading: String::new(),
+            timeline_hash: joined_hash(t.doc, scenes)?,
+            locked,
+            frames: frames as u64,
+            files,
+            mix_gain_db,
+            mix_lufs,
+            warnings,
+            scenes: scenes
+                .iter()
+                .map(|x| ManifestScene {
+                    scene_id: x.id.clone(),
+                    number: x.number,
+                    version: 0,
+                })
+                .collect(),
         };
         std::fs::write(dir.join(MANIFEST), serde_json::to_vec_pretty(&manifest)?)?;
         Ok(manifest)
@@ -758,9 +890,26 @@ pub struct ScenePlan {
     pub locked: bool,
 }
 
+/// What a one-file export will do.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct OneFilePlan {
+    pub version: u32,
+    /// `E02 v004`
+    pub label: String,
+    /// `Episode/v004_2026-11-05`
+    pub folder: String,
+    pub files: Vec<String>,
+    pub bytes: u64,
+    pub length_s: f64,
+    /// The same scenes as this version: exporting again delivers nothing new.
+    pub unchanged_since: Option<u32>,
+}
+
 #[derive(Serialize, Clone, Debug, PartialEq, Default)]
 pub struct Plan {
     pub scenes: Vec<ScenePlan>,
+    /// Set instead of `scenes` when the range goes out as one file.
+    pub one_file: Option<OneFilePlan>,
     /// Scenes with nothing in them, left out.
     pub empty: Vec<u32>,
     /// A whole-episode export's own version.
@@ -825,6 +974,51 @@ fn plan_scene(t: &Target, scene: &Scene, history: &History) -> Result<ScenePlan>
     })
 }
 
+fn plan_one_file(t: &Target, scenes: &[&Scene], history: &History) -> Result<Plan> {
+    let s = &t.settings;
+    let (heard, empty): (Vec<&Scene>, Vec<&Scene>) =
+        scenes.iter().copied().partition(|x| has_audio(t.doc, x));
+    let mut p = Plan {
+        empty: empty.iter().map(|x| x.number).collect(),
+        ..Plan::default()
+    };
+    if heard.is_empty() {
+        return Ok(p);
+    }
+    let version = history.next_episode();
+    let stem = t.ep.episode_stem(version);
+    let tl = joined_timeline(t.doc, &heard);
+    let frames = joined_frames(t.doc, &tl, &heard, s.sample_rate);
+    let length_s = frames as f64 / f64::from(s.sample_rate);
+    let mut files = vec![format!("{stem}_Mix.{}", s.codec.ext())];
+    if s.writes_fcpxml() {
+        files.push(format!("{stem}.fcpxml"));
+    }
+    if s.subtitles {
+        files.push(format!("{stem}.srt"));
+    }
+    match s.cut_list {
+        Some(CutListFormat::Csv) => files.push(format!("{stem}.csv")),
+        Some(CutListFormat::Md) => files.push(format!("{stem}.md")),
+        None => {}
+    }
+    files.push(MANIFEST.to_string());
+    let bytes = (bytes_per_s(s, 2) * length_s) as u64;
+    p.episode_version = Some(version);
+    p.files = files.len();
+    p.bytes = bytes;
+    p.one_file = Some(OneFilePlan {
+        version,
+        label: t.ep.episode_label(version),
+        folder: format!("{EPISODE_FOLDER}/{}", version_folder(version, &t.date())),
+        files,
+        bytes,
+        length_s,
+        unchanged_since: history.one_file_unchanged_since(&joined_hash(t.doc, &heard)?),
+    });
+    Ok(p)
+}
+
 /// Has the scene anything to export?
 pub fn has_audio(doc: &Document, scene: &Scene) -> bool {
     schedule_of(doc, scene).end_s() > 0.0
@@ -832,6 +1026,9 @@ pub fn has_audio(doc: &Document, scene: &Scene) -> bool {
 
 /// What an export will write, without writing it.
 pub fn plan(t: &Target, scenes: &[&Scene], whole_episode: bool, history: &History) -> Result<Plan> {
+    if t.settings.mode == ExportMode::OneFile {
+        return plan_one_file(t, scenes, history);
+    }
     let mut p = Plan {
         episode_version: whole_episode.then(|| history.next_episode()),
         ..Plan::default()

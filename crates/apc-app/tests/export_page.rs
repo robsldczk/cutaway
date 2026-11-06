@@ -7,8 +7,10 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 
 use apc_app::{demo, methods, Access, Service, Session};
-use apc_core::config::ExportSettings;
+use apc_core::config::{ExportMode, ExportSettings};
+use apc_export::timeline::SCENE_GAP_S;
 use apc_export::versions::Manifest;
+use apc_export::{EpisodeTimeline, ExportScope};
 
 fn with_mock(local: &Path) {
     std::env::set_var("CUTAWAY_AI_PROVIDER", "mock");
@@ -336,6 +338,338 @@ fn the_whole_episode_has_its_own_counter_and_says_which_versions_it_holds() {
     );
 }
 
+fn one_file(f: impl FnOnce(&mut ExportSettings)) -> Value {
+    settings(|s| {
+        s.mode = ExportMode::OneFile;
+        s.fcpxml = false;
+        s.subtitles = false;
+        f(s);
+    })
+}
+
+fn episode_folder(r: &Value) -> PathBuf {
+    PathBuf::from(r["episode"]["folder"].as_str().unwrap())
+}
+
+/// Each scene's own mix, at mix level.
+fn scene_mixes(svc: &mut Service) -> Vec<Vec<f32>> {
+    let r = export(
+        svc,
+        json!(["1", "2"]),
+        settings(|s| {
+            s.mode = ExportMode::Mix;
+            s.loudness = None;
+            s.fcpxml = false;
+            s.subtitles = false;
+        }),
+    );
+    (0..2)
+        .map(|i| {
+            let dir = folder(&r, i);
+            let wav = names(&dir).into_iter().find(|n| n.ends_with("_Mix.wav"));
+            read(&dir.join(wav.unwrap())).1
+        })
+        .collect()
+}
+
+#[test]
+fn one_file_is_each_scenes_mix_in_order_with_the_pause_between_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    with_sound(&mut svc, dir.path());
+    let mixes = scene_mixes(&mut svc);
+
+    let r = svc
+        .call(
+            "export_scenes",
+            &json!({ "settings": one_file(|s| s.loudness = None) }),
+        )
+        .unwrap();
+    assert_eq!(r["scenes"], json!([]), "no scene versions of its own");
+    let f = episode_folder(&r);
+    let (rate, joined) = read(&f.join("E01_v001_Mix.wav"));
+    assert_eq!(rate, 48000);
+
+    let gap = (SCENE_GAP_S * 48000.0) as usize * 2;
+    assert_eq!(joined.len(), mixes[0].len() + gap + mixes[1].len());
+    let close = |a: &[f32], b: &[f32]| a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-5);
+    assert!(close(&joined[..mixes[0].len()], &mixes[0]));
+    assert!(joined[mixes[0].len()..mixes[0].len() + gap]
+        .iter()
+        .all(|v| *v == 0.0));
+    assert!(close(&joined[mixes[0].len() + gap..], &mixes[1]));
+    assert_eq!(manifest(&f).frames as usize * 2, joined.len());
+}
+
+#[test]
+fn a_sound_past_the_last_line_keeps_the_next_scene_waiting() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    with_sound(&mut svc, dir.path());
+    let doc = svc.doc();
+    let scene = doc.find_scene("1").unwrap();
+    let line_end =
+        EpisodeTimeline::build(doc, &ExportScope::Scenes(vec![scene.id.clone()])).duration_s;
+    let asset = doc.assets.keys().next().unwrap().clone();
+    svc.call(
+        "place_sound",
+        &json!({ "scene": "1", "asset_id": asset, "lane": "sfx", "at_s": line_end + 5.0 }),
+    )
+    .unwrap();
+    let mixes = scene_mixes(&mut svc);
+
+    let r = svc
+        .call(
+            "export_scenes",
+            &json!({ "settings": one_file(|s| s.loudness = None) }),
+        )
+        .unwrap();
+    let f = episode_folder(&r);
+    let (_, joined) = read(&f.join("E01_v001_Mix.wav"));
+    let gap = (SCENE_GAP_S * 48000.0) as usize * 2;
+    let second = &joined[mixes[0].len() + gap..];
+    assert_eq!(second.len(), mixes[1].len());
+    assert!(second
+        .iter()
+        .zip(&mixes[1])
+        .all(|(a, b)| (a - b).abs() < 1e-5));
+}
+
+#[test]
+fn the_subtitles_of_one_file_land_on_its_second_scene() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    let mixes = scene_mixes(&mut svc);
+    let r = svc
+        .call(
+            "export_scenes",
+            &json!({ "settings": settings(|s| {
+                s.mode = ExportMode::OneFile;
+                s.loudness = None;
+            }) }),
+        )
+        .unwrap();
+    let f = episode_folder(&r);
+    let expected = [
+        "E01_v001.fcpxml",
+        "E01_v001.srt",
+        "E01_v001_Mix.wav",
+        "manifest.json",
+    ];
+    assert_eq!(names(&f), expected);
+
+    let starts: Vec<f64> = EpisodeTimeline::joined(svc.doc(), &ExportScope::All)
+        .scenes
+        .iter()
+        .map(|m| m.start_s)
+        .collect();
+    let first = mixes[0].len() as f64 / 2.0 / 48000.0;
+    assert!(
+        (starts[1] - (first + SCENE_GAP_S)).abs() < 0.001,
+        "{starts:?}"
+    );
+    let srt = std::fs::read_to_string(f.join("E01_v001.srt")).unwrap();
+    let cue = EpisodeTimeline::joined(svc.doc(), &ExportScope::All)
+        .cues
+        .into_iter()
+        .find(|c| c.start_s >= starts[1])
+        .unwrap();
+    let at = cue.start_s as u64;
+    let stamp = format!("00:{:02}:{:02},", at / 60, at % 60);
+    assert!(srt.contains(&stamp), "{stamp} isn't in\n{srt}");
+}
+
+#[test]
+fn loudness_reaches_the_whole_file_and_keeps_the_scenes_balance() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    let r = svc
+        .call(
+            "export_scenes",
+            &json!({ "settings": one_file(|s| s.loudness = Some(-23.0)) }),
+        )
+        .unwrap();
+    let f = episode_folder(&r);
+    let m = manifest(&f);
+    assert!(
+        (m.mix_lufs.unwrap() - -23.0).abs() < 0.2,
+        "{:?}",
+        m.mix_lufs
+    );
+    let (_, joined) = read(&f.join("E01_v001_Mix.wav"));
+    let measured = apc_media::loudness::integrated_lufs(&joined, 48000, 2)
+        .unwrap()
+        .unwrap();
+    assert!((measured - -23.0).abs() < 0.3, "{measured}");
+}
+
+#[test]
+fn one_file_counts_with_the_episode_and_says_when_nothing_changed() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    let plan = svc
+        .call("export_plan", &json!({ "settings": one_file(|_| {}) }))
+        .unwrap();
+    assert_eq!(plan["one_file"]["label"], "E01 v001");
+    assert_eq!(plan["episode_version"], 1);
+    assert_eq!(plan["scenes"], json!([]));
+    assert_eq!(plan["files"], 2, "the mix and the manifest");
+    assert_eq!(plan["one_file"]["unchanged_since"], Value::Null);
+    let folder_name = plan["one_file"]["folder"].as_str().unwrap();
+    assert!(folder_name.starts_with("Episode/v001_"), "{folder_name}");
+    assert!(!folder_name.contains(' '), "{folder_name}");
+
+    let first = svc
+        .call("export_scenes", &json!({ "settings": one_file(|_| {}) }))
+        .unwrap();
+    assert_eq!(first["episode"]["version"], 1);
+    let f = episode_folder(&first);
+    let held: Vec<(u32, u32)> = manifest(&f)
+        .scenes
+        .iter()
+        .map(|s| (s.number, s.version))
+        .collect();
+    assert_eq!(held, [(1, 0), (2, 0)]);
+
+    let status = svc.call("export_status", &json!({})).unwrap();
+    assert_eq!(status["episode_versions"][0]["version"], 1);
+    assert_eq!(status["scenes"][0]["next_version"], 1, "scenes don't count");
+
+    let plan = svc
+        .call("export_plan", &json!({ "settings": one_file(|_| {}) }))
+        .unwrap();
+    assert_eq!(plan["one_file"]["unchanged_since"], 1);
+    let second = svc
+        .call("export_scenes", &json!({ "settings": one_file(|_| {}) }))
+        .unwrap();
+    assert_eq!(second["episode"]["version"], 2);
+    assert_eq!(second["warnings"], json!(["Unchanged since v001."]));
+}
+
+#[test]
+fn one_file_takes_the_scenes_picked_and_only_those() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    let mixes = scene_mixes(&mut svc);
+    let r = export(&mut svc, json!(["2"]), one_file(|s| s.loudness = None));
+    let f = episode_folder(&r);
+    let (_, joined) = read(&f.join("E01_v001_Mix.wav"));
+    assert_eq!(joined.len(), mixes[1].len());
+    let held: Vec<u32> = manifest(&f).scenes.iter().map(|s| s.number).collect();
+    assert_eq!(held, [2]);
+}
+
+#[test]
+fn one_file_locks_its_scenes_and_a_lock_keeps_the_version_it_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    export(&mut svc, json!(["1"]), settings(|s| s.lock_after = true));
+    let r = svc
+        .call(
+            "export_scenes",
+            &json!({ "settings": one_file(|s| s.lock_after = true) }),
+        )
+        .unwrap();
+    assert!(manifest(&episode_folder(&r)).locked);
+    let locks: Vec<(Option<u32>, bool)> = svc
+        .doc()
+        .scenes_in_order()
+        .iter()
+        .map(|s| (s.lock.as_ref().and_then(|l| l.version), s.lock.is_some()))
+        .collect();
+    assert_eq!(locks, [(Some(1), true), (None, true)]);
+}
+
+#[test]
+fn a_failed_one_file_leaves_no_version_and_no_lock() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    for s in svc.doc().sources.values().cloned().collect::<Vec<_>>() {
+        std::fs::remove_file(svc.paths.resolve(&s.path)).unwrap();
+    }
+    svc.call(
+        "export_scenes",
+        &json!({ "settings": one_file(|s| s.lock_after = true) }),
+    )
+    .unwrap_err();
+    assert!(svc.doc().scenes.values().all(|s| s.lock.is_none()));
+    let exports = svc.paths.exports.clone();
+    let left: Vec<_> = walk(&exports).into_iter().filter(|p| p.is_file()).collect();
+    assert!(left.is_empty(), "nothing half written: {left:?}");
+}
+
+#[test]
+fn scenes_with_nothing_in_them_cant_go_out_as_one_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    let lines: Vec<String> = svc.doc().lines.keys().cloned().collect();
+    for id in lines {
+        svc.call("delete_line", &json!({ "line_id": id, "confirm": true }))
+            .unwrap();
+    }
+    let plan = svc
+        .call("export_plan", &json!({ "settings": one_file(|_| {}) }))
+        .unwrap();
+    assert_eq!(plan["one_file"], Value::Null);
+    assert_eq!(plan["empty"], json!([1, 2]));
+    let e = svc
+        .call("export_scenes", &json!({ "settings": one_file(|_| {}) }))
+        .unwrap_err();
+    assert!(e.to_string().contains("nothing in them"), "{e}");
+}
+
+#[test]
+fn scenes_can_be_picked_by_how_far_along_they_are() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    let mark = |svc: &mut Service, scene: &str, status: &str| {
+        svc.call(
+            "set_scene_status",
+            &json!({ "scene": scene, "status": status }),
+        )
+        .unwrap();
+    };
+    mark(&mut svc, "2", "finished");
+    mark(&mut svc, "1", "review");
+    let status = svc.call("export_status", &json!({})).unwrap();
+    assert_eq!(status["scenes"][1]["status"], "finished");
+
+    let s = settings(|_| {});
+    let plan = svc
+        .call(
+            "export_plan",
+            &json!({ "status": ["finished"], "settings": s }),
+        )
+        .unwrap();
+    let numbers: Vec<u64> = plan["scenes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["number"].as_u64().unwrap())
+        .collect();
+    assert_eq!(numbers, [2]);
+    assert_eq!(
+        plan["episode_version"],
+        Value::Null,
+        "that's not the episode"
+    );
+
+    let plan = svc
+        .call(
+            "export_plan",
+            &json!({ "status": ["finished", "review"], "settings": s }),
+        )
+        .unwrap();
+    assert_eq!(plan["scenes"].as_array().unwrap().len(), 2);
+    assert_eq!(plan["episode_version"], Value::Null);
+
+    let none = svc.call(
+        "export_plan",
+        &json!({ "status": ["in_progress"], "settings": s }),
+    );
+    assert!(none.unwrap_err().to_string().contains("marked"));
+}
+
 #[test]
 fn an_exported_scene_is_locked_and_refuses_timing_edits_with_its_version() {
     let dir = tempfile::tempdir().unwrap();
@@ -584,7 +918,7 @@ fn what_cant_be_delivered_is_refused_before_anything_is_written() {
             .unwrap_err();
         assert!(e.to_string().contains(word), "{e}");
     };
-    use apc_core::config::{AudioCodec, ExportMode};
+    use apc_core::config::AudioCodec;
     refused(&mut svc, settings(|s| s.codec = AudioCodec::Mp3), "MP3");
     refused(
         &mut svc,
@@ -823,6 +1157,29 @@ fn a_show_export_goes_only_to_the_confirmed_pipeline_folder() {
     assert!(folder(&r, 0)
         .to_string_lossy()
         .contains("Episodes/Episode 2/Sound/Exports/Sc01_Lab"));
+}
+
+#[test]
+fn a_show_can_take_an_episode_as_one_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut sess, root) = show(dir.path());
+    sess.call(
+        "set_pipeline_folder",
+        &json!({ "path": root.join("Sound").to_string_lossy(), "confirm": true }),
+    )
+    .unwrap();
+    let r = sess
+        .call(
+            "export_show",
+            &json!({ "episodes": [{ "episode": "Episode 2" }], "settings": one_file(|_| {}) }),
+        )
+        .unwrap();
+    let f = episode_folder(&r["episodes"][0]["result"]);
+    assert!(
+        f.starts_with(root.join("Sound/Exports/Ep02/Episode")),
+        "{f:?}"
+    );
+    assert!(names(&f).contains(&"E02_v001_Mix.wav".to_string()));
 }
 
 #[test]

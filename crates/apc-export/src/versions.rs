@@ -52,6 +52,11 @@ impl EpisodeTag {
     pub fn episode_stem(self, version: u32) -> String {
         format!("{}_v{version:03}", self.code())
     }
+
+    /// `E02 v002`
+    pub fn episode_label(self, version: u32) -> String {
+        format!("{} v{version:03}", self.code())
+    }
 }
 
 /// A name a script can take without quoting: ASCII letters, digits and hyphens, with `_` between
@@ -101,6 +106,8 @@ pub struct ManifestFile {
 pub struct ManifestScene {
     pub scene_id: String,
     pub number: u32,
+    /// The scene's own version; 0 in a one-file export, which renders it as it stands and gives
+    /// it no version of its own.
     pub version: u32,
 }
 
@@ -230,6 +237,16 @@ impl History {
             .map(|r| r.manifest.version + 1)
             .max()
             .unwrap_or(1)
+    }
+
+    /// The newest one-file version, when `hash` is what it holds. Only those have a hash.
+    pub fn one_file_unchanged_since(&self, hash: &str) -> Option<u32> {
+        self.episodes()
+            .into_iter()
+            .filter(|r| !r.manifest.timeline_hash.is_empty())
+            .max_by_key(|r| r.manifest.version)
+            .filter(|r| r.manifest.timeline_hash == hash)
+            .map(|r| r.manifest.version)
     }
 
     /// The newest version whose hash is `hash`, when that's also the scene's newest: exporting

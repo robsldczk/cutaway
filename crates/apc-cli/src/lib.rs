@@ -199,6 +199,9 @@ pub struct DeliverArgs {
     /// A scene to export (repeatable); the whole episode without it.
     #[arg(long = "scene")]
     scenes: Vec<String>,
+    /// Only the scenes marked so (repeatable): in-progress, review or finished.
+    #[arg(long = "status")]
+    status: Vec<String>,
     /// Show export: an episode folder of the show (repeatable), to its pipeline folder.
     #[arg(long = "episode")]
     episodes: Vec<String>,
@@ -214,7 +217,7 @@ pub struct DeliverArgs {
 
 #[derive(clap::Args, Debug)]
 pub struct DeliverSettings {
-    /// stems, clips, mix or fcpxml.
+    /// stems, clips, mix, one-file (the range as one mix) or fcpxml.
     #[arg(long = "as", default_value = "stems")]
     mode: String,
     /// Only these tracks, comma separated: dialogue, room-voices, effects, room-effects,
@@ -224,7 +227,7 @@ pub struct DeliverSettings {
     /// One full-length file per character instead of one dialogue file.
     #[arg(long)]
     split_dialogue: bool,
-    /// wav, flac, or mp3 (mix only).
+    /// wav, flac, or mp3 (mix and one-file only).
     #[arg(long, default_value = "wav")]
     format: String,
     /// Sample rate.
@@ -280,7 +283,7 @@ impl DeliverSettings {
             }
         }
         Ok(json!({
-            "mode": self.mode,
+            "mode": snake(&self.mode),
             "tracks": {
                 "dialogue": on("dialogue"), "room_voices": on("room-voices"),
                 "effects": on("effects"), "room_effects": on("room-effects"),
@@ -307,10 +310,12 @@ fn deliver(sess: &mut Session, a: &DeliverArgs) -> anyhow::Result<Value> {
         Some(p) => (Value::Null, json!(p)),
         None => (a.settings.to_json()?, Value::Null),
     };
+    let status =
+        (!a.status.is_empty()).then(|| a.status.iter().map(|s| snake(s)).collect::<Vec<_>>());
     if !a.episodes.is_empty() {
-        if a.dry_run {
+        if a.dry_run || status.is_some() {
             return Err(anyhow!(
-                "--dry-run works on one episode: open it with --project and leave out --episode"
+                "--dry-run and --status work on one episode: open it with --project and leave out --episode"
             ));
         }
         // a scene of a show export is a scene of each episode named
@@ -335,8 +340,13 @@ fn deliver(sess: &mut Session, a: &DeliverArgs) -> anyhow::Result<Value> {
     call(
         sess,
         method,
-        json!({ "scenes": scenes, "settings": settings, "preset": preset }),
+        json!({ "scenes": scenes, "status": status, "settings": settings, "preset": preset }),
     )
+}
+
+/// The service's word for what the command line spells with hyphens.
+fn snake(word: &str) -> String {
+    word.replace('-', "_")
 }
 
 #[derive(Subcommand, Debug)]
@@ -1040,6 +1050,15 @@ mod tests {
             Value::Null
         );
         assert!(settings(&["--loudness", "loud"]).is_err());
+    }
+
+    #[test]
+    fn one_file_is_a_mode_of_its_own() {
+        let s: apc_core::config::ExportSettings =
+            serde_json::from_value(settings(&["--as", "one-file", "--format", "mp3"]).unwrap())
+                .unwrap();
+        assert_eq!(s.mode, apc_core::config::ExportMode::OneFile);
+        assert!(s.check().is_ok(), "one file is a mix, so MP3 is fine");
     }
 
     #[test]

@@ -7,11 +7,11 @@ use chrono::Local;
 use serde_json::{json, Value};
 
 use apc_core::commands::Command;
-use apc_core::config::{ExportPreset, ExportSettings, ProjectConfig, SaveTo};
+use apc_core::config::{ExportMode, ExportPreset, ExportSettings, ProjectConfig, SaveTo};
 use apc_core::project::EpisodePaths;
 use apc_core::show::Show;
 use apc_core::store::EpisodeStore;
-use apc_core::{CoreError, Document, Scene};
+use apc_core::{CoreError, Document, Scene, SceneStatus};
 use apc_export::bounce::{ffmpeg_available, schedule_of};
 use apc_export::package::{self, has_audio, timeline_hash, Target};
 use apc_export::versions::{self, EpisodeTag, ExportRecord, History, ManifestScene};
@@ -114,6 +114,7 @@ fn scene_view(doc: &Document, s: &Scene, h: &History) -> Result<Value> {
         "place": s.place,
         "heading": s.heading,
         "title": s.story.title,
+        "status": s.status,
         "length_s": schedule_of(doc, s).end_s(),
         "has_audio": has_audio(doc, s),
         "lock": s.lock,
@@ -163,6 +164,7 @@ pub fn status(svc: &Service) -> Result<Value> {
         "name": svc.name(),
         "episode": ep.folder(),
         "scenes": scenes,
+        "episode_versions": h.episodes().into_iter().map(record_view).collect::<Vec<_>>(),
         "pipeline": svc.paths.show.as_ref().map(pipeline_fields),
         "presets": cfg.export.presets,
         "defaults": ExportSettings::default(),
@@ -216,7 +218,7 @@ pub fn resolve<'a>(svc: &'a Service, p: &ExportRunP) -> Result<(ExportSettings, 
         episode_tag(&svc.name(), &svc.paths),
         settings.save_to,
     )?;
-    let scenes = pick_scenes(doc, p.scenes.as_deref())?;
+    let scenes = pick_scenes(doc, p.scenes.as_deref(), p.status.as_deref())?;
     Ok((settings, scenes))
 }
 
@@ -228,7 +230,27 @@ fn deliverable(s: &ExportSettings) -> Result<()> {
     })
 }
 
-fn pick_scenes<'a>(doc: &'a Document, keys: Option<&[String]>) -> Result<Vec<&'a Scene>> {
+/// The scenes asked for by number or id, of those with one of the statuses, in script order.
+fn pick_scenes<'a>(
+    doc: &'a Document,
+    keys: Option<&[String]>,
+    status: Option<&[SceneStatus]>,
+) -> Result<Vec<&'a Scene>> {
+    let named = named_scenes(doc, keys)?;
+    let Some(status) = status else {
+        return Ok(named);
+    };
+    let marked: Vec<&Scene> = named
+        .into_iter()
+        .filter(|s| s.status.is_some_and(|x| status.contains(&x)))
+        .collect();
+    if marked.is_empty() {
+        return Err(AppError::Params("no scenes are marked that way".into()));
+    }
+    Ok(marked)
+}
+
+fn named_scenes<'a>(doc: &'a Document, keys: Option<&[String]>) -> Result<Vec<&'a Scene>> {
     let all = doc.scenes_in_order();
     let Some(keys) = keys else {
         return Ok(all);
@@ -269,9 +291,74 @@ pub fn plan(svc: &Service, p: &ExportRunP) -> Result<Value> {
     Ok(serde_json::to_value(package::plan(
         &t,
         &scenes,
-        p.scenes.is_none(),
+        whole_episode(p),
         &h,
     )?)?)
+}
+
+/// Nothing narrowed the range: the episode gets a version of its own beside its scenes'.
+fn whole_episode(p: &ExportRunP) -> bool {
+    p.scenes.is_none() && p.status.is_none()
+}
+
+/// The range as one mix, in one episode version. The scenes get no versions of their own, so
+/// their locks name none, and a lock they already have keeps the version it names.
+fn run_one_file(
+    svc: &mut Service,
+    settings: ExportSettings,
+    scenes: Vec<Scene>,
+    progress: &dyn Fn(f64, &str),
+) -> Result<Value> {
+    let ep = episode_tag(&svc.name(), &svc.paths);
+    let base = base_dir(&svc.paths, ep, settings.save_to)?;
+    let h = history(&svc.paths, ep);
+    let title = svc.name();
+    let now = Local::now();
+    let (heard, empty): (Vec<Scene>, Vec<Scene>) =
+        scenes.into_iter().partition(|s| has_audio(svc.doc(), s));
+    if heard.is_empty() {
+        return Err(AppError::Other("these scenes have nothing in them".into()));
+    }
+    let refs: Vec<&Scene> = heard.iter().collect();
+    let locked = settings.lock_after || heard.iter().all(|s| s.lock.is_some());
+    let t = Target {
+        doc: svc.doc(),
+        paths: &svc.paths,
+        ep,
+        base: &base,
+        settings,
+        now,
+        app_version: APP_VERSION,
+        title: &title,
+    };
+    let record = package::write_one_file(&t, &refs, h.next_episode(), locked, progress)?;
+    let mut warnings = record.manifest.warnings.clone();
+    if let Some(v) = h.one_file_unchanged_since(&record.manifest.timeline_hash) {
+        warnings.push(format!("Unchanged since v{v:03}."));
+    }
+    if settings.lock_after {
+        let at = now.format("%Y-%m-%d").to_string();
+        let commands = heard
+            .iter()
+            .filter(|s| s.lock.is_none())
+            .map(|s| Command::LockScene {
+                scene_id: s.id.clone(),
+                version: None,
+                at: at.clone(),
+            })
+            .collect();
+        svc.exec(&Command::Batch { commands })?;
+    }
+    Ok(json!({
+        "scenes": [],
+        "episode": record_view(&record),
+        "unchanged": [],
+        "empty": empty.iter().map(|s| s.number).collect::<Vec<_>>(),
+        "locked": settings.lock_after,
+        "files": record.manifest.files.len() + 1,
+        "bytes": record.manifest.files.iter().map(|f| f.bytes).sum::<u64>(),
+        "warnings": warnings,
+    }))
 }
 
 /// Runs an export. What finished stays and is locked, even when a later scene fails: those
@@ -279,6 +366,9 @@ pub fn plan(svc: &Service, p: &ExportRunP) -> Result<Value> {
 pub fn run(svc: &mut Service, p: &ExportRunP, progress: &dyn Fn(f64, &str)) -> Result<Value> {
     let (settings, scenes) = resolve(svc, p)?;
     let scenes: Vec<Scene> = scenes.into_iter().cloned().collect();
+    if settings.mode == ExportMode::OneFile {
+        return run_one_file(svc, settings, scenes, progress);
+    }
     let ep = episode_tag(&svc.name(), &svc.paths);
     let base = base_dir(&svc.paths, ep, settings.save_to)?;
     let h = history(&svc.paths, ep);
@@ -357,7 +447,7 @@ pub fn run(svc: &mut Service, p: &ExportRunP, progress: &dyn Fn(f64, &str)) -> R
         }));
     }
     let mut episode = None;
-    if p.scenes.is_none() {
+    if whole_episode(p) {
         let t = Target {
             doc: svc.doc(),
             paths: &svc.paths,
@@ -555,7 +645,7 @@ pub fn run_show(show: &Show, p: &ExportShowP, progress: &dyn Fn(f64, &str)) -> R
         let run_p = ExportRunP {
             scenes: e.scenes.clone(),
             settings: Some(settings),
-            preset: None,
+            ..ExportRunP::default()
         };
         let step = |f: f64, what: &str| {
             progress((i as f64 + f) / total, &format!("{} · {what}", e.episode));

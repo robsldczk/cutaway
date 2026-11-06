@@ -264,6 +264,9 @@ pub struct ExportRunP {
     /// The scenes to export (number or id); the whole episode when omitted.
     #[serde(default)]
     pub scenes: Option<Vec<String>>,
+    /// Only the scenes marked with one of these: `in_progress`, `review`, `finished`.
+    #[serde(default)]
+    pub status: Option<Vec<SceneStatus>>,
     /// Page settings; each field falls back on the page's default.
     #[serde(default)]
     pub settings: Option<ExportSettings>,
@@ -1061,7 +1064,7 @@ registry! {
     "export_mix", ExportMixP, Write, true, "Bounce a scene to WAV or MP3.";
     "export_status", NoParams, Read, true, "The Export page: every scene with its length, lock, export history and whether it changed since, the pipeline folder, presets and the page's defaults.";
     "export_plan", ExportRunP, Read, true, "What an export will write: each scene's next version, its files and their size, and which scenes are unchanged. Nothing is written.";
-    "export_scenes", ExportRunP, Write, true, "Export scenes, or the whole episode, as versioned folders: aligned stems (every file exactly as long as the scene, from 0:00, silent ones too), individual clips, mix only or FCPXML only. Never overwrites: each scene counts up on its own. Locks the scenes after it unless lock_after is off.";
+    "export_scenes", ExportRunP, Write, true, "Export scenes, or the whole episode, as versioned folders: aligned stems (every file exactly as long as the scene, from 0:00, silent ones too), individual clips, mix only, FCPXML only, or one_file: the range as one mix, scene after scene, in one episode version. Pick scenes by number or by status. Never overwrites: each scene counts up on its own. Locks the scenes after it unless lock_after is off.";
     "start_export", ExportRunP, Write, false, "export_scenes in the background (the UI polls job_status).";
     "set_scene_status", SceneStatusP, Write, true, "Mark how far along a scene is: in_progress, review or finished; leave status out to clear it. It only colours the scene on the rail: timing and locks don't care.";
     "lock_scene", LockSceneP, Write, true, "Lock a scene's timing. Undoable. Takes, trims, gaps, order and moving, trimming, adding or removing sounds are refused until it's unlocked; gain, pan, depth, fades and notes stay free.";
