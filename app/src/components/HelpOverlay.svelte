@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from '../lib/app.svelte';
+  import { CHAPTERS, chapterFor } from '../lib/tour';
   const rows: [string, string[]][] = [
     ['Play / stop', ['Space']],
     ['Play from locator', ['⇧', 'Space']],
@@ -102,10 +103,18 @@
     ['Comp / Edit mode', ['M']],
     ['Close', ['Esc']],
   ];
+  const chapter = $derived(!app.noProject && app.view ? chapterFor(app.page, app.inReview) : null);
+  function takeTour() {
+    app.overlay = null;
+    if (chapter) void app.startTour(chapter);
+  }
 </script>
 
 <div class="wrap" role="presentation" onclick={() => (app.overlay = null)}>
   <div class="glass box" role="dialog" aria-label="Keyboard shortcuts" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={() => {}}>
+    {#if chapter}
+      <button class="tour" onclick={takeTour} data-testid="take-tour"><b>Take the tour of {CHAPTERS[chapter].name}</b><span class="muted">Anything you try is put back at the end.</span></button>
+    {/if}
     <div class="h1">Keyboard</div>
     {#each rows as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
     <div class="h2">Sounds on the Arrange page</div>
@@ -143,6 +152,21 @@
     font-size: var(--fs-ui);
     max-height: 86vh;
     overflow-y: auto;
+  }
+  .tour {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    border-radius: var(--radius-btn);
+    background: rgb(var(--accent-rgb) / 0.16);
+    box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.4);
+    text-align: left;
+  }
+  .tour:hover {
+    background: rgb(var(--accent-rgb) / 0.26);
   }
   .h1 {
     grid-column: 1 / -1;

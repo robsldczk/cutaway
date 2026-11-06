@@ -104,7 +104,7 @@
 </script>
 
 <div class="slot" class:right={review} bind:this={slot} bind:clientHeight={slotH}>
-<nav class="glass rail" aria-label="Scenes" class:open style="--cell: {size.cell}px; --cell-gap: {size.gap}px">
+<nav class="glass rail" data-tour="rail" aria-label="Scenes" class:open style="--cell: {size.cell}px; --cell-gap: {size.gap}px">
   <button class="toggle" onclick={() => (open = !open)} aria-label={open ? 'Collapse scene list' : 'Expand scene list'} title="Scene list">
     {open ? '‹' : '›'}
   </button>

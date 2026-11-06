@@ -366,7 +366,7 @@
               <div class="row">
                 <label class="pop">
                   {format ? formatLabel(format) : ''}{@render chevrons()}
-                  <select aria-label="Format" value={format ? formatKey(format) : ''} onchange={(e) => setFormat(e.currentTarget.value)} data-testid="format">
+                  <select aria-label="Format" value={format ? formatKey(format) : ''} onchange={(e) => setFormat(e.currentTarget.value)} data-testid="format" data-tour="format">
                     {#each formats as f (formatKey(f))}<option value={formatKey(f)}>{formatLabel(f)}</option>{/each}
                   </select>
                 </label>
@@ -479,7 +479,7 @@
         {:else if !show}
           <button class="btnx" onclick={() => (naming = true)} disabled={running} data-testid="save-preset">Save preset</button>
         {/if}
-        {#if !show}<button class="btnx" onclick={openForReview} disabled={running || !pickedScenes.length} title="Starts a review round on these scenes: it keeps which cut they're in and marks them Review" data-testid="open-for-review">Open these scenes for review</button>{/if}
+        {#if !show}<button class="btnx" data-tour="for-review" onclick={openForReview} disabled={running || !pickedScenes.length} title="Starts a review round on these scenes: it keeps which cut they're in and marks them Review" data-testid="open-for-review">Open these scenes for review</button>{/if}
         <button class="btnx pri" onclick={run} disabled={!canExport} data-testid="export-go">Export{#if !show}<span class="key">⌘E</span>{/if}</button>
       </div>
     {/if}

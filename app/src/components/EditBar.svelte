@@ -28,7 +28,7 @@
 
 {#snippet toggles()}
   <button class="btn" class:act={app.snapWords} aria-pressed={app.snapWords} onclick={() => (app.snapWords = !app.snapWords)} title="Snap to words and action lines">Snap<span class="long">: {app.snapWords ? 'words' : 'off'}</span></button>
-  <button class="btn" class:act={app.ripple} aria-pressed={app.ripple} onclick={() => (app.ripple = !app.ripple)} title="Ripple moves everything after a clip (⌥-drag inverts); ⌫ then ripple-deletes dialogue">Ripple</button>
+  <button class="btn" data-tour="ripple" class:act={app.ripple} aria-pressed={app.ripple} onclick={() => (app.ripple = !app.ripple)} title="Ripple moves everything after a clip (⌥-drag inverts); ⌫ then ripple-deletes dialogue">Ripple</button>
   <button class="btn" class:act={app.lockScript} aria-pressed={app.lockScript} onclick={() => (app.lockScript = !app.lockScript)} title="Locked: dialogue follows the script order and pauses. Unlocked: dialogue moves freely in time"><Icon name={app.lockScript ? 'lock' : 'unlock'} size={13} />Lock</button>
   <button class="btn tn" onclick={() => (app.waveGain = WAVE[(WAVE.indexOf(app.waveGain) + 1) % WAVE.length])} title="Waveform height" aria-label="Waveform height">Wave ×{app.waveGain}</button>
   <input type="range" min={Math.log(2)} max={Math.log(1000)} step="0.01" value={Math.log(app.editPx || 50)} oninput={(e) => onZoom(Math.exp(+(e.currentTarget as HTMLInputElement).value))} aria-label="Zoom" title="Zoom (⌘← ⌘→, Z)" class="zoom" />
@@ -59,7 +59,7 @@
       <div class="glass pop" role="menu" aria-label="More controls">{@render toggles()}</div>
     {/if}
   </div>
-  <button class="btn" class:act={app.bucketOn} aria-pressed={app.bucketOn} onclick={() => app.setBucket(!app.bucketOn)}>Bucket <span class="kb">B</span></button>
+  <button class="btn" data-tour="bucket" class:act={app.bucketOn} aria-pressed={app.bucketOn} onclick={() => app.setBucket(!app.bucketOn)}>Bucket <span class="kb">B</span></button>
 </section>
 
 <style>

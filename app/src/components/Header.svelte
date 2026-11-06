@@ -67,7 +67,7 @@
     {:else if sc && app.page !== 'import' && app.page !== 'dev' && app.page !== 'export'}<span class="muted2 where" title={sc.heading}>Sc. {sc.number} · {sc.place}{sc.time_of_day ? ` · ${sc.time_of_day}` : ''}</span>{/if}
     <span class="dot" class:saving title={saving ? 'Saving…' : 'Saved'}></span>
   </div>
-  <nav class="glass switch" aria-label="Pages">
+  <nav class="glass switch" aria-label="Pages" data-tour="pages">
     {#each pages as p (p.id)}
       <button class:active={app.page === p.id} disabled={p.id !== 'import' && !ready} onclick={() => app.setPage(p.id)}>{p.label}{#if p.key}<span class="kb">{p.key}</span>{/if}</button>
     {/each}
@@ -77,7 +77,7 @@
       <button class="pillbtn" onclick={() => app.toggleFullBucket()} disabled={!ready}>{#if app.importTab !== 'files'}<Icon name="back" size={13} />Back to {app.importBack === 'arrange' ? 'Arrange' : 'Edit'}{:else}Edit{/if} <span class="kb">⇧B</span></button>
     {/if}
     {#if app.page === 'arrange'}
-      <button class="pillbtn sounds" class:on={app.soundsOn} aria-pressed={app.soundsOn} onclick={() => app.toggleSounds()} title="Sounds beside the dialogue" data-testid="sounds-toggle">
+      <button class="pillbtn sounds" class:on={app.soundsOn} aria-pressed={app.soundsOn} onclick={() => app.toggleSounds()} title="Sounds beside the dialogue" data-testid="sounds-toggle" data-tour="sounds">
         <svg width="22" height="14" viewBox="0 0 22 14" aria-hidden="true"><circle cx="4" cy="9" r="3.5" fill="rgb(var(--bucket-1-rgb))" /><circle cx="11" cy="5" r="4" fill="rgb(var(--bucket-2-rgb))" /><circle cx="18" cy="9" r="3" fill="rgb(var(--bucket-3-rgb))" /></svg>
         <span class="lbl">Sounds <span class="kb">S</span></span>
       </button>
@@ -94,10 +94,10 @@
     <button class="icb round roomy" onclick={() => (app.overlay = 'settings')} aria-label="Settings" title="Settings">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
     </button>
-    <button class="icb round roomy" onclick={() => (app.overlay = 'help')} aria-label="Keyboard shortcuts">?</button>
+    <button class="icb round roomy" onclick={() => (app.overlay = 'help')} aria-label="Keys and tour" title="Keys and tour" data-tour="help">?</button>
     <button class="pillbtn roomy" onclick={() => (app.overlay = 'history')}>History</button>
     <div class="more">
-      <button class="icb round" aria-label="More" aria-haspopup="menu" aria-expanded={more} title="More" onclick={() => (more = !more)} data-testid="header-more"><Icon name="more" size={18} /></button>
+      <button class="icb round" aria-label="More" aria-haspopup="menu" aria-expanded={more} title="More" onclick={() => (more = !more)} data-testid="header-more" data-tour="help"><Icon name="more" size={18} /></button>
       {#if more}
         <div class="scrim0" role="presentation" onclick={() => (more = false)}></div>
         <div class="glass pop right" role="menu" aria-label="More">
@@ -108,7 +108,7 @@
             <label class="msize">Size<input type="range" min="0.8" max="1.3" step="0.05" bind:value={app.scale} aria-label="Box size" /></label>
           {/if}
           <button role="menuitem" onclick={() => pick(() => (app.overlay = 'settings'))}>Settings</button>
-          <button role="menuitem" onclick={() => pick(() => (app.overlay = 'help'))}>Keyboard shortcuts</button>
+          <button role="menuitem" onclick={() => pick(() => (app.overlay = 'help'))}>Keys and tour</button>
           <button role="menuitem" onclick={() => pick(() => (app.overlay = 'history'))}>History</button>
         </div>
       {/if}

@@ -10,6 +10,7 @@ import type { DragSound, EditView, ItemView, Job, SceneSummary, SceneView, ShowV
 
 const soundId = (key: SoundKey) => key.asset_id ?? key.remote_id ?? key.clip?.id ?? '';
 
+import { CHAPTERS, chapterFor, logTop, ownSteps, readOwed, readSeen, undosFor, writeOwed, writeSeen, type ChapterId, type LogRow } from './tour';
 import { flushSpot, keepLast, keepSpot, landing, lastOpen, queueSpot, spotOf, type Spot } from './resume';
 
 export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'export' | 'dev' | 'review';
@@ -22,6 +23,30 @@ export type MappingTarget = { kind: 'take'; line_id: string } | { kind: 'line'; 
 export type Drawer = null | 'inspector' | 'unmatched' | 'bucket';
 
 export type Theme = 'dark' | 'light';
+
+/** A tour under way: the stop it's at, the steps it has made, and what to come back to. */
+export interface TourRun {
+  chapter: ChapterId;
+  i: number;
+  /** Where the command log stood when it began. */
+  mark: number;
+  steps: number[];
+  back: {
+    scene: string | null;
+    line: string | null;
+    pos: number;
+    locator: number;
+    drawer: Drawer;
+    sounds: boolean;
+    bucket: boolean;
+    ripple: boolean;
+    snapWords: boolean;
+    lockScript: boolean;
+    tool: Tool;
+    cycle: { on: boolean; from: number; to: number };
+  };
+  ending: boolean;
+}
 
 /** A clip on the Edit page: a dialogue part (`part`, 0 without splits), a sound or the room tone. */
 export interface EditSel {
@@ -245,6 +270,11 @@ class AppState {
   reviewUi: { marker(): void; note(): void; search(): void; cancel(): boolean; wheel(e: WheelEvent): boolean } | null = null;
   /** The welcome screen sees keys and drops first, while it's up. */
   welcomeUi: { key(e: KeyboardEvent): boolean; drop(paths: string[], x: number, y: number): Promise<void> } | null = null;
+  /** The tour under way. */
+  tour = $state<TourRun | null>(null);
+  /** The chapters this viewer has been through or skipped. */
+  tourSeen = $state<ChapterId[]>(readSeen());
+  private tourStarting = false;
   /** What's opening, shown over everything for as long as it takes. `image` is a CSS background. */
   opening = $state<{ title: string; kicker: string; mode: 'edit' | 'review'; image: string } | null>(null);
   /** The open show (studio mode): its home shows when no episode is open. */
@@ -384,6 +414,7 @@ class AppState {
       if (this.status.path && !this.status.review.package) remember({ name: this.status.show ? `${this.status.show.name} · ${this.status.name}` : this.status.name, path: this.status.path });
       if (this.status.show) await this.loadShow();
       else this.show = null;
+      await this.settleTour();
       if (this.status.warnings.length && this.warned !== this.status.path) {
         this.warned = this.status.path;
         this.say(this.status.warnings.join(' '));
@@ -412,6 +443,129 @@ class AppState {
     this.resumed = this.status?.path ?? '';
     if (this.status?.path && !this.status.review.package) keepLast({ name: this.status.name, path: this.status.path });
     this.watch();
+  }
+
+  // ---- the tour ----
+
+  /** A page reached for the first time, with something on it to show. */
+  offerTour() {
+    const chapter = chapterFor(this.page, this.inReview);
+    if (!chapter || this.tourSeen.includes(chapter) || this.tour) return;
+    if (this.noProject || !this.view || !this.status?.takes) return;
+    if (this.overlay || this.asking || this.unlocking || this.opening) return;
+    // who's reviewing is asked after the page is up: not knowing yet means the sheet is on its way
+    if (this.inReview && !this.reviewer?.current) return;
+    void this.startTour(chapter);
+  }
+
+  private async tourLog() {
+    return (await this.run(() => call<LogRow[]>('history', { limit: 200 }))) ?? [];
+  }
+
+  private tourBack(): TourRun['back'] {
+    return {
+      scene: this.sceneId,
+      line: this.curId,
+      pos: this.pos,
+      locator: this.locator,
+      drawer: this.drawer,
+      sounds: this.soundsOn,
+      bucket: this.bucketOn,
+      ripple: this.ripple,
+      snapWords: this.snapWords,
+      lockScript: this.lockScript,
+      tool: this.tool,
+      cycle: { ...this.cycle },
+    };
+  }
+
+  async startTour(chapter: ChapterId) {
+    if (this.tour || this.tourStarting) return;
+    this.tourStarting = true;
+    if (this.playing) await this.stop();
+    await this.inflight;
+    const back = this.tourBack();
+    // review only keeps notes, and the tour doesn't keep those: there's nothing to put back
+    const mark = this.inReview ? 0 : logTop(await this.tourLog());
+    this.drawer = null;
+    // a line with takes to flip, for the pages that show them
+    if ((chapter === 'options' || chapter === 'arrange') && (this.cur?.takes.length ?? 0) < 2) {
+      const l = this.lines.find((x) => x.takes.length > 1);
+      if (l) this.select(l.line_id);
+    }
+    this.tour = { chapter, i: 0, mark, steps: [], back, ending: false };
+    this.tourStarting = false;
+  }
+
+  /** The tour's stops, one at a time. Past the last one it ends. */
+  async stepTour(d: number) {
+    const run = this.tour;
+    if (!run || run.ending) return;
+    this.reviewUi?.cancel();
+    if (this.playing) await this.stop();
+    const i = run.i + d;
+    if (i >= CHAPTERS[run.chapter].stops.length) return this.endTour();
+    run.i = Math.max(0, i);
+  }
+
+  /** Writes down what the tour has changed as it goes, for a quit to find. */
+  async noteTourSteps() {
+    const run = this.tour;
+    if (!run || this.inReview) return;
+    const steps = ownSteps(await this.tourLog(), run.mark, run.steps, 'ui');
+    if (steps.length === run.steps.length) return;
+    run.steps = steps;
+    if (this.status) writeOwed({ path: this.status.path, steps });
+  }
+
+  /** Undoes the tour's steps, newest first, stopping at anything that isn't one. True when all went. */
+  private async takeBack(steps: number[]) {
+    if (!steps.length) return true;
+    const n = undosFor(await this.tourLog(), steps);
+    for (let i = 0; i < n; i++) await this.run(() => call('undo'));
+    return n === steps.length;
+  }
+
+  async endTour() {
+    const run = this.tour;
+    if (!run || run.ending) return;
+    run.ending = true;
+    this.reviewUi?.cancel();
+    if (this.playing) await this.stop();
+    await this.inflight;
+    await this.noteTourSteps();
+    const all = await this.takeBack(run.steps);
+    writeOwed(null);
+    if (!all) this.say('Something else changed on top of the tour, so what you tried is still there. ⌘Z takes it back.');
+    const b = run.back;
+    if (b.scene && this.sceneId !== b.scene) await this.loadScene(b.scene);
+    else if (run.steps.length) await this.refresh();
+    this.curId = b.line;
+    this.pos = b.pos;
+    this.locator = b.locator;
+    this.passageTo = null;
+    this.lineSel = [];
+    this.drawer = b.drawer;
+    if (this.soundsOn !== b.sounds) this.toggleSounds();
+    this.setBucket(b.bucket);
+    this.ripple = b.ripple;
+    this.snapWords = b.snapWords;
+    this.lockScript = b.lockScript;
+    this.tool = b.tool;
+    this.cycle = b.cycle;
+    if (!this.tourSeen.includes(run.chapter)) {
+      this.tourSeen = [...this.tourSeen, run.chapter];
+      writeSeen(this.tourSeen);
+    }
+    this.tour = null;
+  }
+
+  /** A tour cut short by a quit: what it changed goes back as the episode opens. */
+  private async settleTour() {
+    const owed = readOwed();
+    if (this.tour || !owed || owed.path !== this.status?.path || this.status.review.active) return;
+    writeOwed(null);
+    if (!(await this.takeBack(owed.steps))) this.say('A tour was cut short, and things changed after it, so what was tried in it is still there.');
   }
 
   // ---- review ----

@@ -32,6 +32,7 @@
   import ReviewHistory from './components/ReviewHistory.svelte';
   import ReviewerSheet from './components/ReviewerSheet.svelte';
   import OpeningCover from './components/OpeningCover.svelte';
+  import Tour from './components/Tour.svelte';
 
   let root: HTMLDivElement | undefined = $state();
   let innerWidth = $state(1440);
@@ -87,6 +88,7 @@
 
   /** The native menu (File › Open Show… and friends). */
   async function menu(id: string) {
+    await app.endTour();
     if (id === 'open_show' || id === 'new_show') {
       const r = await pickPath({ directory: true, title: id === 'new_show' ? 'The production folder to make a show' : 'A show folder' });
       if (r && r.length) await app.openShow(r[0], id === 'new_show');
@@ -108,6 +110,7 @@
 
   /** `x`, `y`: on macOS Tauri's "physical" drop position is really in points, so CSS pixels. */
   async function dropped(paths: string[], x: number, y: number) {
+    if (app.tour) return;
     if (app.welcomeUi) return app.welcomeUi.drop(paths, x, y);
     const reviews = paths.filter((p) => p.endsWith(`.${brand.reviewExt}`));
     for (const r of reviews) await addReview(r);
@@ -148,6 +151,7 @@
   /** Pages where a sound from the Finder is filed into a bucket. */
   const filingHere = () => app.page === 'edit' || (app.page === 'arrange' && app.soundsOn) || (app.page === 'import' && app.importTab === 'sounds');
 
+  $effect(() => app.offerTour());
   // the spot is kept as it changes: a quit gives the page no last word
   $effect(() => app.noteSpot(app.spot));
 
@@ -235,6 +239,7 @@
   {#if app.overlay === 'settings'}<Settings />{/if}
   {#if app.overlay === 'history'}<History />{/if}
   {#if app.overlay === 'review-history'}<ReviewHistory />{/if}
+  {#if app.tour}<Tour />{/if}
   {#if app.asking}<ReviewerSheet />{/if}
   {#if app.unlocking}<UnlockSheet />{/if}
 

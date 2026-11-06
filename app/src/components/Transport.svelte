@@ -121,7 +121,7 @@
   }
 </script>
 
-<section class="glass transport" class:wide={app.inReview} aria-label="Transport" data-keeps-sound>
+<section class="glass transport" class:wide={app.inReview} aria-label="Transport" data-keeps-sound data-tour="transport">
   <div class="tabclip" aria-hidden="true">
     <div class="stab" class:on={!!app.soundPicked} style={tabText?.tone ? `--c: var(${tabText.tone})` : ''} data-testid="sound-tab">
       <span class="tdot"></span>

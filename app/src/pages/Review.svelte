@@ -130,6 +130,7 @@
   async function save() {
     const d = draft;
     if (!d || !d.text.trim()) return;
+    if (app.tour) return app.say('Notes aren’t kept during the tour.');
     draft = null;
     await app.addNote(d.params, d.text.trim(), d.tag);
     app.say('Note added');
@@ -404,8 +405,9 @@
       {#if app.reviewer?.current}<span class="muted role">{roleLabel(app.reviewer.current.role)}</span>{/if}
       <Icon name="chevron" size={10} stroke={2.6} />
     </button>
+    <button class="btnx help" onclick={() => (app.overlay = 'help')} aria-label="Keys and tour" title="Keys and tour" data-testid="review-help">?</button>
     <button class="btnx" onclick={() => (app.overlay = 'review-history')} data-testid="review-history">History</button>
-    <button class="btnx" onclick={send} title="Save your notes as one file, ready to e-mail or hand over" data-testid="send-review">Send review</button>
+    <button class="btnx" onclick={send} title="Save your notes as one file, ready to e-mail or hand over" data-testid="send-review" data-tour="finish">Send review</button>
     <button class="btnx pri" onclick={() => app.leaveReview()} data-testid="review-done">Done</button>
   </header>
 
@@ -417,10 +419,10 @@
           {@const c = charColor(v, it.character).rgb}
           {@const cur = app.pos >= it.start_s && app.pos < it.end_s + 0.4}
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the arrows walk the lines) -->
-          <div class="card glass" class:cur style="left: {LEFT}px; width: {cardW}px; top: {row.top}px; height: {row.height}px; background: linear-gradient(90deg, {rgba(c, cur ? 0.4 : 0.22)}, {rgba(c, 0.06)} 70%, var(--glass-fill-1)); box-shadow: inset 0 0 0 {cur ? 1.5 : 1}px {rgba(c, cur ? 0.7 : 0.16)}" onclick={() => { app.select(it.line_id); app.seek(it.start_s); }} data-testid="review-line" data-line={it.line_id}>
+          <div class="card glass" class:cur style="left: {LEFT}px; width: {cardW}px; top: {row.top}px; height: {row.height}px; background: linear-gradient(90deg, {rgba(c, cur ? 0.4 : 0.22)}, {rgba(c, 0.06)} 70%, var(--glass-fill-1)); box-shadow: inset 0 0 0 {cur ? 1.5 : 1}px {rgba(c, cur ? 0.7 : 0.16)}" onclick={() => { app.select(it.line_id); app.seek(it.start_s); }} data-testid="review-line" data-line={it.line_id} data-tour="card">
             <div class="ch"><span class="nm" style="color: {charColor(v, it.character).name}">{charLabel(v, it.character)}</span><span class="tn tcd">{fmt(it.start_s)}</span></div>
             <div class="script ellip txt" title={it.text}>{it.words.length ? lineWords(it).filter((w) => !w.deleted).map((w) => w.text).join(' ') : it.text}</div>
-            <button class="addn" aria-label="Note on this line" title="Note on this line (N)" onclick={(e) => { e.stopPropagation(); void write({ line_id: it.line_id }); }} data-testid="line-note"><Icon name="plus" size={12} stroke={2.6} /></button>
+            <button class="addn" aria-label="Note on this line" title="Note on this line (N)" onclick={(e) => { e.stopPropagation(); void write({ line_id: it.line_id }); }} data-testid="line-note" data-tour="add-note"><Icon name="plus" size={12} stroke={2.6} /></button>
           </div>
         {:else if row.kind === 'act' && row.it}
           <div class="act script ellip" style="left: {LEFT}px; width: {cardW}px; top: {row.top}px; height: {row.height}px" title={row.it.text}>{row.it.text}</div>
@@ -437,7 +439,7 @@
       </svg>
 
       <!-- svelte-ignore a11y_no_static_element_interactions (the keyboard has M and N) -->
-      <div class="hit" style="left: {spineX - 26}px; height: {laid.height}px" onmousedown={spineDown} title="Click for a marker, drag for a range" data-testid="review-spine"></div>
+      <div class="hit" style="left: {spineX - 26}px; height: {laid.height}px" onmousedown={spineDown} title="Click for a marker, drag for a range" data-testid="review-spine" data-tour="spine"></div>
 
       {#each sounds as p (p.id)}
         <button class="snd" style="left: {spineX + 22}px; top: {map.y(p.start_s) - 6}px" title="Note on {p.name}" aria-label="Note on {p.name}" onclick={() => write({ placement_id: p.id })} data-testid="review-sound"></button>
@@ -459,7 +461,7 @@
 
       {#each placed as p (p.item)}
         {#if p.item === DRAFT && draft}
-          <div class="mn draft" style="left: {notesX}px; width: {notesW}px; top: {p.top.toFixed(0)}px" bind:clientHeight={heights[DRAFT]} data-testid="note-draft">
+          <div class="mn draft" style="left: {notesX}px; width: {notesW}px; top: {p.top.toFixed(0)}px" bind:clientHeight={heights[DRAFT]} data-testid="note-draft" data-tour="draft">
             <div class="dtop">
               <span class="av sm">{app.reviewer?.current?.initials ?? '?'}</span>
               <b>New note</b>
@@ -492,7 +494,7 @@
     <span class="nm">Sc. {v?.scene.number} · {v?.scene.place}</span>
     <span class="muted hint">Click the wave for a marker · drag along it for a range</span>
   </div>
-  <div class="nhead" style="left: {notesX}px; width: {notesW}px" data-testid="notes-head">
+  <div class="nhead" style="left: {notesX}px; width: {notesW}px" data-testid="notes-head" data-tour="notes">
     <b>Notes</b>
     <span class="muted count tn">{r?.notes.length ?? 0} · {open} open</span>
     <button class="plain" onclick={() => write(onScene())} title="A note on the whole scene" data-testid="scene-note">On this scene</button>
@@ -657,6 +659,11 @@
     color: var(--text-strong);
     background: var(--glass-hover);
   }
+  .btnx.help {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
   .btnx.pri {
     background: var(--accent);
     color: var(--text-on-pill);
@@ -744,6 +751,7 @@
     opacity: 0;
   }
   .card:hover .addn,
+  .addn:global([data-tour-lit]),
   .addn:focus-visible {
     opacity: 1;
   }

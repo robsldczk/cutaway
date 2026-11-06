@@ -549,7 +549,7 @@
     {@const shd = itemShade(app.view, r.it)}
     <div class="snip" class:clip-muted={r.it.muted} class:clip-dropped={r.it.dropped} class:paired class:slotted={besideOn === r.it.line_id} class:picked={app.lineSel.includes(r.it.line_id) || menu?.ids.includes(r.it.line_id)} bind:this={rowEls[r.it.line_id]} style={rowStyle(r, prevGap, shift, paired)} onclick={(e) => pick(e, r.it)} oncontextmenu={(e) => openMenu(e, r.it)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} role="button" tabindex="-1" onkeydown={() => {}} data-testid="arrange-row">
       <div class="top">
-        <span class="grip" onmousedown={(e) => grabRow(e, r.it)} title="Drag to reorder" aria-label="Drag to reorder" role="button" tabindex="-1">
+        <span class="grip" data-tour="grip" onmousedown={(e) => grabRow(e, r.it)} title="Drag to reorder" aria-label="Drag to reorder" role="button" tabindex="-1">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg>
         </span>
         <span class="nm who" style="color: {charColor(app.view, r.it.character).name}">{charLabel(app.view, r.it.character)}</span>
@@ -564,7 +564,7 @@
           <button class="unpair" aria-label="Back in line, after the other" title="Back in line, after the other" onmousedown={(e) => e.stopPropagation()} onclick={(e) => { e.stopPropagation(); void app.cmd({ cmd: 'set_beside', line_id: r.it.line_id, beside: null }); }} data-testid="pair-undo"><Icon name="x" size={11} /></button>
         {/if}
       </div>
-      <div class="strip" onmousedown={(e) => scrub(e, r.it)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} title="Click to set the locator, I / O to set in and out" style="height: {Math.round(30 * sc)}px" role="slider" tabindex="-1" aria-valuenow={0}>
+      <div class="strip" data-tour="trim" onmousedown={(e) => scrub(e, r.it)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} title="Click to set the locator, I / O to set in and out" style="height: {Math.round(30 * sc)}px" role="slider" tabindex="-1" aria-valuenow={0}>
         {#if t}
           <Waveform peaks={peaksOf(r.it)} fill={rgba(shd, 0.85 - 0.45 * app.depthOf(r.it))} />
           <div class="shade" style="left: 0; width: {h * 100}%"></div>
@@ -615,7 +615,7 @@
     {/if}
     {#if r.next}
       {@const g = gapOf(r)}
-      <div class="gaprow" onmousedown={(e) => grabGap(e, r)} title="Drag up or down to change the pause" style="height: {Math.round((18 + Math.max(g, 0) * 14) * sc)}px" role="slider" tabindex="-1" aria-valuenow={g} data-testid="gap-row">
+      <div class="gaprow" data-tour="gap" onmousedown={(e) => grabGap(e, r)} title="Drag up or down to change the pause" style="height: {Math.round((18 + Math.max(g, 0) * 14) * sc)}px" role="slider" tabindex="-1" aria-valuenow={g} data-testid="gap-row">
         <div class="gapline"></div>
         <div class="gappill" style="color: {g < 0 ? 'var(--overlap)' : 'rgb(var(--ink-rgb) / 0.78)'}">
           <span class="num">{gapLabel(g)}</span>

@@ -1,6 +1,7 @@
 // Keyboard map (docs/specs/frontend-design.md). The box editor handles its own keys.
 import { app } from './app.svelte';
 import { sourceAt } from './lines';
+import { CHAPTERS, tourKey } from './tour';
 
 /** A left or right arrow on a control that steps with them: a clip's trim edge. */
 export function ownArrows(e: KeyboardEvent) {
@@ -8,6 +9,29 @@ export function ownArrows(e: KeyboardEvent) {
 }
 
 const PAGE_KEYS = ['1', '2', '3', '4'];
+
+/** During a tour only what the stop offers gets through. Runs first, ahead of the pages' own keys. */
+export function tourGate(e: KeyboardEvent) {
+  const run = app.tour;
+  if (!run) return;
+  const t = e.target as HTMLElement | null;
+  const typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
+  const what = run.ending ? 'block' : tourKey(CHAPTERS[run.chapter].stops[run.i], e, typing);
+  if (what === 'pass') return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (what === 'next') void app.stepTour(1);
+  else if (what === 'back') void app.stepTour(-1);
+  // Esc drops a note being tried before it drops the tour
+  else if (what === 'end' && !app.reviewUi?.cancel()) void app.endTour();
+}
+
+/** A right click or a double click would open what the tour can't put back. */
+export function tourMouse(e: MouseEvent) {
+  if (!app.tour) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}
 
 export function onKey(e: KeyboardEvent) {
   // nothing's open: the shelf has the keys, and only help is left for the map below
@@ -114,8 +138,8 @@ function reviewKey(e: KeyboardEvent) {
   else if (k === 'Escape') {
     if (app.overlay) app.overlay = null;
     else handled = !!app.reviewUi?.cancel();
-  } else if (app.overlay) handled = false;
-  else if (k === '?') app.overlay = 'help';
+  } else if (k === '?') app.overlay = app.overlay === 'help' ? null : 'help';
+  else if (app.overlay) handled = false;
   else if (mod) handled = false;
   else if (k === ' ' && e.shiftKey) void app.playFromLocator();
   else if (k === ' ') void app.togglePlay();

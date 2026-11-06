@@ -178,7 +178,7 @@
           <button class="rm" aria-label="Delete this direction" title="Delete" onclick={() => app.askDelete(r.it.line_id)} data-testid="delete-line">×</button>
         </div>
       {:else if cur && r.it.line_id === cur.line_id}
-        <div class="active" bind:this={activeEl} data-testid="current-box">
+        <div class="active" bind:this={activeEl} data-testid="current-box" data-tour="box">
           {#each deck as dk (dk.num)}
             <div class="deck" aria-hidden="true" style={dk.style}><span class="dnum">{dk.num}</span></div>
           {/each}
@@ -213,13 +213,13 @@
             </article>
           {/key}
           {#if cur.takes.length}
-            <div class="pills" role="group" aria-label="Takes">
+            <div class="pills" role="group" aria-label="Takes" data-tour="takes">
               {#each cur.takes as t, i (t.id)}
                 <button class="tk" data-testid="take-pill" data-selected={i === k} onclick={() => app.pickTake(cur.line_id, t.id)} aria-label="Take {i + 1}{t.favorite ? ', favorite' : ''}{t.partial ? ', partial' : ''}" style={pillStyle(i, t.partial)}>{i + 1}{t.favorite ? ' ★' : ''}</button>
               {/each}
             </div>
           {/if}
-          <aside class="side notes" aria-label="Room talk around this take">
+          <aside class="side notes" aria-label="Room talk around this take" data-tour="room">
             <div class="nm lab">In the room</div>
             {#if strip.some((r) => r.kind === 'talk')}
               <div class="strip" style="height: {Math.round(320 * sc)}px" bind:clientHeight={stripH}>

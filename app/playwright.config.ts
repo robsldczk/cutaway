@@ -7,7 +7,15 @@ export default defineConfig({
   // one demo session serves every test: run them one after another
   workers: 1,
   timeout: 60_000,
-  use: { baseURL: 'http://127.0.0.1:1421', viewport: { width: 1440, height: 900 } },
+  use: {
+    baseURL: 'http://127.0.0.1:1421',
+    viewport: { width: 1440, height: 900 },
+    // a first-use tour would sit over every spec: tour.spec.ts takes this away
+    storageState: {
+      cookies: [],
+      origins: [{ origin: 'http://127.0.0.1:1421', localStorage: [{ name: 'cutaway.tour', value: JSON.stringify(['options', 'arrange', 'edit', 'export', 'review']) }] }],
+    },
+  },
   webServer: [
     {
       command: 'node tests/epidemic-standin.mjs',

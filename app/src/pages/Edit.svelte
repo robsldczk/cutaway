@@ -943,14 +943,14 @@
 
 {#if app.editInspector}<EditInspector />{/if}
 
-<section class="tl" aria-label="Timeline" style="left: {left}px; right: {right}px">
+<section class="tl" data-tour="timeline" aria-label="Timeline" style="left: {left}px; right: {right}px">
   <div class="scroll" bind:this={scroller} onscroll={() => (scrollX = scroller?.scrollLeft ?? 0)}>
     <div class="content" style="width: {HEAD + width + 24}px; height: {totalH}px">
       <!-- ruler, sentences, action lines and words (sticky on top, whatever is collapsed) -->
       <div class="top" style="width: {HEAD + width + 24}px; height: {TOP}px">
         <div class="hcol" style="height: {TOP}px"><span class="label stl">Script</span></div>
         <div class="area" style="left: {HEAD}px; width: {width}px; height: {TOP}px">
-          <div class="ruler" role="slider" tabindex="-1" aria-label="Ruler" aria-valuenow={app.pos} onmousedown={rulerDown} data-testid="ruler">
+          <div class="ruler" role="slider" tabindex="-1" aria-label="Ruler" aria-valuenow={app.pos} onmousedown={rulerDown} data-testid="ruler" data-tour="ruler">
             <div class="cstrip"></div>
             {#if app.cycle.to > app.cycle.from}<span class="cyc" class:off={!app.cycle.on} style="left: {x(app.cycle.from)}px; width: {x(app.cycle.to - app.cycle.from)}px"></span>{/if}
             {#each ticks as tk (tk.t)}<span class="tick muted tn" style="left: {x(tk.t)}px">{tk.label}</span>{/each}
@@ -1026,7 +1026,7 @@
                     {@const g = geo(k, pt.start_s, pt.end_s)}
                     {@const first = pt.index === firstKept(l)}
                     {@const last = pt.index === lastKept(l)}
-                    <div class="clip" class:sel class:mclip={pt.muted} class:free={l.pinned} role="button" tabindex="-1" onmousedown={(e) => clipDown(e, s)} title="{l.text} (T{(l.take_index ?? 0) + 1}){pt.muted ? ' · muted' : ''}{l.pinned ? ' · unlocked' : ''}" style="left: {x(g.a) + dragDx(k)}px; width: {Math.max(4, x(g.b - g.a))}px; {clipBg(c, sel)}; box-shadow: inset 0 0 0 {sel ? '1.5px var(--playhead)' : `1px ${rgba(c, 0.45)}`}" data-testid="dialogue-clip" data-line={l.line_id} data-part={pt.index}>
+                    <div class="clip" data-tour="clip" class:sel class:mclip={pt.muted} class:free={l.pinned} role="button" tabindex="-1" onmousedown={(e) => clipDown(e, s)} title="{l.text} (T{(l.take_index ?? 0) + 1}){pt.muted ? ' · muted' : ''}{l.pinned ? ' · unlocked' : ''}" style="left: {x(g.a) + dragDx(k)}px; width: {Math.max(4, x(g.b - g.a))}px; {clipBg(c, sel)}; box-shadow: inset 0 0 0 {sel ? '1.5px var(--playhead)' : `1px ${rgba(c, 0.45)}`}" data-testid="dialogue-clip" data-line={l.line_id} data-part={pt.index}>
                       {#each l.pieces.filter((pc) => pc.part === pt.index) as pc, pi (pi)}
                         <div class="pc" style="left: {x(pc.start_s - g.a)}px; width: {x(pc.len_s)}px"><Waveform peaks={piecePeaks(l, pc)} fill={rgba(c, 0.75)} gain={app.waveGain} /></div>
                       {/each}
