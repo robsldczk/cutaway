@@ -181,6 +181,18 @@ pub struct PassageP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct BesideP {
+    pub line_id: String,
+    /// The line to run next to; left out, it goes back in the chain.
+    #[serde(default)]
+    pub beside: Option<String>,
+    /// Seconds after that line's start, negative to start first. Left out, an offset already
+    /// set stays.
+    #[serde(default)]
+    pub offset_s: Option<f64>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct GapP {
     pub line_id: String,
     /// Pause before the line in seconds; null resets to the scene default.
@@ -1004,6 +1016,7 @@ registry! {
     "step_take", SelectTakeP, Write, false, "Step to the previous/next take (take_no = delta).";
     "apply_take_to_passage", PassageP, Write, true, "Use the same take number for several lines (passage mode).";
     "toggle_favorite", LineP, Write, true, "Toggle the favorite star of the line's selected take.";
+    "set_beside", BesideP, Write, true, "Run a line side by side with another: it moves right after that line and starts offset_s after it (negative starts it first), and the next line waits for whichever ends last. Two lines at most. Leave beside out to put it back in the chain. Moving either line out of order ends the pair.";
     "set_gap", GapP, Write, true, "Set the pause before a line (seconds; negative overlaps; null resets).";
     "trim_line", TrimP, Write, true, "Trim the head and tail of a line (seconds; negative extends into the handle).";
     "command", NoParams, Write, false, "Execute any document command (see the Command schema). Used by the UI.";
@@ -1464,6 +1477,16 @@ impl Service {
                     .and_then(|b| b.take_id.clone())
                     .ok_or_else(|| AppError::Params("the line has no selected take".into()))?;
                 Ok(self.exec(&Command::ToggleFavorite { take_id: tid })?.result)
+            }
+            "set_beside" => {
+                let p: BesideP = parse(params)?;
+                Ok(self
+                    .exec(&Command::SetBeside {
+                        line_id: p.line_id,
+                        beside: p.beside,
+                        offset_s: p.offset_s,
+                    })?
+                    .result)
             }
             "set_gap" => {
                 let p: GapP = parse(params)?;

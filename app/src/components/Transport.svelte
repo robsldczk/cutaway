@@ -18,15 +18,18 @@
   // segments: lines in their take shade, pauses neutral
   const segs = $derived.by(() => {
     const out: { w: number; style: string; lbl: string }[] = [];
-    const lines = app.lines.filter((l) => l.end_s > l.start_s);
+    // in time order: the second of a pair can start first. Where lines overlap, the time is
+    // drawn once, so the map stays true to the scene
+    const lines = app.lines.filter((l) => l.end_s > l.start_s).sort((a, b) => a.start_s - b.start_s);
     let t = 0;
     const ci = app.curIndex;
     for (const l of lines) {
+      if (l.end_s <= t) continue;
       if (l.start_s > t + 1e-4) out.push({ w: l.start_s - t, style: 'background: var(--glass-fill-4)', lbl: '' });
       const i = app.lines.indexOf(l);
       const a = i === ci ? 1 : i < ci ? 0.78 : 0.4;
       out.push({
-        w: l.end_s - l.start_s,
+        w: l.end_s - Math.max(l.start_s, t),
         style: `background: ${rgba(itemShade(app.view, l), a)}`,
         lbl: zoom >= 2.5 ? charLabel(app.view, l.character).charAt(0) : '',
       });

@@ -118,6 +118,8 @@ pub struct ItemView {
     pub gap_before_s: f64,
     pub gap_overridden: bool,
     pub pinned: bool,
+    /// The line it runs next to, and how far after that line's start.
+    pub beside: Option<Beside>,
     pub edited_in_edit: bool,
     pub take_id: Option<String>,
     pub take_index: Option<usize>,
@@ -538,6 +540,7 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
             gap_before_s: li.gap_before_s,
             gap_overridden: li.gap_overridden,
             pinned: li.pinned,
+            beside: li.beside.clone(),
             edited_in_edit: b.edited_in_edit(),
             take_id: b.take_id.clone(),
             take_index,

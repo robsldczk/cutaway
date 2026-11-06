@@ -959,3 +959,15 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **A voice at wet 0** stays out of the room however it's panned, so D90's guarantee holds: nothing at wet 0 gets a send, or a change in tone.
 - **`pacing.pan_room`,** 0 to 1, Settings › Pan into the room. It's per episode like the other settings there, and 0 turns it off. Heard in playback, bounces and stems. It's in `Pacing` because that already reaches both, and it has no effect on timing.
 
+### D125 Side by side (Rob, 2026-11-06)
+- **Rob:** drag a line next to another on Arrange, and they sit next to each other. He can offset one, and for now only two run in parallel.
+- **Reading:** next to each other means heard together. Negative pauses already overlap lines, but only against the end of the line before, so a change to its length moves the overlap, and the rows stay stacked.
+- **`BoxState.beside`:** the line it runs next to and an offset from that line's *start*, so the pair holds when either line is trimmed. The next line follows whichever of the two ends last. A negative offset starts the second one first.
+- **On Arrange:** drag by the grip onto the right half of a card, which shows a dashed "Side by side" slot. The dragged line goes right after the other in the order and to its right. The pill on the second card drags it up or down, in 50 ms steps, and the card follows the mouse at 26 px a second. The × puts it back in line, or drag it out. The pair is one row for the spine, so sounds map onto it as onto a card.
+- **Two lines at most:** a line in a pair offers no slot, and `set_beside` refuses a third. It's stored as one line pointing at the one before it, so more than two would need a different model.
+- **What ends a pair:** moving either line out of order, and pinning the second one. Anything that leaves the two lines apart some other way, such as a new script version, doesn't delete the field: the layout only honours it while the partner is right before it, and otherwise the line is back in the chain.
+- **Edit:** moving the second line there, and `set_gap` on it, changes its offset. There's no pause before it to change. Moved without ripple, the first line takes the second with it and the line after them stays.
+- **Nothing else changes for the audio:** overlapping clips already played, bounced and exported. A pair of two characters is on two lanes. Two lines of one character overlap on one lane, as a negative pause does.
+- **A locked scene refuses it:** the lock print sees the new timing, so no extra check was needed.
+- **The transport map** now draws overlapping time once, in time order. It used to add the lengths up, so an overlap, by pause or pair, drifted the map off the playhead. A line that sits wholly inside another doesn't show on the map.
+

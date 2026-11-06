@@ -106,6 +106,8 @@ export interface ItemView {
   gap_before_s: number;
   gap_overridden: boolean;
   pinned: boolean;
+  /** The line it runs next to, and how long after that line's start. */
+  beside: { line_id: string; offset_s: number } | null;
   edited_in_edit: boolean;
   take_id: string | null;
   take_index: number | null;

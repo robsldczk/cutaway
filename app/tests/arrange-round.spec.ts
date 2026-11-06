@@ -97,3 +97,65 @@ test('pan: how far a panned voice goes back into the room is a setting', async (
   await setSlider(slider, 50);
   await expect.poll(async () => (await status()).pan_room).toBe(0.5);
 });
+
+/** Drags a line by its grip onto the right half of another. */
+async function dragBeside(page: Page, from: number, onto: number) {
+  const rows = page.getByTestId('arrange-row');
+  const grip = (await rows.nth(from).locator('.grip').boundingBox())!;
+  const box = (await rows.nth(onto).boundingBox())!;
+  await page.mouse.move(grip.x + 8, grip.y + 8);
+  await page.mouse.down();
+  const to = { x: box.x + box.width * 0.8, y: box.y + box.height / 2 };
+  for (let i = 1; i <= 8; i++) await page.mouse.move(grip.x + ((to.x - grip.x) * i) / 8, grip.y + ((to.y - grip.y) * i) / 8);
+}
+
+test('side by side: drag a line onto another, offset it, and put it back', async ({ page }) => {
+  await openArrange(page);
+  const rows = page.getByTestId('arrange-row');
+  const count = await rows.count();
+  const steps = async () => (await rpc<{ state: string }[]>('history', { limit: 100000 })).filter((r) => r.state === 'done').length;
+  const before = await steps();
+
+  await dragBeside(page, 2, 1);
+  await expect(page.locator('.snip.slotted')).toHaveCount(1);
+  await page.mouse.up();
+
+  const pair = page.getByTestId('arrange-pair');
+  await expect(pair).toHaveCount(1);
+  await expect(pair.getByTestId('arrange-row')).toHaveCount(2);
+  await expect(rows).toHaveCount(count);
+  await expect.poll(steps).toBe(before + 1);
+  const cards = () => Promise.all([pair.getByTestId('arrange-row').first().boundingBox(), pair.getByTestId('arrange-row').last().boundingBox()]);
+  // the column settles after the drop
+  await expect.poll(async () => { const [x, y] = await cards(); return Math.abs(x!.y - y!.y); }).toBeLessThan(2);
+  const [a, b] = (await cards()) as { x: number; y: number; width: number }[];
+  expect(b.x).toBeGreaterThan(a.x + a.width - 1);
+  await page.screenshot({ path: process.env.SHOT_DIR ? `${process.env.SHOT_DIR}/pair.png` : 'test-results/pair.png' });
+
+  // a third can't join: the pair offers no place
+  await dragBeside(page, 0, 1);
+  await expect(page.locator('.snip.slotted')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.mouse.move(10, 10);
+  await page.mouse.up();
+
+  // the offset: the second card follows the mouse, and the view keeps it
+  const pill = page.getByTestId('pair-offset');
+  await expect(pill).toHaveText('together');
+  const p = (await pill.boundingBox())!;
+  await page.mouse.move(p.x + 4, p.y + 4);
+  await page.mouse.down();
+  for (let i = 1; i <= 4; i++) await page.mouse.move(p.x + 4, p.y + 4 + 6.5 * i);
+  await page.mouse.up();
+  await expect(pill).toHaveText('+1.00 s');
+  await expect.poll(async () => { const [x, y] = await cards(); return y!.y - x!.y; }).toBeGreaterThan(20);
+  await page.screenshot({ path: process.env.SHOT_DIR ? `${process.env.SHOT_DIR}/pair-offset.png` : 'test-results/pair-offset.png' });
+
+  await page.getByTestId('pair-undo').click();
+  await expect(pair).toHaveCount(0);
+  await page.keyboard.press('Meta+z');
+  await expect(page.getByTestId('pair-offset')).toHaveText('+1.00 s');
+  await page.keyboard.press('Meta+z');
+  await page.keyboard.press('Meta+z');
+  await expect(page.getByTestId('arrange-pair')).toHaveCount(0);
+});

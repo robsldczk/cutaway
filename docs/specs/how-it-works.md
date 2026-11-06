@@ -158,7 +158,7 @@ See `architecture.md` for the stack, the project folder, the importer and the AI
 **V2**
 - Waveform-precise editing in the box editor
 - Modifier-key cut modes
-- Overlap mode beyond the Arrange page's negative pause *(changed for the Option C design: simple overlap by negative pause is in the MVP)*
+- Overlap mode beyond the Arrange page's negative pause *(changed for the Option C design: simple overlap by negative pause is in the MVP)* *(Changed in implementation, D125: two lines can also run side by side with an offset.)*
 - Cue-reading rhythm as timing template
 - SFX and music lanes
 - Volume automation and effects

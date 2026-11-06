@@ -2,6 +2,7 @@
   import { dropzone, type DropZone } from '../lib/drag.svelte';
   import type { ActionRow } from '../lib/sounds/snap';
   import ClipState from '../components/ClipState.svelte';
+  import Icon from '../components/Icon.svelte';
   import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { call } from '../lib/bridge';
@@ -49,6 +50,16 @@
     return out;
   });
 
+  /** A row, or two side by side (D125). */
+  const groups = $derived.by(() => {
+    const out: Row[][] = [];
+    for (const r of rows) {
+      if (r.it.beside && out.length) out[out.length - 1].push(r);
+      else out.push([r]);
+    }
+    return out;
+  });
+
   // actions before the first line and after the last have no pause to sit in
   const lineItems = $derived((app.view?.items ?? []).filter((i) => i.kind === 'line'));
   const head = $derived.by(() => {
@@ -92,8 +103,12 @@
   let gapPreview = $state<{ id: string; g: number } | null>(null);
   // in and out in source seconds
   let trimPreview = $state<{ id: string; a: number; z: number } | null>(null);
-  let drag = $state<{ id: string; dy: number; y0: number } | null>(null);
+  let drag = $state<{ id: string; dx: number; dy: number; y0: number } | null>(null);
+  /** The line a dragged one would land next to. */
+  let besideOn = $state<string | null>(null);
+  let offPreview = $state<{ id: string; o: number } | null>(null);
   let rowEls: Record<string, HTMLDivElement> = $state({});
+  let pairEls: Record<string, HTMLDivElement> = $state({});
   let off = $state(0);
 
   // Time on this page comes from where the cards sit: one map for the spine, the lines,
@@ -106,6 +121,7 @@
     void sc;
     void gapPreview;
     void actPreview;
+    void offPreview;
     // action text wraps to the column's width, so it's measured once that has settled
     void stageW;
     void moving;
@@ -117,9 +133,12 @@
         const el = actEls[a.line_id];
         if (el) next.push({ start_s: a.start_s, end_s: a.end_s, top: el.offsetTop, height: el.offsetHeight });
       }
-      for (const r of rows) {
-        const el = rowEls[r.it.line_id];
-        if (el) next.push({ start_s: r.it.start_s, end_s: r.it.end_s, top: el.offsetTop, height: el.offsetHeight });
+      for (const g of groups) {
+        // two lines side by side stand for one stretch of time
+        const el = g.length > 1 ? pairEls[g[0].it.line_id] : rowEls[g[0].it.line_id];
+        const start_s = Math.min(...g.map((r) => r.it.start_s));
+        const end_s = Math.max(...g.map((r) => r.it.end_s));
+        if (el) next.push({ start_s, end_s, top: el.offsetTop, height: el.offsetHeight });
       }
       boxes = next;
       // the column takes its first place at once: there's nothing to glide from
@@ -363,15 +382,41 @@
     track(e, (ev) => set(ev.clientX), () => {});
   }
 
+  /** A line another can land next to: on the timeline, and not in a pair with a third. */
+  function canTake(r: Row, id: string) {
+    const after = rows[r.j + 1];
+    return !r.it.beside && (!after?.it.beside || after.it.line_id === id) && r.it.pieces.length > 0 && !r.it.pinned;
+  }
+
+  /** The line under the mouse, when it's over the right half of its card. */
+  function besideAt(ev: MouseEvent, id: string) {
+    for (const r of rows) {
+      if (r.it.line_id === id || !canTake(r, id)) continue;
+      const box = rowEls[r.it.line_id]?.getBoundingClientRect();
+      if (box && ev.clientY >= box.top && ev.clientY <= box.bottom && ev.clientX >= box.left + box.width / 2 && ev.clientX <= box.right + 40) return r.it.line_id;
+    }
+    return null;
+  }
+
   function grabRow(e: MouseEvent, it: ItemView) {
+    const x0 = e.clientX;
     const y0 = e.clientY;
-    drag = { id: it.line_id, dy: 0, y0 };
+    drag = { id: it.line_id, dx: 0, dy: 0, y0 };
     track(
       e,
-      (ev) => drag && (drag = { ...drag, dy: ev.clientY - y0 }),
+      (ev) => {
+        if (drag) drag = { ...drag, dx: ev.clientX - x0, dy: ev.clientY - y0 };
+        besideOn = besideAt(ev, it.line_id);
+      },
       async () => {
         const d = drag;
+        const onto = besideOn;
         drag = null;
+        besideOn = null;
+        if (onto && d) {
+          await app.cmd({ cmd: 'set_beside', line_id: d.id, beside: onto, offset_s: 0 });
+          return;
+        }
         const t = dropIndex(d);
         if (d == null || t == null || !app.view) return;
         const lines = app.view.items.filter((i) => i.kind === 'line');
@@ -382,6 +427,43 @@
         let to = before ? app.view.items.findIndex((i) => i.line_id === before.line_id) : app.view.items.length;
         if (fromIdx < to) to -= 1;
         if (to !== fromIdx) await app.cmd({ cmd: 'move_item', scene_id: app.view.scene.id, item_id: d.id, to_index: to });
+        // pulled out of its pair and put back in the same place: the two go one after the other
+        else if (it.beside && Math.hypot(d.dx, d.dy) > PULL_PX) await app.cmd({ cmd: 'set_beside', line_id: d.id, beside: null });
+      },
+    );
+  }
+
+  /** Half a column is too narrow for the words beside the name: they go on a line of their own. */
+  const PAIRED_EXTRA = 22;
+  /** How far the second of a pair sits from the first. The card follows the mouse. */
+  const PAIR_PX_PER_S = 26;
+  /** A drag shorter than this was only a slip of the hand. */
+  const PULL_PX = 30;
+  const offsetOf = (r: Row) => (offPreview?.id === r.it.line_id ? offPreview.o : (r.it.beside?.offset_s ?? 0));
+  const shiftPx = (o: number) => Math.round(Math.abs(o) * PAIR_PX_PER_S * sc);
+  const offsetLabel = (o: number) => (Math.abs(o) < 0.005 ? 'together' : `${o < 0 ? '−' : '+'}${Math.abs(o).toFixed(2)} s`);
+
+  function grabOffset(e: MouseEvent, r: Row) {
+    const b = r.it.beside;
+    if (!b) return;
+    const id = r.it.line_id;
+    const y0 = e.clientY;
+    track(
+      e,
+      (ev) => (offPreview = { id, o: clamp(b.offset_s + (ev.clientY - y0) / (PAIR_PX_PER_S * sc), -30, 30) }),
+      async () => {
+        const o = offPreview ? snapGap(offPreview.o) : null;
+        if (o == null || Math.abs(o - b.offset_s) < 0.001) {
+          offPreview = null;
+          return;
+        }
+        // hold the released place until the new view lands, so the card doesn't jump back first
+        offPreview = { id, o };
+        try {
+          await app.cmd({ cmd: 'set_beside', line_id: id, beside: b.line_id, offset_s: o });
+        } finally {
+          offPreview = null;
+        }
       },
     );
   }
@@ -401,7 +483,7 @@
   }
 
   const dropY = $derived.by(() => {
-    if (!drag) return null;
+    if (!drag || besideOn) return null;
     const t = dropIndex(drag);
     const others = rows.filter((r) => r.it.line_id !== drag!.id);
     if (t == null) return null;
@@ -411,28 +493,16 @@
     return last ? (rowEls[last.it.line_id]?.offsetTop ?? 0) + S + 6 : 0;
   });
 
-  function rowStyle(r: Row, prevGap: number) {
+  function rowStyle(r: Row, prevGap: number, shift = 0, paired = false) {
     const shd = itemShade(app.view, r.it);
     const isCur = r.it.line_id === app.curId;
     const dragging = drag?.id === r.it.line_id;
     const ov = prevGap < 0 ? Math.round(-prevGap * 44 * sc) : 0;
-    return `height: ${S}px; margin-top: ${-ov}px; z-index: ${dragging ? 30 : 2}; transform: translateY(${dragging ? drag!.dy.toFixed(1) : 0}px)${dragging ? ' rotate(-1deg)' : ''}; transition: ${dragging ? 'none' : 'transform .2s'}; mix-blend-mode: ${ov > 0 ? 'screen' : 'normal'}; background: linear-gradient(90deg, ${rgba(shd, isCur ? 0.44 : 0.28)}, ${rgba(shd, 0.1)} 60%, rgb(var(--veil-rgb) / 0.03)); box-shadow: inset 0 0 0 ${isCur ? 1.5 : 1}px ${rgba(shd, isCur ? 0.75 : 0.2)}${dragging ? ', 0 30px 60px rgb(var(--shadow-rgb) / 0.55)' : isCur ? `, 0 16px 60px ${rgba(shd, 0.22)}` : ''}`;
+    return `height: ${S + (paired ? PAIRED_EXTRA : 0)}px; margin-top: ${shift - ov}px; z-index: ${dragging ? 30 : 2}; transform: translate(${dragging ? drag!.dx.toFixed(1) : 0}px, ${dragging ? drag!.dy.toFixed(1) : 0}px)${dragging ? ' rotate(-1deg)' : ''}; transition: ${dragging ? 'none' : 'transform .2s'}; mix-blend-mode: ${ov > 0 ? 'screen' : 'normal'}; background: linear-gradient(90deg, ${rgba(shd, isCur ? 0.44 : 0.28)}, ${rgba(shd, 0.1)} 60%, rgb(var(--veil-rgb) / 0.03)); box-shadow: inset 0 0 0 ${isCur ? 1.5 : 1}px ${rgba(shd, isCur ? 0.75 : 0.2)}${dragging ? ', 0 30px 60px rgb(var(--shadow-rgb) / 0.55)' : isCur ? `, 0 16px 60px ${rgba(shd, 0.22)}` : ''}`;
   }
 </script>
 
-{#snippet action(a: ItemView)}
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the playhead's keys reach it too) -->
-  <div class="act" class:over={dropOn === a.line_id} class:off={!a.spacer_enabled} style="padding-bottom: {5 + actRoom(a)}px" bind:this={actEls[a.line_id]} use:dropzone={actionZone(a)} onclick={() => on && app.scrubTo(a.start_s)} data-testid="action-row" title={on ? 'Drop a sound here to tag it to this action' : undefined}>
-    <span class="script atext">{a.text}</span>
-    {#each tagsOf(a) as p (p.id)}<span class="tag ellip" data-testid="action-tag">{p.name}</span>{/each}
-    <span class="aedge" role="slider" tabindex="-1" aria-label="Length of this direction" aria-valuenow={actLen(a)} title="Drag to change how long this direction takes" onmousedown={(e) => grabAction(e, a)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} data-testid="action-len"><span class="asec tn">{actLen(a).toFixed(1)} s</span></span>
-  </div>
-{/snippet}
-
-<div class="col" class:masked={on} bind:clientWidth={stageW}>
-<div class="arr" style="left: {on ? COLUMN_LEFT : (stageW - plainW) / 2}px; width: {on ? columnW : plainW}px; transform: translateY({(-off).toFixed(1)}px); transition: {slide}{moving ? ', left var(--dur-move) var(--ease-move), width var(--dur-move) var(--ease-move)' : ''}">
-  {#each head as a (a.line_id)}{@render action(a)}{/each}
-  {#each rows as r, i (r.it.line_id)}
+{#snippet card(r: Row, prevGap: number, shift: number, paired: boolean)}
     {@const t = takeOf(r.it)}
     {@const tr = trims(r.it)}
     {@const hc = inWord(r.it, tr.a)}
@@ -440,8 +510,7 @@
     {@const h = fx(r.it, tr.a)}
     {@const tl = fx(r.it, tr.z)}
     {@const shd = itemShade(app.view, r.it)}
-    {@const prevGap = i > 0 && !rows[i - 1].acts.length ? gapOf(rows[i - 1]) : 0}
-    <div class="snip" class:clip-muted={r.it.muted} class:clip-dropped={r.it.dropped} bind:this={rowEls[r.it.line_id]} style={rowStyle(r, prevGap)} onclick={() => app.select(r.it.line_id)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} role="button" tabindex="-1" onkeydown={() => {}} data-testid="arrange-row">
+    <div class="snip" class:clip-muted={r.it.muted} class:clip-dropped={r.it.dropped} class:paired class:slotted={besideOn === r.it.line_id} bind:this={rowEls[r.it.line_id]} style={rowStyle(r, prevGap, shift, paired)} onclick={() => app.select(r.it.line_id)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} role="button" tabindex="-1" onkeydown={() => {}} data-testid="arrange-row">
       <div class="top">
         <span class="grip" onmousedown={(e) => grabRow(e, r.it)} title="Drag to reorder" aria-label="Drag to reorder" role="button" tabindex="-1">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg>
@@ -450,7 +519,11 @@
         <span class="script ellip txt" style="font-size: {Math.round(15 * sc)}px">{#if r.it.words.length && !r.it.dropped}{#each lineWords(r.it).filter((w) => !w.deleted) as w, wi (w.j)}{wi ? ' ' : ''}<span class:wmuted={w.muted}>{w.text}</span>{/each}{:else}{r.it.text}{/if}</span>
         <ClipState it={r.it} />
         {#if r.it.moved}<span class="badge moved">Moved</span>{/if}
-        <span class="dur" data-testid="row-dur">{(r.it.end_s - r.it.start_s).toFixed(1)} s</span>
+        {#if !r.it.beside}<span class="dur" data-testid="row-dur">{(r.it.end_s - r.it.start_s).toFixed(1)} s</span>{/if}
+        {#if r.it.beside}
+          <span class="offp tn" role="slider" tabindex="-1" aria-label="Offset from the line beside it" aria-valuenow={offsetOf(r)} title="Drag up or down to start it earlier or later" onmousedown={(e) => grabOffset(e, r)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} data-testid="pair-offset">{offsetLabel(offsetOf(r))}</span>
+          <button class="unpair" aria-label="Back in line, after the other" title="Back in line, after the other" onmousedown={(e) => e.stopPropagation()} onclick={(e) => { e.stopPropagation(); void app.cmd({ cmd: 'set_beside', line_id: r.it.line_id, beside: null }); }} data-testid="pair-undo"><Icon name="x" size={11} /></button>
+        {/if}
       </div>
       <div class="strip" onmousedown={(e) => scrub(e, r.it)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} title="Click to set the locator, I / O to set in and out" style="height: {Math.round(30 * sc)}px" role="slider" tabindex="-1" aria-valuenow={0}>
         {#if t}
@@ -471,6 +544,33 @@
         {/if}
       </div>
     </div>
+{/snippet}
+
+{#snippet action(a: ItemView)}
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the playhead's keys reach it too) -->
+  <div class="act" class:over={dropOn === a.line_id} class:off={!a.spacer_enabled} style="padding-bottom: {5 + actRoom(a)}px" bind:this={actEls[a.line_id]} use:dropzone={actionZone(a)} onclick={() => on && app.scrubTo(a.start_s)} data-testid="action-row" title={on ? 'Drop a sound here to tag it to this action' : undefined}>
+    <span class="script atext">{a.text}</span>
+    {#each tagsOf(a) as p (p.id)}<span class="tag ellip" data-testid="action-tag">{p.name}</span>{/each}
+    <span class="aedge" role="slider" tabindex="-1" aria-label="Length of this direction" aria-valuenow={actLen(a)} title="Drag to change how long this direction takes" onmousedown={(e) => grabAction(e, a)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} data-testid="action-len"><span class="asec tn">{actLen(a).toFixed(1)} s</span></span>
+  </div>
+{/snippet}
+
+<div class="col" class:masked={on} bind:clientWidth={stageW}>
+<div class="arr" style="left: {on ? COLUMN_LEFT : (stageW - plainW) / 2}px; width: {on ? columnW : plainW}px; transform: translateY({(-off).toFixed(1)}px); transition: {slide}{moving ? ', left var(--dur-move) var(--ease-move), width var(--dur-move) var(--ease-move)' : ''}">
+  {#each head as a (a.line_id)}{@render action(a)}{/each}
+  {#each groups as grp, i (grp[0].it.line_id)}
+    {@const r = grp[grp.length - 1]}
+    {@const before = i > 0 ? groups[i - 1] : null}
+    {@const prevGap = before && !before.some((x) => x.acts.length) ? gapOf(before[before.length - 1]) : 0}
+    {#if grp.length > 1}
+      {@const o = offsetOf(grp[1])}
+      <div class="pair" bind:this={pairEls[grp[0].it.line_id]} data-testid="arrange-pair">
+        {@render card(grp[0], prevGap, o < 0 ? shiftPx(o) : 0, true)}
+        {@render card(grp[1], prevGap, o > 0 ? shiftPx(o) : 0, true)}
+      </div>
+    {:else}
+      {@render card(r, prevGap, 0, false)}
+    {/if}
     {#if r.next}
       {@const g = gapOf(r)}
       <div class="gaprow" onmousedown={(e) => grabGap(e, r)} title="Drag up or down to change the pause" style="height: {Math.round((18 + Math.max(g, 0) * 14) * sc)}px" role="slider" tabindex="-1" aria-valuenow={g} data-testid="gap-row">
@@ -479,7 +579,7 @@
           <span class="num">{gapLabel(g)}</span>
         </div>
       </div>
-      {#each r.acts as a (a.line_id)}{@render action(a)}{/each}
+      {#each grp.flatMap((x) => x.acts) as a (a.line_id)}{@render action(a)}{/each}
     {/if}
   {/each}
   {#each tail as a (a.line_id)}{@render action(a)}{/each}
@@ -526,6 +626,75 @@
     align-items: center;
     gap: 10px;
     min-width: 0;
+  }
+  /* two lines side by side: half a column each, the second can sit lower or higher */
+  .pair {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .pair .snip {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 10px;
+  }
+  .paired .top {
+    flex-wrap: wrap;
+    gap: 0 6px;
+  }
+  .paired .who {
+    flex: 0 1 auto;
+    width: auto;
+    min-width: 0;
+  }
+  .paired .txt {
+    flex: 1 0 100%;
+    order: 5;
+  }
+  .paired .dur {
+    margin-left: auto;
+  }
+  .offp {
+    flex: none;
+    margin-left: auto;
+    padding: 1px 6px;
+    border-radius: var(--radius-pill);
+    font-size: 10.5px;
+    color: var(--overlap);
+    background: rgb(var(--veil-rgb) / 0.08);
+    cursor: ns-resize;
+  }
+  .unpair {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    color: rgb(var(--ink-rgb) / 0.5);
+  }
+  .unpair:hover {
+    background: rgb(var(--veil-rgb) / 0.1);
+    color: var(--text-strong);
+  }
+  /* where a dragged line would land beside this one */
+  .slotted::after {
+    content: 'Side by side';
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    bottom: 6px;
+    width: calc(50% - 6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px dashed var(--playhead);
+    border-radius: 10px;
+    background: rgb(var(--veil-rgb) / 0.08);
+    font-size: var(--fs-small);
+    color: var(--text-strong);
+    pointer-events: none;
   }
   .grip {
     flex: none;

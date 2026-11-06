@@ -116,6 +116,16 @@ pub enum Command {
         #[serde(default)]
         reset_duration: bool,
     },
+    /// Runs a line next to another: it moves right after that line and starts `offset_s` after
+    /// it. Two lines at most. `beside: None` puts it back in the chain, where it stands in the
+    /// order. Without `offset_s` an offset already set stays.
+    SetBeside {
+        line_id: String,
+        #[serde(default)]
+        beside: Option<String>,
+        #[serde(default)]
+        offset_s: Option<f64>,
+    },
     MoveItem {
         scene_id: String,
         item_id: String,
@@ -492,6 +502,7 @@ impl Command {
             Command::NudgeGap { .. } => "nudge_gap",
             Command::SetTrim { .. } => "set_trim",
             Command::SetSpacer { .. } => "set_spacer",
+            Command::SetBeside { .. } => "set_beside",
             Command::MoveItem { .. } => "move_item",
             Command::SetSceneTightness { .. } => "set_scene_tightness",
             Command::SetComp { .. } => "set_comp",
@@ -711,6 +722,14 @@ impl Command {
                 Ok(json!({ "favorite": t.favorite }))
             }
             Command::SetGap { line_id, gap_s } => {
+                // a line beside another has no pause: the same move is its offset
+                let scene = scene_of(tx, line_id)?;
+                let cur = effective_gap(tx.doc(), &scene, line_id, &pacing);
+                if let Some(g) = gap_s {
+                    if shift_beside(tx, &scene, line_id, g - cur, &pacing)? {
+                        return Ok(Value::Null);
+                    }
+                }
                 let mut b = boxed(tx, line_id)?;
                 b.gap_s = gap_s.map(|g| g.clamp(-5.0, 30.0));
                 tx.put(&b)?;
@@ -718,6 +737,9 @@ impl Command {
             }
             Command::NudgeGap { line_id, delta_s } => {
                 let scene = scene_of(tx, line_id)?;
+                if shift_beside(tx, &scene, line_id, *delta_s, &pacing)? {
+                    return Ok(Value::Null);
+                }
                 let cur = effective_gap(tx.doc(), &scene, line_id, &pacing);
                 let mut b = boxed(tx, line_id)?;
                 let g = ((cur + delta_s) * 1000.0).round() / 1000.0;
@@ -797,9 +819,15 @@ impl Command {
                 let to = (*to_index).min(sc.order.len());
                 sc.order.insert(to, item);
                 tx.put(&sc)?;
+                drop_broken_pairs(tx, &sc)?;
                 opening_drops_gap(tx, &sc, first_before, &pacing)?;
                 Ok(json!({ "index": to }))
             }
+            Command::SetBeside {
+                line_id,
+                beside,
+                offset_s,
+            } => set_beside(tx, line_id, beside.as_deref(), *offset_s, &pacing),
             Command::SetSceneTightness {
                 scene_id,
                 tightness,
@@ -1538,12 +1566,153 @@ fn move_clip(
         tx.put(&b)?;
         return Ok(Value::Null);
     }
+    if shift_beside(tx, &scene, line_id, delta, pacing)? {
+        return Ok(Value::Null);
+    }
     let cur = layout.item(line_id).map(|i| i.gap_before_s).unwrap_or(0.0);
     b.gap_s = Some(ms(cur + delta));
     tx.put(&b)?;
     if !ripple {
         hold_next(tx, &scene, line_id, &layout, pacing)?;
     }
+    Ok(Value::Null)
+}
+
+/// How far a line beside another can sit from it.
+const BESIDE_MAX_S: f64 = 30.0;
+
+/// The dialogue lines of a scene in order.
+fn dialogue_order<'a>(doc: &Document, scene: &'a Scene) -> Vec<&'a String> {
+    scene
+        .order
+        .iter()
+        .filter(|id| {
+            doc.lines
+                .get(*id)
+                .is_some_and(|l| l.kind == LineKind::Dialogue)
+        })
+        .collect()
+}
+
+/// After a change of order: a pair whose lines no longer follow each other is two lines again.
+fn drop_broken_pairs(tx: &mut Tx, scene: &Scene) -> Result<()> {
+    let lines = dialogue_order(tx.doc(), scene);
+    let broken: Vec<String> = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(i, id)| {
+            let b = tx.doc().boxes.get(*id)?.beside.as_ref()?;
+            let before = i.checked_sub(1).and_then(|p| lines.get(p));
+            (before.map(|x| x.as_str()) != Some(b.line_id.as_str())).then(|| (*id).clone())
+        })
+        .collect();
+    for id in broken {
+        let mut b = boxed(tx, &id)?;
+        b.beside = None;
+        tx.put(&b)?;
+    }
+    Ok(())
+}
+
+/// Moves a line that's beside another by `delta`, if it is. Says whether it was.
+fn shift_beside(
+    tx: &mut Tx,
+    scene: &Scene,
+    line_id: &str,
+    delta: f64,
+    pacing: &crate::timeline::Pacing,
+) -> Result<bool> {
+    let layout = layout_scene(tx.doc(), scene, pacing);
+    if layout.item(line_id).is_none_or(|i| i.beside.is_none()) {
+        return Ok(false);
+    }
+    let mut b = boxed(tx, line_id)?;
+    if let Some(x) = b.beside.as_mut() {
+        x.offset_s = ms((x.offset_s + delta).clamp(-BESIDE_MAX_S, BESIDE_MAX_S));
+    }
+    tx.put(&b)?;
+    Ok(true)
+}
+
+fn set_beside(
+    tx: &mut Tx,
+    line_id: &str,
+    beside: Option<&str>,
+    offset_s: Option<f64>,
+    pacing: &crate::timeline::Pacing,
+) -> Result<Value> {
+    let mut sc = scene_of(tx, line_id)?;
+    let mut b = boxed(tx, line_id)?;
+    let Some(partner) = beside else {
+        if b.beside.take().is_some() {
+            tx.put(&b)?;
+        }
+        return Ok(Value::Null);
+    };
+    let offset = offset_s
+        .or_else(|| {
+            let held = b.beside.as_ref().filter(|x| x.line_id == partner);
+            held.map(|x| x.offset_s)
+        })
+        .unwrap_or(0.0);
+    if !offset.is_finite() {
+        return Err(CoreError::invalid("offset_s must be a number"));
+    }
+    if partner == line_id {
+        return Err(CoreError::invalid("a line can't run beside itself"));
+    }
+    let other = tx
+        .doc()
+        .lines
+        .get(partner)
+        .ok_or_else(|| CoreError::not_found("line", partner))?;
+    if other.scene_id != sc.id || other.kind != LineKind::Dialogue {
+        return Err(CoreError::invalid(format!(
+            "{partner} is not a line of this scene"
+        )));
+    }
+    let lines = dialogue_order(tx.doc(), &sc);
+    let taken = |id: &str| {
+        tx.doc()
+            .boxes
+            .get(id)
+            .and_then(|x| x.beside.as_ref())
+            .is_some()
+    };
+    let at = lines.iter().position(|x| x.as_str() == partner);
+    let follower = at.and_then(|i| lines.get(i + 1)).map(|x| x.as_str());
+    let partner_full = taken(partner) || (follower.is_some_and(taken) && follower != Some(line_id));
+    if partner_full {
+        return Err(CoreError::invalid("two lines at most can run side by side"));
+    }
+    let layout = layout_scene(tx.doc(), &sc, pacing);
+    if layout
+        .item(partner)
+        .is_none_or(|i| i.pieces.is_empty() || i.pinned)
+    {
+        return Err(CoreError::invalid(format!(
+            "{partner} isn't in the chain of the scene"
+        )));
+    }
+    let first_before = first_locked(tx.doc(), &sc, pacing);
+    // right after its partner, wherever it was
+    sc.order.retain(|x| x != line_id);
+    let to = sc
+        .order
+        .iter()
+        .position(|x| x == partner)
+        .map_or(sc.order.len(), |i| i + 1);
+    sc.order.insert(to, line_id.to_string());
+    tx.put(&sc)?;
+    b.beside = Some(Beside {
+        line_id: partner.to_string(),
+        offset_s: ms(offset.clamp(-BESIDE_MAX_S, BESIDE_MAX_S)),
+    });
+    b.gap_s = None;
+    b.pinned_s = None;
+    tx.put(&b)?;
+    drop_broken_pairs(tx, &sc)?;
+    opening_drops_gap(tx, &sc, first_before, pacing)?;
     Ok(Value::Null)
 }
 
@@ -1592,10 +1761,13 @@ fn hold_next(
     let Some(pos) = scene.order.iter().position(|x| x == line_id) else {
         return Ok(());
     };
+    // a line beside this one goes with it: what stays put is the next one after them
     let next = scene.order[pos + 1..].iter().find(|id| {
         before
             .item(id)
-            .map(|i| i.kind == ItemKind::Box && !i.pieces.is_empty() && !i.pinned)
+            .map(|i| {
+                i.kind == ItemKind::Box && !i.pieces.is_empty() && !i.pinned && i.beside.is_none()
+            })
             .unwrap_or(false)
     });
     let Some(nid) = next.cloned() else {
@@ -1631,7 +1803,11 @@ fn pin_clip(
         .ok_or_else(|| CoreError::not_found("line", line_id))?;
     let mut b = boxed(tx, line_id)?;
     match at_s {
-        Some(t) => b.pinned_s = Some(ms(t.max(0.0))),
+        Some(t) => {
+            b.pinned_s = Some(ms(t.max(0.0)));
+            // free in time means out of the pair too
+            b.beside = None;
+        }
         None => {
             if b.pinned_s.is_none() {
                 return Ok(json!({ "start_s": start }));
@@ -3714,5 +3890,175 @@ mod tests {
         assert_eq!(bus.doc().scenes[&scene].status, Some(SceneStatus::Review));
         bus.undo().unwrap();
         assert_eq!(bus.doc().scenes[&scene].status, None);
+    }
+
+    /// Lines a, b and c of one scene with a take each, and c's start as the chain has it.
+    fn three_lines() -> (tempfile::TempDir, CommandBus) {
+        let (d, mut bus) = setup();
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            let mut c = tx.doc().lines["b"].clone();
+            c.id = "c".into();
+            c.number = 4;
+            tx.put(&c)?;
+            let mut t = tx.doc().takes["tb"].clone();
+            t.id = "tc".into();
+            t.line_id = "c".into();
+            tx.put(&t)?;
+            tx.put(&BoxState {
+                id: "c".into(),
+                take_id: Some("tc".into()),
+                ..Default::default()
+            })?;
+            let mut s = tx.doc().scenes.values().next().unwrap().clone();
+            s.order.push("c".into());
+            tx.put(&s)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        (d, bus)
+    }
+
+    fn beside(line: &str, with: Option<&str>, offset_s: Option<f64>) -> Command {
+        Command::SetBeside {
+            line_id: line.into(),
+            beside: with.map(str::to_string),
+            offset_s,
+        }
+    }
+
+    #[test]
+    fn a_line_beside_another_starts_with_it_and_the_next_follows_the_longer() {
+        let (_d, mut bus) = three_lines();
+        let before = bus.doc().clone();
+        bus.execute(&beside("b", Some("a"), None)).unwrap();
+        let l = lay(&bus);
+        let (a, b, c) = (
+            l.item("a").unwrap(),
+            l.item("b").unwrap(),
+            l.item("c").unwrap(),
+        );
+        assert_eq!(b.start_s, a.start_s);
+        assert_eq!(b.beside.as_ref().unwrap().line_id, "a");
+        assert!(b.end_s > a.end_s, "b is the longer one here");
+        assert!(c.start_s >= b.end_s, "the next line waits for both");
+
+        // an offset moves the second one, and only as much as it asks
+        bus.execute(&beside("b", Some("a"), Some(0.4))).unwrap();
+        let l = lay(&bus);
+        assert!((l.item("b").unwrap().start_s - l.item("a").unwrap().start_s - 0.4).abs() < 1e-9);
+
+        bus.undo().unwrap();
+        bus.undo().unwrap();
+        assert_eq!(bus.doc(), &before);
+    }
+
+    #[test]
+    fn the_second_of_a_pair_can_start_first_but_not_before_the_scene() {
+        let (_d, mut bus) = three_lines();
+        bus.execute(&beside("c", Some("b"), Some(-0.5))).unwrap();
+        let l = lay(&bus);
+        let (b, c) = (l.item("b").unwrap(), l.item("c").unwrap());
+        assert!((b.start_s - c.start_s - 0.5).abs() < 1e-9);
+        bus.execute(&beside("c", None, None)).unwrap();
+        bus.execute(&beside("b", Some("a"), Some(-30.0))).unwrap();
+        assert_eq!(lay(&bus).item("b").unwrap().start_s, 0.0);
+    }
+
+    #[test]
+    fn dragged_from_further_down_a_line_moves_next_to_its_partner() {
+        let (_d, mut bus) = three_lines();
+        bus.execute(&beside("c", Some("a"), None)).unwrap();
+        let order = |bus: &CommandBus| bus.doc().scenes.values().next().unwrap().order.clone();
+        let o = order(&bus);
+        let at = |id: &str| o.iter().position(|x| x == id).unwrap();
+        assert_eq!(at("c"), at("a") + 1);
+        assert!(at("c") < at("b"));
+        assert!(lay(&bus).item("c").unwrap().beside.is_some());
+    }
+
+    #[test]
+    fn only_two_lines_run_side_by_side() {
+        let (_d, mut bus) = three_lines();
+        bus.execute(&beside("b", Some("a"), None)).unwrap();
+        // not next to the second of a pair, nor as a third next to the first
+        assert!(bus.execute(&beside("c", Some("b"), None)).is_err());
+        assert!(bus.execute(&beside("c", Some("a"), None)).is_err());
+        assert!(bus.execute(&beside("a", Some("a"), None)).is_err());
+        assert!(bus.execute(&beside("a", Some("nope"), None)).is_err());
+    }
+
+    #[test]
+    fn moving_a_line_out_breaks_the_pair_and_the_other_goes_back_in_the_chain() {
+        let (_d, mut bus) = three_lines();
+        bus.execute(&beside("b", Some("a"), None)).unwrap();
+        let scene = bus.doc().scenes.keys().next().unwrap().clone();
+        let last = bus.doc().scenes[&scene].order.len() - 1;
+        bus.execute(&Command::MoveItem {
+            scene_id: scene,
+            item_id: "a".into(),
+            to_index: last,
+        })
+        .unwrap();
+        assert!(bus.doc().boxes["b"].beside.is_none());
+        let l = lay(&bus);
+        assert!(l.item("a").unwrap().start_s > l.item("b").unwrap().end_s);
+    }
+
+    #[test]
+    fn a_pair_that_no_longer_follows_each_other_is_ignored_not_broken() {
+        let (_d, mut bus) = three_lines();
+        bus.execute(&beside("b", Some("a"), None)).unwrap();
+        // as a new script version would leave it: another line between them
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            let mut s = tx.doc().scenes.values().next().unwrap().clone();
+            s.order.retain(|x| x != "c");
+            let at = s.order.iter().position(|x| x == "b").unwrap();
+            s.order.insert(at, "c".into());
+            tx.put(&s)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        let l = lay(&bus);
+        assert!(l.item("b").unwrap().beside.is_none());
+        assert!(l.item("b").unwrap().start_s > l.item("a").unwrap().end_s);
+    }
+
+    #[test]
+    fn on_edit_a_line_beside_another_moves_by_its_offset() {
+        let (_d, mut bus) = three_lines();
+        bus.execute(&beside("b", Some("a"), None)).unwrap();
+        bus.execute(&Command::MoveClip {
+            line_id: "b".into(),
+            delta_s: 0.25,
+            ripple: true,
+        })
+        .unwrap();
+        assert_eq!(bus.doc().boxes["b"].beside.as_ref().unwrap().offset_s, 0.25);
+        bus.execute(&Command::NudgeGap {
+            line_id: "b".into(),
+            delta_s: 0.25,
+        })
+        .unwrap();
+        assert_eq!(bus.doc().boxes["b"].beside.as_ref().unwrap().offset_s, 0.5);
+        let g = lay(&bus).item("b").unwrap().gap_before_s;
+        bus.execute(&Command::SetGap {
+            line_id: "b".into(),
+            gap_s: Some(g + 0.25),
+        })
+        .unwrap();
+        assert_eq!(bus.doc().boxes["b"].beside.as_ref().unwrap().offset_s, 0.75);
+    }
+
+    #[test]
+    fn a_locked_scene_refuses_a_pair() {
+        let (_d, mut bus) = three_lines();
+        let scene = bus.doc().scenes.keys().next().unwrap().clone();
+        bus.execute(&Command::LockScene {
+            scene_id: scene,
+            version: None,
+            at: "2026-11-06".into(),
+        })
+        .unwrap();
+        assert!(bus.execute(&beside("b", Some("a"), None)).is_err());
     }
 }

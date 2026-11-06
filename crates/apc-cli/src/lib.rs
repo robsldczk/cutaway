@@ -106,6 +106,14 @@ pub enum Cmd {
     Unlock {
         scene: String,
     },
+    /// Run a line side by side with another. Without one, it goes back in the chain.
+    Beside {
+        line: String,
+        with: Option<String>,
+        /// Seconds after that line's start, negative to start first.
+        #[arg(long, allow_negative_numbers = true)]
+        offset: Option<f64>,
+    },
     /// Mark how far along a scene is: in_progress, review or finished. Without one, clears it.
     Mark {
         scene: String,
@@ -905,6 +913,11 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                     &mut sess,
                     "unlock_scene",
                     json!({ "scene": scene, "confirm": confirm }),
+                ),
+                Cmd::Beside { line, with, offset } => call(
+                    &mut sess,
+                    "set_beside",
+                    json!({ "line_id": line, "beside": with, "offset_s": offset }),
                 ),
                 Cmd::Mark { scene, status } => call(
                     &mut sess,

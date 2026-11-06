@@ -831,6 +831,16 @@ impl WordEdits {
     }
 }
 
+/// A line running next to the one before it, so the two are heard together. It only counts while
+/// that line really comes right before it on the timeline; anything else leaves it in the chain.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, schemars::JsonSchema)]
+pub struct Beside {
+    pub line_id: String,
+    /// How long after that line's start this one starts; negative starts it first.
+    #[serde(default)]
+    pub offset_s: f64,
+}
+
 /// Edit state of one dialogue line on the timeline (id = line id).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, schemars::JsonSchema)]
 pub struct BoxState {
@@ -852,6 +862,9 @@ pub struct BoxState {
     /// Absolute scene time (Edit page pin); overrides the gap.
     #[serde(default)]
     pub pinned_s: Option<f64>,
+    /// Runs next to the line before it instead of after it (D125).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub beside: Option<Beside>,
     #[serde(default)]
     pub gain_db: f64,
     /// Split points (Edit page), in source order once laid out.

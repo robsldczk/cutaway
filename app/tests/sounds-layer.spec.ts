@@ -452,6 +452,9 @@ test('actions: they read between the lines, and a sound dropped on one hangs on 
   // beside it counts too, and the tooltip says what it's on
   await rpc('remove_sound', { placement_id: s.id });
   await expect(row.getByTestId('action-tag')).toHaveCount(0);
+  // to the middle first: at the end of a long scene it can sit under the transport
+  await row.click();
+  await page.waitForTimeout(400);
   const b = (await row.boundingBox())!;
   const field = (await page.getByTestId('sounds-field').boundingBox())!;
   const from = await centre(await bucketRow(page));
@@ -828,6 +831,7 @@ test('glue: dropped where nothing snaps, a sound stays on that moment when the d
   expect(now.start_s).toBeGreaterThan(put.start_s + 1);
   expect(now.anchor).toEqual(put.anchor);
   expect(now.offset_s).toBe(put.offset_s);
+  await rpc('undo');
 });
 
 test('glue: off in the opened sound, it stays at its time and through a move, and comes back', async ({ page }) => {

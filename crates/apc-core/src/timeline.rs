@@ -143,6 +143,9 @@ pub struct LayoutItem {
     /// Every part dropped: the line is out of the cut.
     #[serde(default)]
     pub dropped: bool,
+    /// The line it runs next to, while that holds (`BoxState::beside`).
+    #[serde(default)]
+    pub beside: Option<crate::model::Beside>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -676,6 +679,14 @@ fn build_box(doc: &Document, b: &BoxState, pacing: &Pacing) -> BuiltBox {
 }
 
 /// Lays out one scene.
+/// The last line of the chain, as the next one sees it.
+struct Chained {
+    id: String,
+    start_s: f64,
+    /// It's beside another already.
+    beside: bool,
+}
+
 pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayout {
     let mut items = Vec::new();
     let mut cursor = 0.0;
@@ -685,6 +696,8 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
     let mut opening = true;
     // start of the last chained box: a default overlap never reaches back past it
     let mut prev_start = 0.0;
+    // the line a next one could run beside
+    let mut last: Option<Chained> = None;
     for item_id in &scene.order {
         let Some(line) = doc.lines.get(item_id) else {
             continue;
@@ -720,6 +733,7 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
                 parts: Vec::new(),
                 muted: false,
                 dropped: false,
+                beside: None,
             });
             continue;
         }
@@ -761,10 +775,22 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
                 parts,
                 muted,
                 dropped,
+                beside: None,
             });
             continue;
         }
-        let (gap, overridden) = if first_box {
+        // beside the line just before it, and only that: two lines at most (D125)
+        let beside = b
+            .beside
+            .as_ref()
+            .filter(|_| b.pinned_s.is_none())
+            .filter(|x| {
+                last.as_ref()
+                    .is_some_and(|l| l.id == x.line_id && !l.beside)
+            });
+        let (gap, overridden) = if beside.is_some() {
+            (0.0, true)
+        } else if first_box {
             // the first locked line starts the scene unless it was moved later
             (b.gap_s.unwrap_or(0.0).max(0.0), b.gap_s.is_some())
         } else {
@@ -779,9 +805,10 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
                 }
             }
         };
-        let start = match b.pinned_s {
-            Some(p) => p,
-            None => (cursor + gap).max(0.0),
+        let start = match (b.pinned_s, beside, &last) {
+            (Some(p), _, _) => p,
+            (None, Some(x), Some(l)) => (l.start_s + x.offset_s).max(0.0),
+            _ => (cursor + gap).max(0.0),
         };
         for p in pieces.iter_mut() {
             p.start_s += start;
@@ -811,14 +838,30 @@ pub fn layout_scene(doc: &Document, scene: &Scene, pacing: &Pacing) -> SceneLayo
             parts,
             muted,
             dropped,
+            beside: beside.cloned(),
         });
         // Pinned (unlocked) boxes are out of the chain: the next box follows the last
         // locked one, and spacers before a pinned box still count for it.
-        if b.pinned_s.is_none() {
+        if beside.is_some() {
+            // the next line follows whichever of the two ends last; a pause written between
+            // them is still owed
+            prev_start = prev_start.max(start);
+            cursor = cursor.max(end);
+            last = Some(Chained {
+                id: item_id.clone(),
+                start_s: start,
+                beside: true,
+            });
+        } else if b.pinned_s.is_none() {
             prev_start = start;
             cursor = end;
             pending_spacers = 0.0;
             first_box = false;
+            last = Some(Chained {
+                id: item_id.clone(),
+                start_s: start,
+                beside: false,
+            });
         }
     }
     add_handles(doc, &mut items, pacing);
