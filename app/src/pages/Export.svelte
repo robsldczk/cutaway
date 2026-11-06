@@ -1,5 +1,6 @@
 <script lang="ts">
-  // The Export page: one calm sheet, labels on the left, one control per row, details in popups.
+  // The Export page: one calm sheet, as wide as the window is, read left to right in three columns:
+  // what goes out, as what, and how and where. Details sit in popups, and the footer stays in view.
   // The usual export is one look and one click. From the show home it's the show export: the
   // Range row lists episodes and their scenes, and it saves to the pipeline folder alone.
   import { onDestroy, onMount, untrack } from 'svelte';
@@ -270,199 +271,212 @@
 
     {#if s}
       <div class="form">
-        <div class="lab">Range</div>
-        <div>
-          {#if show}
-            {#each showStatus?.episodes ?? [] as e (e.folder)}
-              {@const on = !!shown[e.folder]}
-              <div class="ep">
-                <label class="chk">
-                  <input type="checkbox" checked={on} disabled={!e.scenes.length} onchange={(ev) => toggleEpisode(e.folder, e.scenes, ev.currentTarget.checked)} data-testid="show-episode" />
-                  <span class:off={!on}>{e.label}</span>
-                  {#if !e.scenes.length}<span class="dim">no project</span>{/if}
-                </label>
-                {#if on}
+        <div class="colx">
+          <div class="group">
+            <div class="lab">Range</div>
+            <div>
+              {#if show}
+                {#each showStatus?.episodes ?? [] as e (e.folder)}
+                  {@const on = !!shown[e.folder]}
+                  <div class="ep">
+                    <label class="chk">
+                      <input type="checkbox" checked={on} disabled={!e.scenes.length} onchange={(ev) => toggleEpisode(e.folder, e.scenes, ev.currentTarget.checked)} data-testid="show-episode" />
+                      <span class:off={!on}>{e.label}</span>
+                      {#if !e.scenes.length}<span class="dim">no project</span>{/if}
+                    </label>
+                    {#if on}
+                      <div class="chips">
+                        {#each e.scenes.filter((x) => shown[e.folder].includes(x.id)) as x (x.id)}
+                          <span class="pick"><span class="dim tn">Sc. {x.number}</span>{x.place}{#if x.lock}<Icon name="lock" size={10} />{/if}<button aria-label="Remove scene {x.number}" onclick={() => dropShown(e.folder, x.id)}><Icon name="x" size={12} stroke={2.4} /></button></span>
+                        {/each}
+                        {#if e.scenes.some((x) => !shown[e.folder].includes(x.id))}
+                          <label class="pick add">
+                            Add scene
+                            <select aria-label="Add a scene of {e.label}" value="" onchange={(ev) => addShown(e.folder, e.scenes, ev.currentTarget.value)}>
+                              <option value="" disabled>Add scene</option>
+                              {#each e.scenes.filter((x) => !shown[e.folder].includes(x.id)) as x (x.id)}<option value={x.id}>Sc. {x.number} · {x.place}</option>{/each}
+                            </select>
+                          </label>
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+                <div class="cap tn">{showScenes} {showScenes === 1 ? 'scene' : 'scenes'} of {showEpisodes} {showEpisodes === 1 ? 'episode' : 'episodes'}</div>
+              {:else}
+                <div class="segx" role="group" aria-label="Range">
+                  <button class:on={whole} aria-pressed={whole} onclick={() => (whole = true)}>Whole episode</button>
+                  <button class:on={!whole} aria-pressed={!whole} onclick={() => (whole = false)}>Scenes</button>
+                </div>
+                {#if !whole}
                   <div class="chips">
-                    {#each e.scenes.filter((x) => shown[e.folder].includes(x.id)) as x (x.id)}
-                      <span class="pick"><span class="dim tn">Sc. {x.number}</span>{x.place}{#if x.lock}<Icon name="lock" size={10} />{/if}<button aria-label="Remove scene {x.number}" onclick={() => dropShown(e.folder, x.id)}><Icon name="x" size={12} stroke={2.4} /></button></span>
+                    {#each pickedScenes as x (x.id)}
+                      <span class="pick" title={x.heading}><span class="dim tn">Sc. {x.number}</span>{x.place}{#if x.lock}<Icon name="lock" size={10} />{/if}<button aria-label="Remove scene {x.number}" onclick={() => (picked = picked.filter((id) => id !== x.id))}><Icon name="x" size={12} stroke={2.4} /></button></span>
                     {/each}
-                    {#if e.scenes.some((x) => !shown[e.folder].includes(x.id))}
+                    {#if unpicked.length}
                       <label class="pick add">
                         Add scene
-                        <select aria-label="Add a scene of {e.label}" value="" onchange={(ev) => addShown(e.folder, e.scenes, ev.currentTarget.value)}>
+                        <select aria-label="Add a scene" value="" onchange={(e) => addScene(e.currentTarget.value)} data-testid="add-scene">
                           <option value="" disabled>Add scene</option>
-                          {#each e.scenes.filter((x) => !shown[e.folder].includes(x.id)) as x (x.id)}<option value={x.id}>Sc. {x.number} · {x.place}</option>{/each}
+                          {#each unpicked as x (x.id)}<option value={x.id}>Sc. {x.number} · {x.place}</option>{/each}
                         </select>
                       </label>
                     {/if}
                   </div>
                 {/if}
+                <div class="cap tn" data-testid="range-caption">{rangeCaption(pickedScenes, scenes.length)}</div>
+              {/if}
+              <div class="lockrow">
+                {@render tick(s.lock_after, (v) => s && (s.lock_after = v), 'Lock these scenes after export', '', '', 'lock-after')}
+                <div class="cap flat under">timing can't change</div>
               </div>
-            {/each}
-            <div class="cap tn">{showScenes} {showScenes === 1 ? 'scene' : 'scenes'} of {showEpisodes} {showEpisodes === 1 ? 'episode' : 'episodes'}</div>
-          {:else}
-            <div class="segx" role="group" aria-label="Range">
-              <button class:on={whole} aria-pressed={whole} onclick={() => (whole = true)}>Whole episode</button>
-              <button class:on={!whole} aria-pressed={!whole} onclick={() => (whole = false)}>Scenes</button>
             </div>
-            {#if !whole}
-              <div class="chips">
-                {#each pickedScenes as x (x.id)}
-                  <span class="pick" title={x.heading}><span class="dim tn">Sc. {x.number}</span>{x.place}{#if x.lock}<Icon name="lock" size={10} />{/if}<button aria-label="Remove scene {x.number}" onclick={() => (picked = picked.filter((id) => id !== x.id))}><Icon name="x" size={12} stroke={2.4} /></button></span>
-                {/each}
-                {#if unpicked.length}
-                  <label class="pick add">
-                    Add scene
-                    <select aria-label="Add a scene" value="" onchange={(e) => addScene(e.currentTarget.value)} data-testid="add-scene">
-                      <option value="" disabled>Add scene</option>
-                      {#each unpicked as x (x.id)}<option value={x.id}>Sc. {x.number} · {x.place}</option>{/each}
+          </div>
+          {#if history.length}
+            <div class="group">
+              <div class="lab">History</div>
+              <details>
+                <summary class="tn">{history.length} {history.length === 1 ? 'version' : 'versions'}</summary>
+                <ul>
+                  {#each history as h (h.r.folder)}
+                    <li class="tn">
+                      <span class="ellip" title={h.r.destination === 'pipeline' ? 'Pipeline folder' : 'Episode exports'}>Sc. {h.scene.number} {version(h.r.version)} · {h.r.date.slice(0, 10)} · {h.r.destination === 'pipeline' ? 'Pipeline' : 'Episode'}</span>
+                      <button class="link" onclick={() => app.reveal(h.r.folder)}>Reveal</button>
+                    </li>
+                  {/each}
+                </ul>
+              </details>
+            </div>
+          {/if}
+        </div>
+
+        <div class="colx">
+          <div class="group">
+            <div class="lab">Export as</div>
+            <div>
+              <label class="pop">
+                {mode.label}{@render chevrons()}
+                <select aria-label="Export as" value={s.mode} onchange={(e) => s && (s.mode = e.currentTarget.value as ExportSettings['mode'])} data-testid="export-as">
+                  {#each MODES as m (m.id)}<option value={m.id}>{m.label}</option>{/each}
+                </select>
+              </label>
+              <div class="as">
+                <svg width="64" height="40" viewBox="0 0 64 40" aria-hidden="true"><path d={stack} stroke-width="3" stroke-linecap="round" fill="none" stroke="var(--text-3)" /><path d="M2 1 V39 M62 1 V39" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="2 2" /></svg>
+                <span class="cap flat">{mode.caption}</span>
+              </div>
+            </div>
+          </div>
+          {#if showsTracks(s.mode)}
+            <div class="group">
+              <div class="lab">Tracks</div>
+              <div>
+                <div class="two">
+                  {#each TRACKS as t (t.key)}
+                    {@render tick(s.tracks[t.key], (v) => s && (s.tracks[t.key] = v), t.name, t.sub, t.color, `track-${t.key}`)}
+                  {/each}
+                </div>
+                <div class="cap">Voices and effects stay dry. Their room reverb goes to the two room tracks.</div>
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <div class="colx">
+          {#if showsFormat(s.mode)}
+            <div class="group">
+              <div class="lab">Format</div>
+              <div class="row">
+                <label class="pop">
+                  {format ? formatLabel(format) : ''}{@render chevrons()}
+                  <select aria-label="Format" value={format ? formatKey(format) : ''} onchange={(e) => setFormat(e.currentTarget.value)} data-testid="format">
+                    {#each formats as f (formatKey(f))}<option value={formatKey(f)}>{formatLabel(f)}</option>{/each}
+                  </select>
+                </label>
+                {#if s.mode !== 'clips' || s.tracks.mix}
+                  <label class="pop">
+                    {LOUDNESS.find((l) => l.value === s?.loudness)?.label ?? `Mix at ${s.loudness} LUFS`}{@render chevrons()}
+                    <select aria-label="Loudness of the mix" value={String(s.loudness ?? 'off')} onchange={(e) => setLoudness(e.currentTarget.value)} data-testid="loudness">
+                      {#each LOUDNESS as l (l.label)}<option value={String(l.value ?? 'off')}>{l.label}</option>{/each}
                     </select>
                   </label>
                 {/if}
               </div>
-            {/if}
-            <div class="cap tn" data-testid="range-caption">{rangeCaption(pickedScenes, scenes.length)}</div>
-          {/if}
-          <div class="lockrow">
-            {@render tick(s.lock_after, (v) => s && (s.lock_after = v), 'Lock these scenes after export', "timing can't change", '', 'lock-after')}
-          </div>
-        </div>
-
-        <div class="line"></div>
-
-        <div class="lab">Export as</div>
-        <div>
-          <label class="pop">
-            {mode.label}{@render chevrons()}
-            <select aria-label="Export as" value={s.mode} onchange={(e) => s && (s.mode = e.currentTarget.value as ExportSettings['mode'])} data-testid="export-as">
-              {#each MODES as m (m.id)}<option value={m.id}>{m.label}</option>{/each}
-            </select>
-          </label>
-          <div class="as">
-            <svg width="64" height="40" viewBox="0 0 64 40" aria-hidden="true"><path d={stack} stroke-width="3" stroke-linecap="round" fill="none" stroke="var(--text-3)" /><path d="M2 1 V39 M62 1 V39" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="2 2" /></svg>
-            <span class="cap flat">{mode.caption}</span>
-          </div>
-        </div>
-
-        {#if showsTracks(s.mode)}
-          <div class="lab">Tracks</div>
-          <div>
-            <div class="two">
-              {#each TRACKS as t (t.key)}
-                {@render tick(s.tracks[t.key], (v) => s && (s.tracks[t.key] = v), t.name, t.sub, t.color, `track-${t.key}`)}
-              {/each}
             </div>
-            <div class="cap">Voices and effects stay dry. Their room reverb goes to the two room tracks.</div>
+          {/if}
+          <div class="group">
+            <div class="lab">Also export</div>
+            <div class="col">
+              {#if s.mode === 'fcpxml'}
+                <label class="chk"><input type="checkbox" checked disabled /><span>FCPXML</span><span class="dim">for Resolve and Logic</span></label>
+              {:else}
+                {@render tick(s.fcpxml, (v) => s && (s.fcpxml = v), 'FCPXML', 'for Resolve and Logic', '', 'also-fcpxml')}
+                {#if s.fcpxml && s.mode === 'stems'}
+                  <div class="under">
+                    <label class="pop small">
+                      {s.fcpxml_source === 'stems' ? 'From the stems' : 'From the recordings'}{@render chevrons()}
+                      <select aria-label="FCPXML source" value={s.fcpxml_source} onchange={(e) => s && (s.fcpxml_source = e.currentTarget.value as ExportSettings['fcpxml_source'])}>
+                        <option value="original">From the recordings</option>
+                        <option value="stems">From the stems</option>
+                      </select>
+                    </label>
+                  </div>
+                {/if}
+              {/if}
+              {@render tick(s.subtitles, (v) => s && (s.subtitles = v), 'Subtitles', 'SRT', '', 'also-srt')}
+              <div class="inline">
+                {@render tick(s.cut_list !== null, (v) => s && (s.cut_list = v ? 'csv' : null), 'Cut list', s.cut_list === null ? 'CSV' : '', '', 'also-cutlist')}
+                {#if s.cut_list}
+                  <label class="pop small">
+                    {s.cut_list === 'md' ? 'Markdown' : 'CSV'}{@render chevrons()}
+                    <select aria-label="Cut list format" value={s.cut_list} onchange={(e) => s && (s.cut_list = e.currentTarget.value as 'csv' | 'md')}>
+                      <option value="csv">CSV</option>
+                      <option value="md">Markdown</option>
+                    </select>
+                  </label>
+                {/if}
+              </div>
+            </div>
           </div>
-        {/if}
-
-        <div class="line"></div>
-
-        {#if showsFormat(s.mode)}
-          <div class="lab">Format</div>
-          <div class="row">
-            <label class="pop">
-              {format ? formatLabel(format) : ''}{@render chevrons()}
-              <select aria-label="Format" value={format ? formatKey(format) : ''} onchange={(e) => setFormat(e.currentTarget.value)} data-testid="format">
-                {#each formats as f (formatKey(f))}<option value={formatKey(f)}>{formatLabel(f)}</option>{/each}
-              </select>
-            </label>
-            {#if s.mode !== 'clips' || s.tracks.mix}
-              <label class="pop">
-                {LOUDNESS.find((l) => l.value === s?.loudness)?.label ?? `Mix at ${s.loudness} LUFS`}{@render chevrons()}
-                <select aria-label="Loudness of the mix" value={String(s.loudness ?? 'off')} onchange={(e) => setLoudness(e.currentTarget.value)} data-testid="loudness">
-                  {#each LOUDNESS as l (l.label)}<option value={String(l.value ?? 'off')}>{l.label}</option>{/each}
-                </select>
-              </label>
-            {/if}
-          </div>
-        {/if}
-
-        <div class="lab">Also export</div>
-        <div class="col">
-          {#if s.mode === 'fcpxml'}
-            <label class="chk"><input type="checkbox" checked disabled /><span>FCPXML</span><span class="dim">for Resolve and Logic</span></label>
-          {:else}
-            <div class="inline">
-              {@render tick(s.fcpxml, (v) => s && (s.fcpxml = v), 'FCPXML', 'for Resolve and Logic', '', 'also-fcpxml')}
-              {#if s.fcpxml && s.mode === 'stems'}
-                <label class="pop small">
-                  {s.fcpxml_source === 'stems' ? 'From the stems' : 'From the recordings'}{@render chevrons()}
-                  <select aria-label="FCPXML source" value={s.fcpxml_source} onchange={(e) => s && (s.fcpxml_source = e.currentTarget.value as ExportSettings['fcpxml_source'])}>
-                    <option value="original">From the recordings</option>
-                    <option value="stems">From the stems</option>
+          <div class="group">
+            <div class="lab">Save to</div>
+            <div>
+              {#if show}
+                <span class="pathline">{pipeline?.path ?? 'Pipeline folder'}</span>
+              {:else}
+                <label class="pop">
+                  {s.save_to === 'pipeline' ? 'Pipeline folder' : 'Episode exports'}{@render chevrons()}
+                  <select aria-label="Save to" value={s.save_to} onchange={(e) => s && (s.save_to = e.currentTarget.value as ExportSettings['save_to'])} data-testid="save-to">
+                    <option value="episode">Episode exports</option>
+                    {#if pipeline}<option value="pipeline">Pipeline folder</option>{/if}
                   </select>
                 </label>
               {/if}
+              {#if needsFolder || pipelineOpen}
+                <div class="confirm" data-testid="pipeline-confirm">
+                  <p>{pipeline?.proposal ? 'Is this where deliverables go? Nothing is written until you confirm it.' : 'Choose the folder deliverables go to. It is asked once, and kept in the show.'}</p>
+                  {#if inTauri}
+                    {#if pipeline?.proposal}<code>{pipeline.proposal}</code>{/if}
+                  {:else}
+                    <input class="field" aria-label="Pipeline folder" bind:value={pipelinePath} placeholder="/path/to/the/pipeline/Sound" data-testid="pipeline-path" />
+                  {/if}
+                  <div class="row">
+                    {#if inTauri}<button class="btnx" onclick={chooseFolder}>Choose…</button>{/if}
+                    {#if inTauri ? pipeline?.proposal : pipelinePath}<button class="btnx pri" onclick={() => confirmFolder(inTauri ? (pipeline?.proposal ?? '') : pipelinePath)} data-testid="pipeline-use">Use this folder</button>{/if}
+                  </div>
+                </div>
+              {:else if s.save_to === 'pipeline' && pipeline?.path}
+                <div class="cap">{pipeline.path} · <button class="link" onclick={() => (pipelineOpen = true)}>Change</button></div>
+              {/if}
+              {#if plan && !needsFolder}
+                <div class="cap tn" data-testid="saved-caption">{savedCaption(plan)}</div>
+                {#if unchangedCaption(plan)}<div class="cap tn note" data-testid="unchanged-caption">{unchangedCaption(plan)}</div>{/if}
+                {#if plan.empty.length}<div class="cap tn">Left out, nothing in them: Sc. {plan.empty.join(', ')}.</div>{/if}
+              {/if}
+              {#if planError && !needsFolder}<div class="cap note">{planError}</div>{/if}
+              {#each status?.warnings ?? [] as w (w)}<div class="cap note" data-testid="export-warning">{w}</div>{/each}
             </div>
-          {/if}
-          {@render tick(s.subtitles, (v) => s && (s.subtitles = v), 'Subtitles', 'SRT', '', 'also-srt')}
-          <div class="inline">
-            {@render tick(s.cut_list !== null, (v) => s && (s.cut_list = v ? 'csv' : null), 'Cut list', s.cut_list === null ? 'CSV' : '', '', 'also-cutlist')}
-            {#if s.cut_list}
-              <label class="pop small">
-                {s.cut_list === 'md' ? 'Markdown' : 'CSV'}{@render chevrons()}
-                <select aria-label="Cut list format" value={s.cut_list} onchange={(e) => s && (s.cut_list = e.currentTarget.value as 'csv' | 'md')}>
-                  <option value="csv">CSV</option>
-                  <option value="md">Markdown</option>
-                </select>
-              </label>
-            {/if}
           </div>
         </div>
-
-        <div class="lab">Save to</div>
-        <div>
-          {#if show}
-            <span class="pathline">{pipeline?.path ?? 'Pipeline folder'}</span>
-          {:else}
-            <label class="pop">
-              {s.save_to === 'pipeline' ? 'Pipeline folder' : 'Episode exports'}{@render chevrons()}
-              <select aria-label="Save to" value={s.save_to} onchange={(e) => s && (s.save_to = e.currentTarget.value as ExportSettings['save_to'])} data-testid="save-to">
-                <option value="episode">Episode exports</option>
-                {#if pipeline}<option value="pipeline">Pipeline folder</option>{/if}
-              </select>
-            </label>
-          {/if}
-          {#if needsFolder || pipelineOpen}
-            <div class="confirm" data-testid="pipeline-confirm">
-              <p>{pipeline?.proposal ? 'Is this where deliverables go? Nothing is written until you confirm it.' : 'Choose the folder deliverables go to. It is asked once, and kept in the show.'}</p>
-              {#if inTauri}
-                {#if pipeline?.proposal}<code>{pipeline.proposal}</code>{/if}
-              {:else}
-                <input class="field" aria-label="Pipeline folder" bind:value={pipelinePath} placeholder="/path/to/the/pipeline/Sound" data-testid="pipeline-path" />
-              {/if}
-              <div class="row">
-                {#if inTauri}<button class="btnx" onclick={chooseFolder}>Choose…</button>{/if}
-                {#if inTauri ? pipeline?.proposal : pipelinePath}<button class="btnx pri" onclick={() => confirmFolder(inTauri ? (pipeline?.proposal ?? '') : pipelinePath)} data-testid="pipeline-use">Use this folder</button>{/if}
-              </div>
-            </div>
-          {:else if s.save_to === 'pipeline' && pipeline?.path}
-            <div class="cap">{pipeline.path} · <button class="link" onclick={() => (pipelineOpen = true)}>Change</button></div>
-          {/if}
-          {#if plan && !needsFolder}
-            <div class="cap tn" data-testid="saved-caption">{savedCaption(plan)}</div>
-            {#if unchangedCaption(plan)}<div class="cap tn note" data-testid="unchanged-caption">{unchangedCaption(plan)}</div>{/if}
-            {#if plan.empty.length}<div class="cap tn">Left out, nothing in them: Sc. {plan.empty.join(', ')}.</div>{/if}
-          {/if}
-          {#if planError && !needsFolder}<div class="cap note">{planError}</div>{/if}
-          {#each status?.warnings ?? [] as w (w)}<div class="cap note" data-testid="export-warning">{w}</div>{/each}
-        </div>
-
-        {#if history.length}
-          <div class="lab">History</div>
-          <details>
-            <summary class="tn">{history.length} {history.length === 1 ? 'version' : 'versions'}</summary>
-            <ul>
-              {#each history as h (h.r.folder)}
-                <li class="tn">
-                  <span class="ellip">Sc. {h.scene.number} {version(h.r.version)} · {h.r.date.slice(0, 10)} · {h.r.destination === 'pipeline' ? 'Pipeline folder' : 'Episode exports'}</span>
-                  <button class="link" onclick={() => app.reveal(h.r.folder)}>Reveal</button>
-                </li>
-              {/each}
-            </ul>
-          </details>
-        {/if}
       </div>
 
       <div class="foot">
@@ -496,20 +510,26 @@
   .page {
     position: absolute;
     inset: 0;
-    overflow-y: auto;
-    padding: 92px 16px 40px;
+    display: flex;
+    flex-direction: column;
+    padding: 92px 16px 24px;
     box-sizing: border-box;
   }
   .page.over {
     z-index: 30;
     background: var(--scrim-light);
   }
+  /* never taller than the window: the columns scroll inside it, the footer stays */
   .sheet-x {
-    width: 640px;
+    display: flex;
+    flex-direction: column;
+    flex: 0 1 auto;
+    min-height: 0;
+    width: 1160px;
     max-width: 100%;
     margin: 0 auto;
     box-sizing: border-box;
-    padding: 30px 34px 26px;
+    padding: 26px 34px 22px;
     border-radius: var(--radius-sheet);
     background: var(--panel);
   }
@@ -517,7 +537,7 @@
     display: flex;
     align-items: baseline;
     gap: 12px;
-    margin-bottom: 26px;
+    margin-bottom: 20px;
   }
   .closeb,
   .head .pop {
@@ -540,23 +560,31 @@
     font-size: 12px;
     font-weight: 500;
   }
+  /* the padding keeps focus rings clear of the scroll edge */
   .form {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
     display: grid;
-    grid-template-columns: 132px minmax(0, 1fr);
-    column-gap: 20px;
-    row-gap: 18px;
-    align-items: start;
+    grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.18fr) minmax(0, 1fr);
+    column-gap: 28px;
+    margin: -3px;
+    padding: 3px;
+  }
+  .colx {
+    min-width: 0;
+  }
+  .colx + .colx {
+    padding-left: 28px;
+    border-left: 1px solid var(--glass-outline);
+  }
+  .group + .group {
+    margin-top: 18px;
   }
   .lab {
     font-size: 13px;
     color: var(--text-3);
-    text-align: right;
-    padding-top: 7px;
-  }
-  .line {
-    height: 1px;
-    background: var(--glass-outline);
-    grid-column: 1 / -1;
+    margin-bottom: 8px;
   }
   .segx {
     display: inline-flex;
@@ -653,7 +681,7 @@
     gap: 9px;
     font-size: 13px;
     color: var(--text-strong);
-    height: 26px;
+    min-height: 26px;
     min-width: 0;
   }
   .chk .off {
@@ -695,6 +723,7 @@
     color: var(--text-4);
     line-height: 1.45;
     margin-top: 7px;
+    overflow-wrap: anywhere;
   }
   .cap.flat {
     margin-top: 0;
@@ -704,6 +733,13 @@
   }
   .lockrow {
     margin-top: 6px;
+  }
+  /* lines up with the text of the tick above it */
+  .under {
+    margin-left: 25px;
+  }
+  .under .pop {
+    margin-bottom: 3px;
   }
   .as {
     display: flex;
@@ -717,7 +753,7 @@
   .two {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    column-gap: 20px;
+    column-gap: 16px;
   }
   .row {
     display: flex;
@@ -744,7 +780,6 @@
     color: var(--text-2);
     word-break: break-all;
     display: block;
-    padding-top: 7px;
   }
   .confirm {
     margin-top: 10px;
@@ -773,7 +808,6 @@
   details summary {
     font-size: 13px;
     color: var(--text-2);
-    padding-top: 7px;
     cursor: pointer;
   }
   ul {
@@ -803,8 +837,9 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 28px;
-    padding-top: 20px;
+    flex: none;
+    margin-top: 20px;
+    padding-top: 18px;
     border-top: 1px solid var(--glass-outline);
   }
   .grow {
@@ -865,17 +900,39 @@
     width: 150px;
     height: 34px;
   }
-  @media (max-width: 620px) {
+  /* a smaller window keeps the columns and steps down: tighter, and the side notes go */
+  @media (max-width: 1200px) {
+    .sheet-x {
+      padding: 22px 24px 18px;
+    }
     .form {
-      grid-template-columns: minmax(0, 1fr);
-      row-gap: 8px;
+      column-gap: 20px;
     }
-    .lab {
-      text-align: left;
-      padding-top: 10px;
+    .colx + .colx {
+      padding-left: 20px;
     }
-    .two {
-      grid-template-columns: 1fr;
+    .two .dim,
+    .as svg {
+      display: none;
+    }
+  }
+  /* below the app's smallest window (a browser on the bridge): one column, the page scrolls */
+  @media (max-width: 860px) {
+    .page {
+      overflow-y: auto;
+    }
+    .sheet-x {
+      flex: none;
+    }
+    .form {
+      display: block;
+      overflow: visible;
+    }
+    .colx + .colx {
+      margin-top: 18px;
+      padding: 18px 0 0;
+      border-left: none;
+      border-top: 1px solid var(--glass-outline);
     }
   }
 </style>

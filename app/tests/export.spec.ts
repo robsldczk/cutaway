@@ -46,6 +46,37 @@ test('Export is the fourth page, with the defaults of the sheet', async ({ page 
   if (shots) await page.screenshot({ path: `${shots}/export.png`, fullPage: true });
 });
 
+test('the sheet lies wide: three columns side by side, and Export stays in view', async ({ page }) => {
+  await open(page);
+  const columns = page.getByRole('region', { name: 'Export' }).locator('.colx');
+  const go = page.getByTestId('export-go');
+  for (const [width, height] of [[1440, 900], [1280, 720], [900, 640]]) {
+    await page.setViewportSize({ width, height });
+    const boxes = await columns.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect));
+    expect(boxes).toHaveLength(3);
+    expect(boxes[1].x).toBeGreaterThanOrEqual(boxes[0].right);
+    expect(boxes[2].x).toBeGreaterThanOrEqual(boxes[1].right);
+    expect(boxes[1].y).toBe(boxes[0].y);
+    expect(boxes[2].y).toBe(boxes[0].y);
+    await expect(go).toBeInViewport({ ratio: 1 });
+  }
+
+  // no column is left empty when the rows go
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByTestId('export-as').selectOption('fcpxml');
+  await expect(columns.nth(2)).toContainText('Also export');
+  await page.getByTestId('export-as').selectOption('stems');
+
+  // shorter than the sheet, the columns scroll inside it and the footer stays
+  await page.setViewportSize({ width: 900, height: 420 });
+  await expect(go).toBeInViewport({ ratio: 1 });
+  const form = page.locator('.form');
+  expect(await form.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true);
+  await page.getByTestId('save-to').scrollIntoViewIfNeeded();
+  await expect(page.getByTestId('save-to')).toBeInViewport();
+  await expect(go).toBeInViewport({ ratio: 1 });
+});
+
 test('what it exports as decides the rows', async ({ page }) => {
   await open(page);
   const tracks = page.getByTestId('track-dialogue');

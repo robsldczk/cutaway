@@ -971,3 +971,15 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **A locked scene refuses it:** the lock print sees the new timing, so no extra check was needed.
 - **The transport map** now draws overlapping time once, in time order. It used to add the lengths up, so an overlap, by pause or pair, drifted the map off the playhead. A line that sits wholly inside another doesn't show on the map.
 
+
+### D127 The Export sheet lies wide (Rob, 2026-11-06)
+- **Rob:** the export panel is made for a vertical setup, rearrange it for a horizontal one.
+- **Why it had to change:** the sheet was one 640 px column, 835 px tall. In the default 1440 × 900 window the Export button was cut off by the bottom edge, and over half the width stayed empty.
+- **Options:** two columns, which leaves the left one tall and the sheet still high; three columns; or a wide sheet with the rows in a new order.
+- **Choice:** three columns in the old row order, read left to right. Range and History, then Export as and Tracks, then Format, Also export and Save to. 1160 px wide at most, 484 px tall by default.
+- **Labels go above their controls.** This changes the handover's "labels on the left, one control per row": the label gutter cost 150 px, and each column needs that width.
+- **Tracks stays under Export as,** so the rows that a mode hides never empty a column.
+- **The sheet stays at the top of the page,** not centred, so a mode that hides rows doesn't move the controls under the pointer.
+- **Never taller than the window:** the columns scroll inside the sheet, and the header and footer stay, so Export is always in view.
+- **Smaller windows step down, as in D116:** below 1200 px the padding tightens, and the stems picture and the tracks' side notes go. The app's smallest window, 900 × 640, still has three columns. Below 860 px, which only a browser on the bridge reaches, it's one column and the page scrolls.
+- **History rows** say Episode or Pipeline, with the full name as a tooltip. The narrower column cut the long name off, and that's the part that tells two rows apart.
