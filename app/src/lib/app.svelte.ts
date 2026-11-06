@@ -11,7 +11,7 @@ import type { DragSound, EditView, ItemView, Job, SceneSummary, SceneView, ShowV
 const soundId = (key: SoundKey) => key.asset_id ?? key.remote_id ?? key.clip?.id ?? '';
 
 import { CHAPTERS, chapterFor, logTop, ownSteps, readOwed, readSeen, undosFor, writeOwed, writeSeen, type ChapterId, type LogRow } from './tour';
-import { flushSpot, keepLast, keepSpot, landing, lastOpen, queueSpot, spotOf, type Spot } from './resume';
+import { flushSpot, keepSpot, landing, moveSpot, queueSpot, spotOf, type Spot } from './resume';
 
 export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'export' | 'dev' | 'review';
 export type ImportTab = 'files' | 'sounds' | 'rooms';
@@ -94,6 +94,7 @@ export function forgetRecent(paths: string[]) {
 
 /** An item found again in a new place keeps its place in the list. */
 export function relinkRecent(from: string, to: string) {
+  moveSpot(from, to);
   keepRecent(recentEpisodes().filter((r) => r.path !== to).map((r) => (r.path === from ? { ...r, path: to } : r)));
 }
 
@@ -163,8 +164,6 @@ class AppState {
   private resumed = $state('');
   /** The spot the scene being loaded lands on. */
   private arriving: Spot | null = null;
-  /** A launch reopens what was left open, once. */
-  private reopened = false;
   /** Take auditioned alone in the box editor (`pos` is then seconds into the take). */
   audition = $state<string | null>(null);
   locator = $state(0);
@@ -421,7 +420,6 @@ class AppState {
       }
     } catch (e) {
       if (e instanceof BridgeError && e.code === 'no_project') {
-        if (await this.reopen()) return;
         this.noProject = true;
         await this.loadShow();
         return;
@@ -441,7 +439,6 @@ class AppState {
       this.page = 'import';
     }
     this.resumed = this.status?.path ?? '';
-    if (this.status?.path && !this.status.review.package) keepLast({ name: this.status.name, path: this.status.path });
     this.watch();
   }
 
@@ -729,31 +726,6 @@ class AppState {
     this.setBucket(true);
   }
 
-  /** At launch, opens what was open at the end. True when an episode took over the boot. */
-  private async reopen() {
-    if (this.reopened) return false;
-    this.reopened = true;
-    const last = lastOpen();
-    if (!last) return false;
-    // off the record until it has opened: a file that brings the app down isn't tried at every launch
-    keepLast(null);
-    this.busy = true;
-    try {
-      await call(last.show ? 'open_show' : 'open_project', { path: last.path });
-    } catch (e) {
-      this.say(`${last.name} couldn't be reopened. ${e instanceof BridgeError ? e.message : String(e)}`);
-      return false;
-    } finally {
-      this.busy = false;
-    }
-    if (last.show) {
-      keepLast(last);
-      return false;
-    }
-    await this.boot();
-    return true;
-  }
-
   /** The first load of an episode lands where it was left. After that it stays on its scene. */
   private async resume() {
     const path = this.status?.path ?? '';
@@ -798,10 +770,7 @@ class AppState {
     if (this.playing) await this.stop();
     const r = await this.run(() => call<{ snapshot: string | null }>('close_project'));
     if (!r) return;
-    const show = this.status?.review.package ? null : this.status?.show;
     this.resetEpisode();
-    // closed on purpose: the next launch comes back to the show's home, or to the start screen
-    keepLast(show ? { name: show.name, path: show.root, show: true } : null);
   }
 
   /** Forgets the open episode's view state (the core has closed or replaced it). */
@@ -871,7 +840,6 @@ class AppState {
     const v = await this.run(() => call<ShowView>(create ? 'create_show' : 'open_show', create ? { root: path } : { path }));
     if (!v) return false;
     remember({ name: v.name, path: v.root, show: true });
-    keepLast({ name: v.name, path: v.root, show: true });
     await this.loadShow();
     return true;
   }
@@ -899,7 +867,6 @@ class AppState {
     if (this.playing) await this.stop();
     await this.run(() => call('close_show'));
     this.resetEpisode();
-    keepLast(null);
     this.show = null;
     this.backdrop = null;
     this.backdropOf = '';

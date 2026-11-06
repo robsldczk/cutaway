@@ -14,17 +14,7 @@ export interface Spot {
   zoom: number;
 }
 
-/** What was open at the end: an episode, or a show's home. */
-export interface LastOpen {
-  name: string;
-  path: string;
-  show?: boolean;
-}
-
 const SPOTS = 'cutaway.spots';
-const LAST = 'cutaway.last';
-/** Episodes remembered, newest first. */
-export const KEPT = 30;
 /** How often a moving playhead is written. A quit gives the page no last word, so this is what's at stake. */
 export const EVERY_MS = 500;
 
@@ -74,8 +64,14 @@ export function spotOf(path: string): Spot | null {
   return valid(all().find(([p]) => p === path)?.[1]);
 }
 
+/** One spot per episode, for every episode: a spot is a few words, so none is ever dropped. */
 export function keepSpot(path: string, spot: Spot) {
-  write(SPOTS, [[path, spot], ...all().filter(([p]) => p !== path)].slice(0, KEPT));
+  write(SPOTS, [[path, spot], ...all().filter(([p]) => p !== path)]);
+}
+
+/** An episode found in a new place is still where it was left. */
+export function moveSpot(from: string, to: string) {
+  write(SPOTS, all().filter(([p]) => p !== to).map(([p, s]) => [p === from ? to : p, s]));
 }
 
 /** The next spot to write. Only the newest counts, and at most one write per `EVERY_MS`. */
@@ -96,15 +92,6 @@ export function flushSpot() {
   timer = null;
   if (waiting) keepSpot(waiting.path, waiting.spot);
   waiting = null;
-}
-
-export function lastOpen(): LastOpen | null {
-  const v = read(LAST) as Partial<LastOpen> | null;
-  return v && typeof v.path === 'string' && v.path ? { name: String(v.name ?? v.path), path: v.path, show: !!v.show } : null;
-}
-
-export function keepLast(last: LastOpen | null) {
-  write(LAST, last);
 }
 
 /** Where a spot lands in the scene as it is now: edits since then can have moved its end or its line. */

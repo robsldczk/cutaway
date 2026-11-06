@@ -142,10 +142,9 @@ test('hovering highlights and leaves the hero alone', async ({ page }) => {
 });
 
 test('Edit and ↩ open for editing, Review and ⌥↩ read-only, whichever is selected', async ({ page }) => {
-  /** Back to the shelf as a closed episode leaves it: a launch would reopen one left open. */
+  /** A launch: nothing's open, and the shelf comes up. */
   const leave = async () => {
     await rpc('close_show');
-    await page.evaluate(() => localStorage.removeItem('cutaway.last'));
     await page.reload();
     await expect(page.getByTestId('welcome')).toBeVisible();
     await expect(title(page)).toHaveText('Demo');
@@ -230,6 +229,13 @@ test('a show opens at its home, for editing or for review', async ({ page }) => 
   await tile(page, /^TARMAC/).click();
   await reviewButton(page).click();
   await expect(page.getByText('Show, for review')).toBeVisible();
+});
+
+test('a show opens on the episode last worked in', async ({ page }) => {
+  await shelf(page);
+  await tile(page, /^TARMAC/).click();
+  await editButton(page).click();
+  await expect(page.getByRole('combobox', { name: 'Episode' })).toHaveValue('Time Burrito');
 });
 
 test('the single episodes group lists them, and opens nothing itself', async ({ page }) => {
@@ -405,6 +411,10 @@ test('a missing item is dimmed, offers Locate… and relinks', async ({ page }) 
   await expect(editButton(page)).toHaveCount(0);
   await expect(reviewButton(page)).toHaveCount(0);
 
+  // where it was left goes with it
+  const left = { page: 'arrange', tab: 'files', scene: 's4', line: null, at: 12, zoom: 0 };
+  await page.evaluate(([p, s]) => localStorage.setItem('cutaway.spots', JSON.stringify([[p, s]])), [f, left] as const);
+
   page.on('dialog', (d) => void d.accept(moved));
   await hero(page).getByRole('button', { name: /^Locate/ }).click();
   await expect(editButton(page)).toBeVisible();
@@ -412,6 +422,8 @@ test('a missing item is dimmed, offers Locate… and relinks', async ({ page }) 
   const list = await page.evaluate(() => JSON.parse(localStorage.getItem('cutaway.recent') ?? '[]'));
   expect(list[0].path).toBe(moved);
   expect(list).toHaveLength(2);
+  const spots = await page.evaluate(() => JSON.parse(localStorage.getItem('cutaway.spots') ?? '[]'));
+  expect(spots).toEqual([[moved, left]]);
 });
 
 test('Remove from recents forgets it and deletes nothing', async ({ page }) => {

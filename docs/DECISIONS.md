@@ -1034,7 +1034,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 ### D131 Coming back to where it was left (Rob, 2026-11-06)
 - **Rob:** it should remember the position he left off in, so he doesn't have to find his spot again after quitting.
 - **What's remembered, per episode:** page, Import tab, scene, line, playhead and the Edit page's zoom. Any way back into an episode lands there, not only a launch.
-- **At launch:** the app reopens what was open at the end, an episode or a show's home, so the start screen only shows after closing on purpose. A file that has gone leaves the start screen and a toast saying so.
+- **At launch:** *changed by D154: every launch starts on the welcome screen.* The app reopens what was open at the end, an episode or a show's home, so the start screen only shows after closing on purpose. A file that has gone leaves the start screen and a toast saying so.
 - **Options for where it lives:** the project file, a file in the app's data folder, or the webview's storage.
 - **Choice:** the webview's storage, like the recent list. The project file syncs to other machines, and every move of the playhead would count as a change to it. So a spot is per machine: another machine has its own.
 - **Written as it changes, at most every 500 ms:** a quit gives the page no last word. Tried in the real app, not only in Chromium: a real quit 0.8 s after the last move came back on the same scene, page and playhead, and so did `kill -9`. Measured again on a copy of Episode 2 inside its show, in the real app, with `kill -9` at set times after a click on a block: the page and scene came back every time, and the playhead from 0.8 s on. At 0.1 s and 0.4 s it came back at the spot before that click, so what's at stake is that last half second, as designed.
@@ -1178,7 +1178,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Note counts show on every tile with notes,** not only the selected one as in the mockup: the handover wants the count to say where feedback is waiting.
 
 ### D147 Conflicts with the app, and which way each went (2026-11-06)
-- **The first thing you see at launch.** The handover: the welcome screen. D131: the app reopens what was open at the end. The codebase wins, as the handover says it should: the welcome screen shows after closing on purpose, and at a launch with nothing left open.
+- **The first thing you see at launch.** The handover: the welcome screen. D131: the app reopens what was open at the end. The codebase wins, as the handover says it should: the welcome screen shows after closing on purpose, and at a launch with nothing left open. *Rob reversed this the same day: see D154.*
 - **Recent stays in the webview's storage,** per viewer, as it was. `welcome_view` takes the list as a parameter. The list keeps 24 items, up from 6, since the row scrolls.
 - **Review and Recent.** D143 keeps packages out of Recent so a review doesn't come back as an editing session. On the shelf that can't happen: nothing opens without choosing. So Review from the shelf moves the item to the front. A package opened from the Show menu still stays out, and the launch reopen and remembered spot are unchanged.
 - **Open project package in review mode** (D143) is gone from the screen: the Review button is that option. It stays in the Show menu. A package from someone else comes in through Open… and then Review.
@@ -1235,3 +1235,11 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **A note can be tried and isn't kept.** `add_note` is an event, and an undo is another event (D137) that would reach the other machines, so there's nothing to put back cleanly. M, N, the + and the wave all open the draft. Saving says *Notes aren't kept during the tour*, and the draft goes at the next stop, or with Esc. While a draft is open it's what is lit, so the card keeps off it.
 - **The target is found again every frame,** as the column moves under it. Several elements can carry one `data-tour` name, and the one nearest the middle wins: on Options and Arrange that's the current line, and with the ? folded into the ⋯ menu it's the ⋯. What isn't on screen leaves the card in the middle.
 - **A drag begun in the spotlight owns the pointer until it lets go.** Arrange finds its drop targets by point, and the tour's blockers would otherwise be what it finds.
+### D154 Every launch starts on the welcome screen, and every project remembers (Rob, 2026-11-06)
+- **Rob:** the welcome screen should open at every launch, and each project should remember its state once it's opened. This replaces the launch reopen of D131. The spots of D131 stay, and are now what brings a project back.
+- **Launch:** nothing is reopened, so `cutaway.last` and its code are gone, along with the guard against a file that brings the app down at every launch: nothing opens by itself any more. The most recent item is selected, so ↩ is the old reopen. A project named on launch (a Finder double-click, `CUTAWAY_PROJECT`) still opens: that's asked for.
+- **A page reload isn't a launch:** with an episode open in the core, it stays open.
+- **Every project:** spots were capped at the 30 newest, so the 31st project opened cost the oldest its place. The cap is gone. A spot is about 100 bytes, so a thousand projects is 100 KB of storage.
+- **Locate… carries the spot** to the new path. It was keyed by the old one, so a relinked project would have started over.
+- **A show opens on the episode last worked in,** from the recent list, instead of its first with a project.
+- **Unchanged:** a spot is per machine (D131), and a package opened for review keeps none (D143).

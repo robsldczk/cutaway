@@ -1,7 +1,7 @@
 <script lang="ts">
   // The show home (studio mode): the show's backdrop full bleed, its name, and the
   // episode dropdown. Opening an episode without a project makes one in its Sound folder.
-  import { app } from '../lib/app.svelte';
+  import { app, recentEpisodes } from '../lib/app.svelte';
   import { brand } from '../lib/brand';
   import { call, inTauri, pickPath } from '../lib/bridge';
   import Export from '../pages/Export.svelte';
@@ -10,7 +10,9 @@
   const show = $derived(app.show);
   const eps = $derived(show?.episodes ?? []);
   let picked = $state('');
-  const ep = $derived(eps.find((e) => e.folder === picked) ?? eps.find((e) => e.file) ?? eps[0]);
+  /** The episode last worked in, of this show. */
+  const lastEp = $derived(recentEpisodes().map((r) => eps.find((e) => e.file === r.path)).find(Boolean));
+  const ep = $derived(eps.find((e) => e.folder === picked) ?? lastEp ?? eps.find((e) => e.file) ?? eps[0]);
   const dir = $derived(ep && show ? ep.dir.replace(show.root, '').replace(/^[/\\]/, '') : '');
   let imagePath = $state('');
   let migrating = $state(false);

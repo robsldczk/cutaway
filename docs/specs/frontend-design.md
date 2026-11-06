@@ -275,7 +275,7 @@ A glass sheet in three steps:
 - **Save Version** (⌘S) asks for a name.
 - **History** (⌘⇧H): the list of backups and named versions with Revert.
 
-*Changed in implementation (D131):* the app reopens what was open at the end, and each episode comes back on its page, scene, line, playhead and Edit zoom. The start screen shows after closing on purpose. Spots are kept per machine, not in the project.
+*Changed in implementation (D131, D154):* every launch starts on the welcome screen. Each episode comes back on its page, scene, line, playhead and Edit zoom when it's opened, however long ago that was. Spots are kept per machine, not in the project.
 
 ## Export panel
 
@@ -327,7 +327,7 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 
 ## Welcome screen
 
-*Changed in implementation (D146–D152):* the start screen is a shelf: a hero for the selected item, a row of recent episodes, a row of shows. A click selects; Edit, Review, ↩ and ⌥↩ open. A show takes over the first row, Esc brings it back. New episode and New show are short sheets that make a project without opening it. Scripts and recordings dropped on the window start an episode, an image on a tile or the hero sets its cover, a review file goes to its episode. Covers are `Cover.jpg` in the project. It shows after closing on purpose and at a launch with nothing left open: D131 still reopens what was open. *Open project package in review mode* is now the Review button, and stays in the Show menu. Spec: `tasks/Welcome/audioplay-cutter-handover-welcome.md`.
+*Changed in implementation (D146–D152):* the start screen is a shelf: a hero for the selected item, a row of recent episodes, a row of shows. A click selects; Edit, Review, ↩ and ⌥↩ open. A show takes over the first row, Esc brings it back. New episode and New show are short sheets that make a project without opening it. Scripts and recordings dropped on the window start an episode, an image on a tile or the hero sets its cover, a review file goes to its episode. Covers are `Cover.jpg` in the project. It shows at every launch (D154) and after closing, with the most recent item selected. *Open project package in review mode* is now the Review button, and stays in the Show menu. Spec: `tasks/Welcome/audioplay-cutter-handover-welcome.md`.
 
 ## Tours
 

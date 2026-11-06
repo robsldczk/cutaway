@@ -483,7 +483,7 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 **Built:** the start screen from `tasks/Welcome`. A hero for the selected item and two rows of cover tiles, Recent episodes and Shows. A click selects; Edit, Review, ↩ and ⌥↩ open. A show takes over the first row, and Esc or the row's title brings it back. Single episodes group in one tile. New episode and New show are short sheets that make a project without opening it. Scripts and recordings dropped on the window start an episode, an image on a tile or the hero sets its cover, a review file goes to its episode. Missing items are dimmed with *Locate…*; a right click has *Set cover…* and *Remove from recents*. A full-screen transition shows while a project loads, for as long as it loads. On the CLI as `cutaway shelf` and `cutaway cover`, on the MCP as `welcome_view`, `set_cover` and `add_review_to`.
 
 **Conflicts with the app (all in D147):**
-- Launch still reopens what was open (D131), so the welcome screen shows after closing on purpose or with nothing left open. The handover calls it the first thing you see; say if you want it at every launch.
+- Launch: first built to keep D131's reopen, then changed at your word: every launch starts on the welcome screen (D154).
 - There was no stage in the app, so it's worked out from the work done (D148).
 - New single episodes and shows go to `~/Documents/Cutaway` unless *Choose…* says otherwise (D151).
 - New episodes in a show get no number unless the name carries one: numbers belong to the pipeline (D151).
@@ -515,3 +515,8 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 - Clear `cutaway.tour` from the app's storage, or use a fresh user, and open Episode 2: do the stops land on sensible things on real scenes?
 - Try a locked scene: what's refused should say so, and the tour should carry on.
 - Read the card text. It's all in `app/src/lib/tour.ts`.
+## Every launch on the welcome screen (2026-11-06, D154)
+
+**Built:** nothing reopens at launch; the welcome screen comes up with the most recent item selected, so ↩ gets you back. Every project keeps its page, scene, line, playhead and Edit zoom, with no limit on how many (it was 30). A spot follows a project through *Locate…*. A show opens on the episode last worked in.
+
+**Rob's check:** quit with an episode open on Arrange, launch, press ↩: same page, scene and playhead.

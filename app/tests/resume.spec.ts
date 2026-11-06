@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// Coming back to where it was left. A reload is a relaunch for the page; closing the episode on
-// the bridge as well makes it a launch with nothing open, which is what the app really starts with.
+// Coming back to where it was left. A reload with the episode still open on the bridge only
+// reloads the page; closing it there as well makes a launch, which starts on the welcome screen.
 
 const bridge = 'http://127.0.0.1:7358/rpc';
 
@@ -45,21 +45,24 @@ test('a reload lands on the page, scene and playhead it was left on', async ({ p
   await expectLeft(page, time);
 });
 
-test('a launch with nothing open reopens the episode, at its spot', async ({ page }) => {
+test('a launch starts on the welcome screen, and the episode comes back at its spot', async ({ page }) => {
   const time = await leave(page);
   await rpc(page, 'close_project');
   await page.reload();
+  await expect(page.getByTestId('welcome')).toBeVisible();
+  await expect(page.getByTestId('rail-scene')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Selected' }).getByRole('heading')).toHaveText('Demo');
+  await page.keyboard.press('Enter');
   await expectLeft(page, time);
   expect((await rpc<{ path: string }>(page, 'project_status')).path).toBeTruthy();
 });
 
-test('an episode closed on purpose stays closed, and keeps its spot for later', async ({ page }) => {
+test('an episode closed keeps its spot for later', async ({ page }) => {
   const time = await leave(page);
   const { path } = await rpc<{ path: string }>(page, 'project_status');
   await page.getByRole('button', { name: /^Demo/ }).click();
   await page.getByRole('menuitem', { name: 'Back to start screen' }).click();
   await expect(page.getByTestId('rail-scene')).toHaveCount(0);
-  expect(await stored(page, 'cutaway.last')).toBe('');
 
   await page.reload();
   await expect(page.getByRole('button', { name: 'Open', exact: false }).first()).toBeVisible();
@@ -97,17 +100,10 @@ test('what has gone since is left out, and says so', async ({ page }) => {
   await page.reload();
   await expect(scene(page, 1)).toBeVisible();
   await expect(page.getByTestId('arrange-row').first()).toBeVisible();
-
-  // a file that's gone: the start screen, and a word why
-  await rpc(page, 'close_project');
-  await page.evaluate(() => localStorage.setItem('cutaway.last', JSON.stringify({ name: 'Lost episode', path: '/nowhere/lost.cutaway' })));
-  await page.reload();
-  await expect(page.getByRole('status')).toContainText("Lost episode couldn't be reopened");
-  await expect(page.getByTestId('rail-scene')).toHaveCount(0);
   await rpc(page, 'open_project', { path });
 });
 
-test('a show comes back too: its episode with the show around it, or its home', async ({ page }) => {
+test('an episode of a show comes back with the show around it, from the welcome screen', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('current-box')).toBeVisible();
   const demo = (await rpc<{ path: string }>(page, 'project_status')).path;
@@ -132,16 +128,10 @@ test('a show comes back too: its episode with the show around it, or its home', 
   // a launch: nothing is open, not even the show
   await rpc(page, 'close_show');
   await page.reload();
+  await expect(page.getByTestId('welcome')).toBeVisible();
+  await page.keyboard.press('Enter');
   await expectLeft(page, time);
   expect((await rpc<{ show: { root: string } | null }>(page, 'project_status')).show?.root).toBe(root);
-
-  // left on the show's home, it comes back there
-  await page.getByRole('button', { name: /Turkey Time|Episode 2/ }).first().click();
-  await page.getByRole('menuitem', { name: 'Show home' }).click();
-  await expect(page.getByTestId('show-export')).toBeVisible();
-  await rpc(page, 'close_show');
-  await page.reload();
-  await expect(page.getByTestId('show-export')).toBeVisible();
 
   await rpc(page, 'close_show');
   await rpc(page, 'open_project', { path: demo });

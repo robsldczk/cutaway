@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EVERY_MS, flushSpot, keepLast, keepSpot, KEPT, landing, lastOpen, queueSpot, spotOf, type Spot } from './resume';
+import { EVERY_MS, flushSpot, keepSpot, landing, moveSpot, queueSpot, spotOf, type Spot } from './resume';
 
 const spot = (over: Partial<Spot> = {}): Spot => ({ page: 'edit', tab: 'files', scene: 's2', line: 'l7', at: 12.5, zoom: 80, ...over });
 
@@ -27,11 +27,18 @@ describe('spots', () => {
     expect(spotOf('/c')).toBeNull();
   });
 
-  it('forgets the oldest episodes first', () => {
-    for (let i = 0; i <= KEPT; i++) keepSpot(`/${i}`, spot());
-    expect(spotOf('/0')).toBeNull();
-    expect(spotOf('/1')).not.toBeNull();
-    expect(spotOf(`/${KEPT}`)).not.toBeNull();
+  it('remembers every episode, however many there are', () => {
+    for (let i = 0; i < 500; i++) keepSpot(`/${i}`, spot({ scene: `s${i}` }));
+    expect(spotOf('/0')?.scene).toBe('s0');
+    expect(spotOf('/499')?.scene).toBe('s499');
+  });
+
+  it('moves with an episode that was found somewhere else', () => {
+    keepSpot('/old', spot({ scene: 's7' }));
+    keepSpot('/new', spot({ scene: 'stale' }));
+    moveSpot('/old', '/new');
+    expect(spotOf('/old')).toBeNull();
+    expect(spotOf('/new')?.scene).toBe('s7');
   });
 
   it("doesn't trust what storage hands back", () => {
@@ -55,7 +62,6 @@ describe('spots', () => {
     });
     expect(() => keepSpot('/a', spot())).not.toThrow();
     expect(spotOf('/a')).toBeNull();
-    expect(lastOpen()).toBeNull();
   });
 });
 
@@ -88,17 +94,6 @@ describe('queueSpot', () => {
     expect(spotOf('/f')).toBeNull();
     flushSpot();
     expect(spotOf('/f')?.at).toBe(4);
-  });
-});
-
-describe('lastOpen', () => {
-  it('holds one episode or show, and clears', () => {
-    keepLast({ name: 'Ep 2', path: '/ep' });
-    expect(lastOpen()).toEqual({ name: 'Ep 2', path: '/ep', show: false });
-    keepLast({ name: 'tm', path: '/tm', show: true });
-    expect(lastOpen()?.show).toBe(true);
-    keepLast(null);
-    expect(lastOpen()).toBeNull();
   });
 });
 
