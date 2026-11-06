@@ -8,6 +8,8 @@ import type { DragSound, EditView, ItemView, Job, SceneSummary, SceneView, ShowV
 
 const soundId = (key: SoundKey) => key.asset_id ?? key.remote_id ?? key.clip?.id ?? '';
 
+import { flushSpot, keepLast, keepSpot, landing, lastOpen, queueSpot, spotOf, type Spot } from './resume';
+
 export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'export' | 'dev';
 export type ImportTab = 'files' | 'sounds' | 'rooms';
 export type Tool = 'pointer' | 'split' | 'fade' | 'gain' | 'marquee';
@@ -114,6 +116,12 @@ class AppState {
   passageTo = $state<string | null>(null);
   playing = $state(false);
   pos = $state(0);
+  /** The episode that has landed on its remembered spot: until then nothing overwrites it. */
+  private resumed = $state('');
+  /** The spot the scene being loaded lands on. */
+  private arriving: Spot | null = null;
+  /** A launch reopens what was left open, once. */
+  private reopened = false;
   /** Take auditioned alone in the box editor (`pos` is then seconds into the take). */
   audition = $state<string | null>(null);
   locator = $state(0);
@@ -343,6 +351,7 @@ class AppState {
       }
     } catch (e) {
       if (e instanceof BridgeError && e.code === 'no_project') {
+        if (await this.reopen()) return;
         this.noProject = true;
         await this.loadShow();
         return;
@@ -351,14 +360,78 @@ class AppState {
       return;
     }
     if (this.status && this.status.scenes > 0) {
-      await this.loadScene(this.sceneId || '1');
+      await this.resume();
       if (this.status.takes === 0) this.page = 'import';
       void this.loadExports();
     } else {
       this.view = null;
       this.page = 'import';
     }
+    this.resumed = this.status?.path ?? '';
+    if (this.status?.path) keepLast({ name: this.status.name, path: this.status.path });
     this.watch();
+  }
+
+  /** At launch, opens what was open at the end. True when an episode took over the boot. */
+  private async reopen() {
+    if (this.reopened) return false;
+    this.reopened = true;
+    const last = lastOpen();
+    if (!last) return false;
+    // off the record until it has opened: a file that brings the app down isn't tried at every launch
+    keepLast(null);
+    this.busy = true;
+    try {
+      await call(last.show ? 'open_show' : 'open_project', { path: last.path });
+    } catch (e) {
+      this.say(`${last.name} couldn't be reopened. ${e instanceof BridgeError ? e.message : String(e)}`);
+      return false;
+    } finally {
+      this.busy = false;
+    }
+    if (last.show) {
+      keepLast(last);
+      return false;
+    }
+    await this.boot();
+    return true;
+  }
+
+  /** The first load of an episode lands where it was left. After that it stays on its scene. */
+  private async resume() {
+    const path = this.status?.path ?? '';
+    const spot = this.resumed === path ? null : spotOf(path);
+    if (!spot) return this.loadScene(this.sceneId || '1');
+    this.page = spot.page === 'dev' && !this.dev ? 'options' : spot.page;
+    this.importTab = spot.tab;
+    this.editPx = spot.zoom;
+    this.arriving = spot;
+    try {
+      await this.loadScene(spot.scene);
+    } catch {
+      // the scene has gone since: the page is still the right one
+      await this.loadScene('1');
+    } finally {
+      this.arriving = null;
+    }
+  }
+
+  /** Where Rob is in this episode, or null until it has landed. */
+  get spot(): Spot | null {
+    if (!this.status?.path || this.resumed !== this.status.path || !this.sceneId) return null;
+    return {
+      page: this.page,
+      tab: this.importTab,
+      scene: this.sceneId,
+      line: this.curId,
+      at: this.audition ? this.locator : this.pos,
+      zoom: this.editPx,
+    };
+  }
+
+  /** Called whenever the spot changes. */
+  noteSpot(spot: Spot | null) {
+    if (spot && this.status?.path) queueSpot(this.status.path, spot);
   }
 
   /** Back to the start screen: the core snapshots unsaved changes and closes the episode. */
@@ -366,11 +439,19 @@ class AppState {
     if (this.playing) await this.stop();
     const r = await this.run(() => call<{ snapshot: string | null }>('close_project'));
     if (!r) return;
+    const show = this.status?.show;
     this.resetEpisode();
+    // closed on purpose: the next launch comes back to the show's home, or to the start screen
+    keepLast(show ? { name: show.name, path: show.root, show: true } : null);
   }
 
   /** Forgets the open episode's view state (the core has closed or replaced it). */
   private resetEpisode() {
+    const spot = this.spot;
+    if (spot && this.status?.path) keepSpot(this.status.path, spot);
+    flushSpot();
+    this.resumed = '';
+    this.editPx = 0;
     if (this.revTimer) clearInterval(this.revTimer);
     this.revTimer = null;
     this.lastRev = -1;
@@ -425,6 +506,7 @@ class AppState {
     const v = await this.run(() => call<ShowView>(create ? 'create_show' : 'open_show', create ? { root: path } : { path }));
     if (!v) return;
     remember({ name: v.name, path: v.root, show: true });
+    keepLast({ name: v.name, path: v.root, show: true });
     await this.loadShow();
   }
 
@@ -451,6 +533,7 @@ class AppState {
     if (this.playing) await this.stop();
     await this.run(() => call('close_show'));
     this.resetEpisode();
+    keepLast(null);
     this.show = null;
     this.backdrop = null;
     this.backdropOf = '';
@@ -491,6 +574,13 @@ class AppState {
       this.soundSel = [];
       this.soundOpen = null;
       this.lineSel = [];
+      // with the view, not after it: the pages read the playhead as they appear
+      if (this.arriving?.scene === v.scene.id) {
+        const { at, line } = landing(this.arriving, v.duration_s, this.lines);
+        this.pos = at;
+        this.locator = at;
+        this.curId = line ?? this.lineAt(at)?.line_id ?? this.curId;
+      }
     }
     if (this.wantsSounds) await this.loadEdit();
   }

@@ -782,8 +782,6 @@ test('snap: the button turns it off, and it stays off', async ({ page }) => {
   expect((await sound(a)).anchor).not.toBeNull();
 
   await page.reload();
-  await expect(page.getByTestId('current-box')).toBeVisible();
-  await page.getByRole('button', { name: 'Arrange', exact: false }).click();
   await expect(page.getByTestId('snap-toggle')).toHaveAttribute('aria-pressed', 'false');
   await page.getByTestId('snap-toggle').click();
 });

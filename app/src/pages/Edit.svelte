@@ -142,6 +142,13 @@
   $effect(() => {
     if (measured && v && !untrack(() => app.editPx)) app.editPx = fitPx;
   });
+  // arriving at a zoomed timeline, the playhead is in sight
+  let arrived = false;
+  $effect(() => {
+    if (!measured || !v || arrived) return;
+    arrived = true;
+    void tick().then(() => untrack(() => reveal(app.pos, app.pos)));
+  });
   // page along with the playhead while playing
   $effect(() => {
     const t = app.pos;

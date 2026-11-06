@@ -5,6 +5,7 @@
   import { brand } from './lib/brand';
   import { fileEnd, fileEnter, fileOver } from './lib/filedrop.svelte';
   import { onKey } from './lib/keys';
+  import { flushSpot } from './lib/resume';
   import Header from './components/Header.svelte';
   import SceneRail from './components/SceneRail.svelte';
   import Transport from './components/Transport.svelte';
@@ -127,8 +128,12 @@
   /** Pages where a sound from the Finder is filed into a bucket. */
   const filingHere = () => app.page === 'edit' || (app.page === 'arrange' && app.soundsOn) || (app.page === 'import' && app.importTab === 'sounds');
 
+  // the spot is kept as it changes: a quit gives the page no last word
+  $effect(() => app.noteSpot(app.spot));
+
   onMount(() => {
     void app.boot();
+    window.addEventListener('pagehide', flushSpot);
     // the browser tests have no Finder: they call what Tauri's events would
     if (import.meta.env.DEV) {
       Object.assign(window, { cutawayFileDrag: { enter: fileEnter, over: fileOver, drop: (paths: string[], x: number, y: number) => { fileEnd(); return dropped(paths, x, y); } } });
@@ -157,6 +162,7 @@
     }
     return () => {
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pagehide', flushSpot);
       el?.removeEventListener('wheel', onWheel);
       unlisten?.();
       unmenu?.();

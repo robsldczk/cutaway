@@ -1030,3 +1030,15 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **⌥⌘C / ⌥⌘V,** from the menu too. Copy Style's keys on a Mac, and ⌘C stays free. Read by the key's place, because ⌥ makes a Mac type ç and √. A paste is one undo step, and what's copied lasts until the episode closes, across scenes.
 - **No new command:** a paste is a `batch` of the commands that exist.
 
+
+### D131 Coming back to where it was left (Rob, 2026-11-06)
+- **Rob:** it should remember the position he left off in, so he doesn't have to find his spot again after quitting.
+- **What's remembered, per episode:** page, Import tab, scene, line, playhead and the Edit page's zoom. Any way back into an episode lands there, not only a launch.
+- **At launch:** the app reopens what was open at the end, an episode or a show's home, so the start screen only shows after closing on purpose. A file that has gone leaves the start screen and a toast saying so.
+- **Options for where it lives:** the project file, a file in the app's data folder, or the webview's storage.
+- **Choice:** the webview's storage, like the recent list. The project file syncs to other machines, and every move of the playhead would count as a change to it. So a spot is per machine: another machine has its own.
+- **Written as it changes, at most every 500 ms:** a quit gives the page no last word. Tried in the real app, not only in Chromium: a real quit 0.8 s after the last move came back on the same scene, page and playhead, and so did `kill -9`.
+- **While a take is auditioned** `pos` is seconds into the take, so the spot keeps the locator instead.
+- **The record of what was open is cleared before opening and written back after,** so an episode that brings the app down isn't opened at every launch.
+- **A spot that no longer fits:** a playhead past the end stops at the end, a line that has gone gives way to the line at the playhead, and a scene that has gone falls back to the first, on the same page.
+- **Not remembered:** selections, open drawers and the scroll of Arrange and Options, which follow the current line anyway. Edit has its own scroll, so it now brings the playhead into sight when it opens. That also applies when coming from another page.

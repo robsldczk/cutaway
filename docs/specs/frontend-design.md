@@ -275,6 +275,8 @@ A glass sheet in three steps:
 - **Save Version** (⌘S) asks for a name.
 - **History** (⌘⇧H): the list of backups and named versions with Revert.
 
+*Changed in implementation (D131):* the app reopens what was open at the end, and each episode comes back on its page, scene, line, playhead and Edit zoom. The start screen shows after closing on purpose. Spots are kept per machine, not in the project.
+
 ## Export panel
 
 - **Scope:** current scene, selected scenes, or everything.
