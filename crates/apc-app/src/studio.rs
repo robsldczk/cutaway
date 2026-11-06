@@ -166,9 +166,6 @@ pub fn shown_name(b: &SoundBucket) -> String {
 /// A room's ambience, not sound effects: it's chosen in Import › Rooms, and a bucket of it
 /// doesn't show among the buckets (D92). A bucket only named so keeps its folder's sounds.
 pub fn is_ambience_bucket(svc: &Service, b: &SoundBucket) -> bool {
-    if b.character.is_some() {
-        return false;
-    }
     if b.folder
         .as_deref()
         .is_some_and(|f| f.ends_with("room-tone"))
@@ -203,7 +200,7 @@ pub fn bucket_by_name(svc: &Service, file: &str) -> Option<String> {
     let mut open: Vec<&SoundBucket> = doc
         .buckets
         .values()
-        .filter(|b| b.character.is_none() && !is_music(doc, b))
+        .filter(|b| !is_music(doc, b))
         .filter(|b| !is_loose_bucket(svc, b) && !is_ambience_bucket(svc, b))
         .collect();
     open.sort_by_key(|b| (b.order, b.id.clone()));
@@ -293,7 +290,7 @@ pub fn link_folders(svc: &mut Service) -> Result<usize> {
         let mut open: Vec<&SoundBucket> = doc
             .buckets
             .values()
-            .filter(|b| b.character.is_none() && b.folder.is_none())
+            .filter(|b| b.folder.is_none())
             .collect();
         open.sort_by_key(|b| b.order);
         for b in open {
@@ -323,7 +320,6 @@ pub fn link_folders(svc: &mut Service) -> Result<usize> {
                 exclude: vec![],
                 ai_suggested: false,
                 order,
-                character: None,
                 search_offset: 0,
                 folder: Some(folder),
                 loops: Default::default(),
@@ -470,7 +466,7 @@ pub fn matches(svc: &Service, scene: Option<&str>) -> Matches {
         .collect();
     let mut out = Matches::default();
     for b in doc.buckets.values() {
-        if b.character.is_some() || is_music(doc, b) || b.folder.as_ref() == Some(&loose) {
+        if is_music(doc, b) || b.folder.as_ref() == Some(&loose) {
             continue;
         }
         let open: Vec<(&Entry, &SoundWords)> = sounds
@@ -577,7 +573,7 @@ pub fn folder_has_files(svc: &Service, b: &SoundBucket) -> bool {
 }
 
 /// Where a bucket's new sounds go: its folder in the show's library (`show:sfx/doors`),
-/// made now if it doesn't exist yet. `None` outside a show and for vocal buckets.
+/// made now if it doesn't exist yet. `None` outside a show.
 pub fn bucket_dest(svc: &mut Service, bucket_id: &str) -> Result<Option<String>> {
     let Some(lib) = svc.show_lib.clone() else {
         return Ok(None);
@@ -585,9 +581,6 @@ pub fn bucket_dest(svc: &mut Service, bucket_id: &str) -> Result<Option<String>>
     let Some(b) = svc.doc().buckets.get(bucket_id).cloned() else {
         return Ok(None);
     };
-    if b.character.is_some() {
-        return Ok(None);
-    }
     let folder = match &b.folder {
         Some(f) => f.clone(),
         None => {

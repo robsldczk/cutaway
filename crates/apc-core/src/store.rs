@@ -332,6 +332,7 @@ impl EpisodeStore {
             let v: Value = serde_json::from_str(&data)?;
             doc.put_value(kind, &id, Some(&v))?;
         }
+        doc.drop_unused_cuts();
         Ok(doc)
     }
 
@@ -541,7 +542,7 @@ fn write_row(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::SceneRoom;
+    use crate::model::{Lane, SceneRoom};
     use serde_json::json;
 
     /// An episode file as version 1 wrote it: rows without the room or the sound fields.
@@ -676,6 +677,75 @@ mod tests {
             store.meta("schema_version").unwrap().as_deref(),
             Some(EPISODE_SCHEMA_VERSION.to_string().as_str())
         );
+    }
+
+    /// What the vocal buckets left in a file: (kind, id, row).
+    fn vocals_left_behind() -> Vec<(&'static str, &'static str, Value)> {
+        let cut = |id: &str| {
+            json!({ "id": id, "file": format!("Vocals/Paul/{id}.wav"), "hash": id,
+                    "category": "Vocals/Paul", "source": "recorded" })
+        };
+        vec![
+            (
+                "bucket",
+                "bk_vocals_paul",
+                json!({ "id": "bk_vocals_paul", "name": "Paul · vocals", "character": "PAUL",
+                        "keywords": [], "scene_ids": [], "cue_ids": [], "kept": ["a_idle", "a_used"],
+                        "previews": [], "dismissed": [], "exclude": [] }),
+            ),
+            ("asset", "a_idle", cut("a_idle")),
+            ("asset", "a_used", cut("a_used")),
+            (
+                "asset",
+                "a_door",
+                json!({ "id": "a_door", "file": "SFX/door.wav", "hash": "door", "source": "imported" }),
+            ),
+            (
+                "placement",
+                "p1",
+                json!({ "id": "p1", "scene_id": "sc1", "asset_id": "a_used", "lane": "adlib",
+                        "character": "PAUL", "layer": 1, "at_s": 1.0, "len_s": 0.5,
+                        "fade_in_s": 0.01, "fade_out_s": 0.05 }),
+            ),
+        ]
+    }
+
+    #[test]
+    fn an_older_file_reads_without_its_vocals_and_keeps_them_on_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.cutaway");
+        let store = EpisodeStore::create(&path).unwrap();
+        for (kind, id, row) in vocals_left_behind() {
+            store
+                .conn()
+                .execute(
+                    "INSERT INTO entity(kind,id,data) VALUES(?1,?2,?3)",
+                    params![kind, id, row.to_string()],
+                )
+                .unwrap();
+        }
+        let doc = store.load_document().unwrap();
+        assert!(doc.buckets.is_empty());
+        // a cut nobody uses is gone from the document, a placed one stays, others aren't touched
+        let assets: Vec<&str> = doc.assets.keys().map(String::as_str).collect();
+        assert_eq!(assets, ["a_door", "a_used"]);
+        // the adlib track is gone: the sound sits on its character's lane, out of the room
+        let p = &doc.placements["p1"];
+        assert_eq!(p.lane, Lane::Dialogue);
+        assert_eq!(p.character.as_deref(), Some("PAUL"));
+        assert!(!p.in_room());
+        // and the file is as it was: reading changes nothing
+        assert_eq!(row(&store, "bucket", "bk_vocals_paul")["character"], "PAUL");
+        assert_eq!(row(&store, "asset", "a_idle")["id"], "a_idle");
+        assert_eq!(row(&store, "placement", "p1")["lane"], "adlib");
+    }
+
+    #[test]
+    fn undo_or_a_backup_cant_bring_a_vocal_bucket_back() {
+        let mut doc = Document::default();
+        let (_, id, row) = vocals_left_behind().remove(0);
+        doc.put_value(Kind::Bucket, id, Some(&row)).unwrap();
+        assert!(doc.buckets.is_empty());
     }
 
     #[test]

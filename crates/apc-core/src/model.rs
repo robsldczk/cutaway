@@ -1,7 +1,7 @@
 //! Typed document entities. Each entity is stored as one row of the `entity` table
 //! (see `docs/PLAN.md`, schema) and changed only through the command bus.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -1012,12 +1012,10 @@ pub enum Lane {
     Sfx,
     Ambience,
     Music,
-    /// A character's dialogue lane (`Placement::character`). Vocal sounds placed before there
-    /// was an adlib lane stay here.
+    /// A character's dialogue lane (`Placement::character`). A sound on the adlib track, which
+    /// is gone, reads as being on its character's lane (D118).
+    #[serde(alias = "adlib")]
     Dialogue,
-    /// The adlib track: the actors' vocal sounds (breaths, "mh-hm", efforts, words picked out
-    /// of a performance). `Placement::character` says whose; on Arrange they're sounds (D102).
-    Adlib,
 }
 
 /// A sound placed on the timeline.
@@ -1029,7 +1027,7 @@ pub struct Placement {
     #[serde(default)]
     pub cue_id: Option<String>,
     pub lane: Lane,
-    /// Whose voice it is (`Lane::Dialogue`, `Lane::Adlib`).
+    /// Whose voice it is (`Lane::Dialogue`).
     #[serde(default)]
     pub character: Option<String>,
     #[serde(default)]
@@ -1089,9 +1087,9 @@ impl Placement {
 
     /// Whether the sound plays in the scene's room. Music is outside the story's space and
     /// vocal sounds on a dialogue lane belong with the dialogue, so depth means nothing for
-    /// them (D76). An adlib is placed in the room like an effect (D102).
+    /// them (D76).
     pub fn in_room(&self) -> bool {
-        matches!(self.lane, Lane::Sfx | Lane::Ambience | Lane::Adlib)
+        matches!(self.lane, Lane::Sfx | Lane::Ambience)
     }
 }
 
@@ -1111,7 +1109,8 @@ pub enum AssetSource {
     Imported,
     Licensed,
     Generated,
-    /// Cut from the episode's own recordings (a character's vocal sounds).
+    /// Cut from the episode's own recordings. Nothing is cut any more; the ones still used in
+    /// an older episode stay this (D118).
     Recorded,
 }
 
@@ -1192,10 +1191,6 @@ pub struct SoundBucket {
     pub ai_suggested: bool,
     #[serde(default)]
     pub order: u32,
-    /// A character's vocal bucket: filled by the analysis from the actor's own recordings
-    /// only (no search, no generation).
-    #[serde(default)]
-    pub character: Option<String>,
     /// How far into the provider's results the keyword search has read ("Load more").
     #[serde(default)]
     pub search_offset: usize,
@@ -1258,6 +1253,12 @@ pub struct Document {
     pub marks: BTreeMap<String, DevMark>,
 }
 
+/// A character's vocal bucket, in a file from before they were removed. Undo and backups can
+/// bring one back as well as a load, so it's turned away here (D118).
+fn is_vocal_bucket(v: &Value) -> bool {
+    v.get("character").is_some_and(|c| !c.is_null())
+}
+
 macro_rules! dispatch {
     ($($kind:ident => $field:ident),* $(,)?) => {
         impl Document {
@@ -1273,6 +1274,7 @@ macro_rules! dispatch {
 
             /// Inserts, replaces (`Some`) or removes (`None`) one entity from JSON.
             pub fn put_value(&mut self, kind: Kind, id: &str, value: Option<&Value>) -> Result<()> {
+                let value = value.filter(|v| !(kind == Kind::Bucket && is_vocal_bucket(v)));
                 match kind {
                     $(Kind::$kind => match value {
                         Some(v) => {
@@ -1320,6 +1322,42 @@ dispatch!(
 );
 
 impl Document {
+    /// Takes the sounds the analysis used to cut for the vocal buckets out of a loaded document:
+    /// nothing lists them any more. One still in use stays, and the rows and files are left as
+    /// they are (D118).
+    pub(crate) fn drop_unused_cuts(&mut self) {
+        let mut used: HashSet<&str> = self
+            .placements
+            .values()
+            .map(|p| p.asset_id.as_str())
+            .collect();
+        used.extend(
+            self.buckets
+                .values()
+                .flat_map(|b| b.kept.iter().map(String::as_str)),
+        );
+        used.extend(
+            self.scenes
+                .values()
+                .filter_map(|s| s.tone.as_ref())
+                .map(|t| t.asset_id.as_str()),
+        );
+        used.extend(
+            self.locations
+                .values()
+                .filter_map(|l| l.room_tone.asset_id.as_deref()),
+        );
+        let unused: Vec<String> = self
+            .assets
+            .values()
+            .filter(|a| a.source == AssetSource::Recorded && !used.contains(a.id.as_str()))
+            .map(|a| a.id.clone())
+            .collect();
+        for id in unused {
+            self.assets.remove(&id);
+        }
+    }
+
     /// The ambience a scene plays. Places share: without one of its own a scene plays what
     /// its location has, for its time of day if that's set apart, then what the setting it
     /// belongs to has, then the location's room tone (D97).

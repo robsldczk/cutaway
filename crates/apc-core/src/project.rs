@@ -29,7 +29,7 @@ pub struct EpisodePaths {
     pub cache: PathBuf,
     pub logs: PathBuf,
     /// The episode's own library: everything of a standalone episode, a show episode's
-    /// vocals (cut from its own recordings).
+    /// vocals (cut from its own recordings, by builds before D118).
     pub library: PathBuf,
     /// The show, when the episode lives in one.
     pub show: Option<Show>,

@@ -20,7 +20,6 @@ pub mod sound;
 pub mod sound_edit;
 pub mod studio;
 pub mod views;
-pub mod vocals;
 
 pub use error::{AppError, Result};
 pub use methods::{methods, Access, MethodInfo, Session};

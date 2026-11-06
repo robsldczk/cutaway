@@ -636,12 +636,9 @@ pub struct PlaceFromBucketP {
     /// A kept sound …
     #[serde(default)]
     pub asset_id: Option<String>,
-    /// … or a preview (downloads first, in the background) …
+    /// … or a preview (downloads first, in the background).
     #[serde(default)]
     pub remote_id: Option<String>,
-    /// … or a stretch of a recording, cut into the character's vocals.
-    #[serde(default)]
-    pub clip: Option<ClipP>,
     #[serde(default)]
     pub bucket_id: Option<String>,
     /// The cue it answers.
@@ -649,7 +646,7 @@ pub struct PlaceFromBucketP {
     pub cue_id: Option<String>,
     #[serde(default)]
     pub lane: Option<Lane>,
-    /// For `lane: dialogue`. A vocal goes on the adlib track with its own character.
+    /// For `lane: dialogue`.
     #[serde(default)]
     pub character: Option<String>,
     #[serde(default)]
@@ -676,9 +673,6 @@ pub struct ClipP {
     /// Source-file seconds.
     pub t0: f64,
     pub t1: f64,
-    /// What was said, for the sound's name.
-    #[serde(default)]
-    pub text: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -1055,11 +1049,11 @@ registry! {
     "bucket_search", BucketSearchP, Write, true, "Search for a bucket's keywords. Epidemic Sound results become previews (not downloaded).";
     "bucket_download", BucketRemoteP, Write, true, "Download a preview (licensed) and keep it in the bucket. Counts against the plan.";
     "bucket_keep", BucketAssetP, Write, true, "Keep a library sound in a bucket.";
-    "bucket_remove", BucketAssetP, Write, true, "Take a kept sound out of a bucket (it stays in the library). A removed vocal stays out on the next analysis.";
+    "bucket_remove", BucketAssetP, Write, true, "Take a kept sound out of a bucket (it stays in the library).";
     "bucket_dismiss", BucketRemoteP, Write, true, "Dismiss a preview so searches skip it.";
     "bucket_generate", BucketGenerateP, Write, true, "Generate sounds for a bucket (ElevenLabs) and keep them.";
-    "place_from_bucket", PlaceFromBucketP, Write, true, "Place a bucket sound on the timeline. A preview downloads first (returns a job_id). A character's vocal, or a clip from search_performances (cut into their vocals), always goes on the adlib track.";
-    "search_performances", PerformanceSearchP, Read, true, "Search what the actors said and did on their own mics: \"paul huh\". Gives stretches already cut to the sound, to trim and place with place_from_bucket's clip.";
+    "place_from_bucket", PlaceFromBucketP, Write, true, "Place a bucket sound on the timeline. A preview downloads first (returns a job_id).";
+    "search_performances", PerformanceSearchP, Read, true, "Search what the actors said and did on their own mics: \"paul huh\". Gives stretches already cut to the sound; make one a take with add_take, or a new line with add_line.";
     "play_sound", PlaySoundP, Read, false, "Audition a bucket sound (kept or preview) on the preview player. The timeline stops; its playhead stays.";
     "stop_sound", NoParams, Read, false, "Stop the preview player.";
     "sound_playhead", NoParams, Read, false, "The preview player's sound, position and state.";
@@ -1766,11 +1760,6 @@ impl Service {
             "bucket_keep" => {
                 let p: BucketAssetP = parse(params)?;
                 let a = crate::sound::ensure_asset_in_doc(self, &p.asset_id)?;
-                if let Some(b) = self.doc().buckets.get(&p.bucket_id) {
-                    if a.source != AssetSource::Recorded {
-                        crate::buckets::only_sourced(b)?;
-                    }
-                }
                 // in a show the bucket's folder gets a copy, so every episode has it there
                 if let Some(dest) = crate::studio::bucket_dest(self, &p.bucket_id)? {
                     let path = self.library().path_of(&a);

@@ -14,7 +14,6 @@
   import CleanUpSheet from '../components/CleanUpSheet.svelte';
   import { drag, dropzone, type DropZone } from '../lib/drag.svelte';
   import type { Bucket, BucketsView, CleanupPlan, Preview, SearchPage, SearchResult } from '../lib/types';
-  import { colorOf, solid } from '../theme';
 
   let sort = $state<'scene' | 'tag' | 'show'>('scene');
   let data = $state<BucketsView | null>(null);
@@ -228,19 +227,16 @@
   {/if}
   {#each data?.buckets ?? [] as b (b.id)}
     {@const here = !!app.sceneId && b.scene_ids.includes(app.sceneId)}
-    {@const col = b.character ? solid(colorOf(b.color_index ?? 0).rgb) : null}
-    {@const takes = !b.character}
-    <article class="bk glass" class:sel={b.id === app.openBucket} class:here class:over={over === b.id} class:hint={dragging && takes} aria-label="Bucket {b.name}" data-testid="bucket-card" use:dropzone={takes ? target(b.id, b) : null}>
+    <article class="bk glass" class:sel={b.id === app.openBucket} class:here class:over={over === b.id} class:hint={dragging} aria-label="Bucket {b.name}" data-testid="bucket-card" use:dropzone={target(b.id, b)}>
       <button class="cover" aria-label="Open {b.name}" onclick={() => (app.openBucket = app.openBucket === b.id ? null : b.id)}></button>
       <div class="hd">
-        {#if col}<span class="ctag" style="background: {col}">{b.name.replace(/ · vocals$/, '')}</span><span class="ellip nm2 muted">vocals</span><span class="chip outline tn">{b.kept.length}</span>
-        {:else}<span class="ellip nm2">{b.name}</span>{#each b.scenes as s (s)}<span class="chip outline tn">{s}</span>{/each}{/if}
+        <span class="ellip nm2">{b.name}</span>{#each b.scenes as s (s)}<span class="chip outline tn">{s}</span>{/each}
       </div>
       <div class="kws">{#each b.keywords as k (k)}<span class="chip kw">{k}</span>{/each}</div>
       {#if b.folder}<div class="fld muted ellip" title="Saved in the show's library: Sound/{b.folder}">Sound/{b.folder}</div>{/if}
       <div class="tiles">
         {#each tiles(b) as t (t.key)}
-          <span class="tl" class:kept={t.kept} style={col && t.kept ? `background: color-mix(in srgb, ${col} 18%, transparent)` : ''}><span class="w"><Waveform peaks={t.peaks} fill={col ?? (t.kept ? 'var(--sfx)' : 'rgb(var(--ink-rgb) / 0.3)')} /></span></span>
+          <span class="tl" class:kept={t.kept}><span class="w"><Waveform peaks={t.peaks} fill={t.kept ? 'var(--sfx)' : 'rgb(var(--ink-rgb) / 0.3)'} /></span></span>
         {/each}
         {#each Array.from({ length: Math.max(0, 4 - tiles(b).length) }, (_, i) => i) as i (i)}<span class="tl empty"></span>{/each}
       </div>
@@ -471,19 +467,6 @@
     min-width: 0;
     font-size: 15px;
     font-weight: 600;
-  }
-  .ctag {
-    display: inline-flex;
-    align-items: center;
-    height: 24px;
-    padding: 0 10px;
-    border-radius: var(--radius-pill);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #16110d;
-    flex: none;
   }
   .fld {
     font-size: 11px;

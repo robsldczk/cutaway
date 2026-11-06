@@ -596,16 +596,9 @@ impl Service {
             self.last_report = Some(report.clone());
             return Ok(report);
         }
-        progress(apc_analysis::Progress {
-            stage: "vocals".into(),
-            fraction: 1.0,
-            message: format!("Collecting {} vocal sounds", out.vocals.len()),
-        });
-        let mut payload = out.payload;
-        if !out.vocals.is_empty() {
-            (payload.assets, payload.buckets) = crate::vocals::prepare(self, &out.vocals)?;
-        }
-        self.exec(&Command::ApplyAnalysis { payload })?;
+        self.exec(&Command::ApplyAnalysis {
+            payload: out.payload,
+        })?;
         std::fs::write(self.paths.logs.join("match-report.md"), &report.markdown)?;
         self.media.clear();
         self.last_report = Some(report.clone());

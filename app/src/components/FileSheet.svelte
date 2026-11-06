@@ -49,7 +49,7 @@
     lit = null;
     const [view, hit] = await Promise.all([call<BucketsView>('buckets', {}), call<{ name: string; bucket_id: string | null }>('suggest_bucket', { name: path })]);
     if (mine !== opening) return;
-    buckets = view.buckets.filter((b) => !b.character).map((b) => ({ id: b.id, name: b.name }));
+    buckets = view.buckets.map((b) => ({ id: b.id, name: b.name }));
     // what's typed in the meantime stays: a guess never overwrites it
     if (typed) return;
     text = !hit.bucket_id && AMBIENT.test(path) ? AMBIENCE : hit.name;

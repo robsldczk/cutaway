@@ -130,8 +130,6 @@ fn role_of(lane: &str, doc: &Document) -> String {
         "effects.Room".into()
     } else if lane == "DIALOGUE" {
         "dialogue".into()
-    } else if lane.starts_with("ADLIB") {
-        "dialogue.Adlibs".into()
     } else if lane.starts_with("SFX") {
         "effects".into()
     } else if lane == "MUSIC" {

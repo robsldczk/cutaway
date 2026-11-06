@@ -510,10 +510,10 @@ fn director_files_link_only_to_the_recording_they_are_named_after() {
     check(&mut s);
 }
 
-/// The analysis fills each character's vocal bucket from the actor's own mic; nothing else
-/// goes in, a removed vocal stays out, and a vocal is placed on the character's lane.
+/// An actor's small sounds stay in the recording: the analysis cuts nothing out of them and
+/// makes no bucket of them (D118). They become takes in the mapping editor.
 #[test]
-fn the_analysis_fills_character_vocal_buckets_from_the_recordings() {
+fn the_analysis_cuts_no_vocals_out_of_the_recordings() {
     env();
     let dir = tempfile::tempdir().unwrap();
     let demo = dir.path().join("session");
@@ -545,134 +545,17 @@ fn the_analysis_fills_character_vocal_buckets_from_the_recordings() {
         .unwrap();
     s.call("run_alignment", &json!({})).unwrap();
 
-    let paul = |s: &mut apc_app::Session| {
-        s.call("buckets", &json!({})).unwrap()["buckets"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|b| b["character"] == "PAUL")
-            .cloned()
-            .expect("Paul's vocal bucket")
-    };
-    let b = paul(&mut s);
-    assert_eq!(b["name"], "Paul · vocals");
-    let bid = b["id"].as_str().unwrap().to_string();
-    let mhm = b["kept"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|k| k["tags"][0] == "mhm")
-        .cloned()
-        .expect("the mh-hm");
-    assert_eq!(mhm["heard"], "Mh-hm.");
-    assert_eq!(mhm["source"], "recorded");
-    assert!(
-        mhm["file"].as_str().unwrap().starts_with("Vocals/Paul/"),
-        "{}",
-        mhm["file"]
-    );
-    assert!(mhm["duration_s"].as_f64().unwrap() > 0.5);
-    // the scene filter shows it where Paul speaks
-    let sc1 = s.call("buckets", &json!({ "scene": "1" })).unwrap();
-    assert!(sc1["buckets"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|x| x["id"] == bid.as_str()));
+    let buckets = s.call("buckets", &json!({})).unwrap();
+    assert_eq!(buckets["buckets"], json!([]), "{buckets}");
+    assert_eq!(s.call("list_library", &json!({})).unwrap(), json!([]));
+    assert!(!dir.path().join("Ep/Library/Vocals").exists());
 
-    // only the actor's own recordings: no search, no generation, no outside sounds
-    assert!(s
+    // what's on Paul's mic is still there to find, for the mapping editor
+    let found = s
         .call(
-            "bucket_search",
-            &json!({ "bucket_id": bid, "provider": "library" })
-        )
-        .is_err());
-    assert!(s
-        .call("bucket_generate", &json!({ "bucket_id": bid }))
-        .is_err());
-
-    // placed on the adlib track as Paul's, wherever it was dropped
-    let aid = mhm["id"].as_str().unwrap().to_string();
-    s.call(
-        "place_from_bucket",
-        &json!({ "scene": "1", "asset_id": aid, "at_s": 2.0 }),
-    )
-    .unwrap();
-    s.call(
-        "place_from_bucket",
-        &json!({ "scene": "1", "asset_id": aid, "at_s": 2.0, "lane": "dialogue", "character": "SARA" }),
-    )
-    .unwrap();
-    s.call(
-        "place_from_bucket",
-        &json!({ "scene": "1", "bucket_id": bid, "asset_id": aid, "at_s": 2.0, "lane": "sfx" }),
-    )
-    .unwrap();
-    let ev = s.call("edit_view", &json!({ "scene": "1" })).unwrap();
-    let placed = ev["placements"].as_array().unwrap();
-    assert_eq!(placed.len(), 3);
-    for pl in placed {
-        assert_eq!(pl["lane"], "adlib", "{pl}");
-        assert_eq!(pl["character"], "PAUL", "{pl}");
-    }
-    // together on one track they stack, as effects do
-    let mut layers: Vec<u64> = placed
-        .iter()
-        .map(|p| p["layer"].as_u64().unwrap())
-        .collect();
-    layers.sort();
-    assert_eq!(layers, [0, 1, 2]);
-    // nothing else goes on that track
-    assert!(s
-        .call(
-            "place_sound",
-            &json!({ "scene": "1", "asset_id": aid, "lane": "adlib", "at_s": 1.0 })
-        )
-        .is_err());
-
-    // removed, it stays out when the analysis runs again
-    let n = b["kept"].as_array().unwrap().len();
-    s.call(
-        "bucket_remove",
-        &json!({ "bucket_id": bid, "asset_id": aid }),
-    )
-    .unwrap();
-    s.call("run_alignment", &json!({})).unwrap();
-    let again = paul(&mut s);
-    assert_eq!(again["kept"].as_array().unwrap().len(), n - 1);
-    assert!(again["kept"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|k| k["id"] != aid.as_str()));
-
-    // the analysis, vocals included, is one undo step
-    let first = {
-        let mut f = apc_app::Session::new("test");
-        f.call(
-            "create_episode",
-            &json!({ "parent": dir.path().join("b").to_string_lossy(), "name": "Ep" }),
+            "search_performances",
+            &json!({ "query": "lunch", "character": "PAUL" }),
         )
         .unwrap();
-        f.call(
-            "import_script",
-            &json!({ "path": demo.join("Demo Episode.fountain").to_string_lossy() }),
-        )
-        .unwrap();
-        f.call("import_audio", &json!({ "paths": paths, "copy": true }))
-            .unwrap();
-        f.call("run_alignment", &json!({})).unwrap();
-        assert!(f.call("buckets", &json!({})).unwrap()["buckets"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|b| b["character"] == "PAUL"));
-        f.call("undo", &json!({})).unwrap();
-        f.call("buckets", &json!({})).unwrap()
-    };
-    assert!(first["buckets"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|b| b["character"].is_null()));
+    assert!(found["total"].as_u64().unwrap() > 0, "{found}");
 }

@@ -6,11 +6,9 @@
   import { grab } from '../lib/drag.svelte';
   import { len } from '../lib/format';
   import Icon from './Icon.svelte';
-  import PerformanceSearch from './PerformanceSearch.svelte';
   import PreviewPlayer from './PreviewPlayer.svelte';
   import Waveform from './Waveform.svelte';
   import type { Asset, Bucket, BucketsView } from '../lib/types';
-  import { colorOf, solid } from '../theme';
 
   /** Up to here a dropped sound keeps its length, looped or not. */
   const LOOP_MIN_S = 6;
@@ -49,10 +47,6 @@
 
   // ---- search: this scene's buckets narrow down, the rest of the library comes in below ----
   let q = $state('');
-  /** The character search has its own query: "paul huh" is no sound's name. */
-  let who = $state('');
-  let finder = $state<HTMLInputElement>();
-  const people = $derived(app.bucketSearch === 'characters');
   let library = $state<Asset[]>([]);
   const words = $derived(q.toLowerCase().split(/\s+/).filter(Boolean));
   const hit = (text: string) => words.every((w) => text.toLowerCase().includes(w));
@@ -80,19 +74,8 @@
   function searchKey(e: KeyboardEvent) {
     if (e.key !== 'Escape') return;
     e.stopPropagation();
-    if (people) who = '';
-    else q = '';
+    q = '';
     (e.currentTarget as HTMLElement).blur();
-  }
-
-  function searchIn(mode: 'sounds' | 'characters') {
-    app.bucketSearch = mode;
-    finder?.focus();
-  }
-
-  function pickCharacter(name: string) {
-    who = `${name} `;
-    finder?.focus();
   }
 
   function isOpen(id: string, i: number) {
@@ -142,19 +125,11 @@
     <button class="btn" onclick={() => app.toggleFullBucket()}>Full bucket <span class="kb">⇧B</span></button>
     <button class="ib" aria-label="Hide bucket (B)" title="Hide (B)" onclick={() => app.setBucket(false)}><Icon name="chevron-right" /></button>
   </div>
-  <div class="seg mode" role="group" aria-label="Search">
-    <button class="tab" class:on={!people} aria-pressed={!people} onmousedown={(e) => e.preventDefault()} onclick={() => searchIn('sounds')} data-testid="search-sounds">Sounds</button>
-    <button class="tab" class:on={people} aria-pressed={people} onmousedown={(e) => e.preventDefault()} onclick={() => searchIn('characters')} data-testid="search-characters">Characters</button>
-  </div>
-  {#if people}
-    <input class="field find" type="search" placeholder="Name and what they said: paul huh" aria-label="Search what the characters said" bind:this={finder} bind:value={who} onkeydown={searchKey} data-testid="character-search" />
-    <PerformanceSearch query={who} onpick={pickCharacter} />
-  {:else}
   <div class="legend muted">
     <span><span class="dot gold"></span>Downloaded</span>
     <span><span class="dot ring"></span>Preview, downloads on drop</span>
   </div>
-  <input class="field find" type="search" placeholder="Search sounds" aria-label="Search sounds" bind:this={finder} bind:value={q} onkeydown={searchKey} data-testid="bucket-search" />
+  <input class="field find" type="search" placeholder="Search sounds" aria-label="Search sounds" bind:value={q} onkeydown={searchKey} data-testid="bucket-search" />
   <div class="list">
     {#if eyes?.others}
       {@const faded = eyes.hidden.includes(eyes.others.id)}
@@ -167,7 +142,7 @@
     {/if}
     {#each data?.buckets ?? [] as b, i (b.id)}
       {@const open = isOpen(b.id, i)}
-      {@const col = eyes ? eyes.color(b.id) : b.character ? solid(colorOf(b.color_index ?? 0).rgb) : null}
+      {@const col = eyes ? eyes.color(b.id) : null}
       {@const faded = !!eyes?.hidden.includes(b.id)}
       {#if (!eyes || col) && shows(b)}
       {#if b.show_wide && !data?.buckets[i - 1]?.show_wide}<div class="label wide">Whole show</div>{/if}
@@ -177,18 +152,18 @@
           <span class="chev" style="transform: rotate({open ? 0 : -90}deg)"><Icon name="chevron" size={11} stroke={2.4} /></span>
           {#if col}<span class="dot" style="background: {faded ? 'transparent' : col}; box-shadow: {faded ? `inset 0 0 0 1.5px ${col}` : 'none'}"></span>{/if}
           <span class="bn">{b.name}</span>
-          <span class="muted tn cnt">{col && !eyes ? b.kept.length : `${b.kept.length} + ${b.previews.length}`}</span>
+          <span class="muted tn cnt">{b.kept.length} + {b.previews.length}</span>
         </button>
         {#if eyes}{@render eye(b.id, b.name, faded)}{/if}
         </div>
         {#if open}
           {#each keptOf(b) as s (s.id)}
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions (dragging is the mouse's; D82) -->
-            <div class="srow kept" class:used={eyes?.used.has(s.id)} style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} role="listitem" onmousedown={(e) => grab(e, { kind: 'bucket', bucket_id: b.id, asset_id: s.id, character: b.character ?? undefined, name: s.name, duration_s: s.duration_s })} data-testid={b.character ? 'vocal-sound' : 'bucket-sound'}>
+            <div class="srow kept" class:used={eyes?.used.has(s.id)} style={col ? `background: color-mix(in srgb, ${col} 12%, transparent)` : ''} role="listitem" onmousedown={(e) => grab(e, { kind: 'bucket', bucket_id: b.id, asset_id: s.id, name: s.name, duration_s: s.duration_s })} data-testid="bucket-sound">
               <span class="grip"><Icon name="grip" /></span>
               <button class="play gold" style={col ? `background: ${col}; color: #16110d` : ''} aria-label="Play {s.name}" onmousedown={(e) => e.preventDefault()} onclick={() => app.toggleSound({ asset_id: s.id }, s)}><Icon name={app.previewing(s.id) ? 'stop' : 'play'} size={10} /></button>
               <div class="mid"><span class="ellip nm4">{s.name}</span><span class="wv"><Waveform peaks={s.peaks} fill={col ?? 'var(--sfx)'} /></span></div>
-              {#if !b.character && s.duration_s > LOOP_MIN_S}<button class="lp" class:on={s.loop} aria-pressed={s.loop} aria-label="Loop {s.name}" title="Loop: goes on the ambience lane and repeats to the end of the scene" onmousedown={(e) => e.preventDefault()} onclick={() => setLoop(b.id, { asset_id: s.id }, !s.loop)} data-testid="bucket-loop">Loop</button>{:else}<span></span>{/if}
+              {#if s.duration_s > LOOP_MIN_S}<button class="lp" class:on={s.loop} aria-pressed={s.loop} aria-label="Loop {s.name}" title="Loop: goes on the ambience lane and repeats to the end of the scene" onmousedown={(e) => e.preventDefault()} onclick={() => setLoop(b.id, { asset_id: s.id }, !s.loop)} data-testid="bucket-loop">Loop</button>{:else}<span></span>{/if}
               <span class="muted tn d">{len(s.duration_s)}</span>
             </div>
           {/each}
@@ -202,7 +177,7 @@
               <span class="muted tn d">{len(p.duration_s)}</span>
             </div>
           {/each}
-          {#if (eyes || !col) && data?.connected.epidemic && b.keywords.length}<button class="btn sm" onclick={() => more(b.id)} disabled={busy === b.id}>{busy === b.id ? 'Searching…' : 'More like these'}</button>{/if}
+          {#if data?.connected.epidemic && b.keywords.length}<button class="btn sm" onclick={() => more(b.id)} disabled={busy === b.id}>{busy === b.id ? 'Searching…' : 'More like these'}</button>{/if}
         {/if}
       </section>
       {/if}
@@ -227,7 +202,6 @@
       <p class="muted note">No sound by that name.</p>
     {/if}
   </div>
-  {/if}
   {#if !off}<PreviewPlayer />{/if}
 </aside>
 
@@ -398,15 +372,6 @@
     flex: none;
     height: 32px;
     font-size: 12.5px;
-  }
-  .mode {
-    flex: none;
-    align-self: flex-start;
-  }
-  .mode .tab {
-    height: 26px;
-    padding: 0 12px;
-    font-size: 12px;
   }
   .cat {
     font-size: 10.5px;

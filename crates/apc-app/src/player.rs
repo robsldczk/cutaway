@@ -268,7 +268,7 @@ pub fn play_file(
     on_preview(svc, id, path, label, (0.0, duration), gain_db, from_s)
 }
 
-/// Plays a stretch of a source on the preview player, before it's cut (the character search).
+/// Plays a stretch of a source on the preview player (the mapping editor).
 /// `sound_playhead` then reports seconds into the stretch.
 pub fn play_stretch(svc: &mut Service, clip: &crate::methods::ClipP, from_s: f64) -> Result<Value> {
     let Some(src) = svc.doc().sources.get(&clip.source_id).cloned() else {

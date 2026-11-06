@@ -93,7 +93,7 @@
     <label class="ir"><span class="muted">Fade in</span><span class="u"><input class="iv" type="text" inputmode="decimal" value={Math.round(sound.fade_in_s * 1000)} onchange={(e) => { const n = num(e); if (n != null) void patch({ fade_in_s: Math.max(0, n) / 1000 }); }} aria-label="Fade in (ms)" />ms</span></label>
     <label class="ir"><span class="muted">Fade out{sound.auto_fade ? ' · auto' : ''}</span><span class="u"><input class="iv" type="text" inputmode="decimal" value={Math.round(sound.fade_out_s * 1000)} onchange={(e) => { const n = num(e); if (n != null) void patch({ fade_out_s: Math.max(0, n) / 1000 }); }} aria-label="Fade out (ms)" />ms</span></label>
     <label class="ir"><span class="muted">Pan</span><span class="u"><input class="iv" type="text" inputmode="decimal" value={signed(sound.pan * 100, 0)} onchange={(e) => { const n = num(e); if (n != null) void patch({ pan: n / 100 }); }} aria-label="Pan (−100 left to 100 right)" />L/R</span></label>
-    {#if sound.lane === 'sfx' || sound.lane === 'ambience' || sound.lane === 'adlib'}
+    {#if sound.lane === 'sfx' || sound.lane === 'ambience'}
       <label class="ir"><span class="muted">Depth</span><span class="u"><input class="iv" type="text" inputmode="decimal" value={Math.round(sound.depth * 100)} onchange={(e) => { const n = num(e); if (n != null) void patch({ depth: n / 100 }); }} aria-label="Depth (0 close to 100 far)" />%</span></label>
     {/if}
     <label class="ir"><span class="muted">Curve</span>

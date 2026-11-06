@@ -1,7 +1,7 @@
 //! The sound library. A standalone episode keeps its sounds in its own `Library/<category>/`
 //! (mirrored into the episode document). In a show, sounds live in the show's library
 //! (`show_library`, paths `show:sfx/doors/…`), and the episode's own `Library/` keeps only
-//! what is cut from its recordings (vocals).
+//! the vocals older builds cut from its recordings (D118).
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -72,7 +72,7 @@ impl Library {
     }
 
     /// Copies a file into the library (or finds the identical file already there).
-    /// `category` is a folder of the episode's own library (`SFX/Doors`, `Vocals/Paul`), or
+    /// `category` is a folder of the episode's own library (`SFX/Doors`), or
     /// a folder of the show's library with the `show:` prefix (`show:sfx/doors`).
     /// `local` are the episode's own assets.
     #[allow(clippy::too_many_arguments)]

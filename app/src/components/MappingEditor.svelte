@@ -315,7 +315,7 @@
   async function listen(t0: number, t1: number) {
     if (!rec || t1 - t0 < MIN_MARK_S) return;
     playFrom = t0;
-    const clip = { id: PREVIEW_ID, source_id: rec.source_id, t0: +t0.toFixed(3), t1: +t1.toFixed(3), text: '' };
+    const clip = { id: PREVIEW_ID, source_id: rec.source_id, t0: +t0.toFixed(3), t1: +t1.toFixed(3) };
     await app.playSound({ clip }, 0, { name: rec.name, duration_s: t1 - t0, peaks: [] });
   }
 

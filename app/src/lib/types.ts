@@ -337,8 +337,8 @@ export interface PlacementView {
   id: string;
   asset_id: string;
   name: string;
-  lane: 'sfx' | 'ambience' | 'music' | 'dialogue' | 'adlib';
-  /** Whose voice (lanes 'dialogue' and 'adlib'). */
+  lane: 'sfx' | 'ambience' | 'music' | 'dialogue';
+  /** Whose voice (lane 'dialogue'). */
   character: string | null;
   layer: number;
   start_s: number;
@@ -495,8 +495,6 @@ export interface BucketSound {
   category: string;
   peaks: number[];
   tags: string[];
-  /** What the recogniser heard ("Mm.") for a character's vocal. */
-  heard: string | null;
   /** Dropped, a sound over 6 s with this on repeats on the ambience lane. */
   loop: boolean;
   /** In this bucket because its file name answers the bucket's cues or keywords. */
@@ -542,9 +540,6 @@ export interface Bucket {
   exclude: string[];
   ai_suggested: boolean;
   anchors: Anchor[];
-  /** A character's vocal bucket: the actor's own recordings, found by the analysis. */
-  character: string | null;
-  color_index: number | null;
   /** Belongs to no scene, so every scene can use it. */
   show_wide?: boolean;
 }
@@ -570,9 +565,6 @@ export interface DragSound {
   bucket_id?: string;
   asset_id?: string;
   remote_id?: string;
-  /** A stretch of a recording, cut when it's dropped (the character search). */
-  clip?: PerformanceClip;
-  character?: string;
   /** The cue it answers, for a candidate. */
   cue_id?: string;
   name: string;
@@ -591,7 +583,6 @@ export interface PerformanceClip {
   source_id: string;
   t0: number;
   t1: number;
-  text: string;
 }
 
 /** A place a character said it: `t0`–`t1` is the clip, `w0`–`w1` the audio around it. */

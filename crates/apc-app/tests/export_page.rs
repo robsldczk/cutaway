@@ -46,7 +46,7 @@ fn with_sound(svc: &mut Service, dir: &Path) {
         json!({ "lane": "sfx", "at_s": 1.0, "depth": 0.5 }),
         json!({ "lane": "ambience", "at_s": 0.0, "depth": 0.4 }),
         json!({ "lane": "music", "at_s": 0.5 }),
-        json!({ "lane": "adlib", "character": "PAUL", "at_s": 1.5, "depth": 0.3 }),
+        json!({ "lane": "dialogue", "character": "PAUL", "at_s": 1.5 }),
     ] {
         let mut p = json!({ "scene": "1", "asset_id": asset });
         for (k, v) in extra.as_object().unwrap() {

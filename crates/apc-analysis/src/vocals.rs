@@ -1,11 +1,9 @@
 //! Character vocals: the small sounds an actor makes besides the scripted lines ("mh-hm",
-//! "ah", laughs, efforts, breaths, panting, running steps), found in the actor's own mic
-//! during the analysis. They fill the character's vocal bucket; nothing is generated or
-//! searched for.
+//! "ah", laughs, efforts, breaths, panting, running steps), found in the actor's own mic when
+//! the mapping editor's search asks for them. Nothing is cut or stored (D118).
 //!
 //! Two sources:
-//! - **Words** the recogniser heard that are interjections, outside any take (or the takes
-//!   of a line that is only an interjection, like "Mh-hm…").
+//! - **Words** the recogniser heard that are interjections, outside any take.
 //! - **Sounds without words** between takes: short bursts above the noise floor that are
 //!   louder in this mic than in the other actors' mics (not bleed), told apart by length,
 //!   level and rhythm.
@@ -25,8 +23,8 @@ pub struct VocalTrack<'a> {
     pub env: &'a [f32],
     /// Recognised words (raw text, start, end).
     pub words: Vec<(String, f64, f64)>,
-    /// Takes on this file (start, end, the line is only interjections).
-    pub takes: Vec<(f64, f64, bool)>,
+    /// Takes on this file (start, end).
+    pub takes: Vec<(f64, f64)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -142,7 +140,8 @@ pub fn find_vocals(tracks: &[VocalTrack]) -> Vec<VocalCandidate> {
     vocals_up_to(tracks, cap)
 }
 
-/// All of them, for a search: the bucket's caps keep it short, a search wants what's there.
+/// All of them, for a search of one kind: the caps keep a whole list short, a search wants
+/// what's there.
 pub fn every_vocal(tracks: &[VocalTrack]) -> Vec<VocalCandidate> {
     vocals_up_to(tracks, |_| usize::MAX)
 }
@@ -151,9 +150,7 @@ fn vocals_up_to(tracks: &[VocalTrack], cap: impl Fn(&str) -> usize) -> Vec<Vocal
     let mut all: Vec<VocalCandidate> = Vec::new();
     for (ti, tr) in tracks.iter().enumerate() {
         let near = |t0: f64, t1: f64, pad: f64| {
-            tr.takes
-                .iter()
-                .any(|&(a, b, _)| t0 < b + pad && a - pad < t1)
+            tr.takes.iter().any(|&(a, b)| t0 < b + pad && a - pad < t1)
         };
         let mut found: Vec<VocalCandidate> = Vec::new();
 
@@ -162,11 +159,8 @@ fn vocals_up_to(tracks: &[VocalTrack], cap: impl Fn(&str) -> usize) -> Vec<Vocal
             let Some(tag) = interjection_tag(raw) else {
                 continue;
             };
-            let in_take = tr.takes.iter().find(|&&(a, b, _)| *t0 < b && a < *t1);
-            if let Some(&(_, _, only_interjection)) = in_take {
-                if !only_interjection {
-                    continue; // part of a scripted line
-                }
+            if tr.takes.iter().any(|&(a, b)| *t0 < b && a < *t1) {
+                continue; // part of a scripted line
             }
             // "Mh-hm" arrives as "Mh" + "hm": back-to-back interjections are one sound
             // (a word ending in punctuation, like "Mm.", is a sound of its own)
@@ -201,11 +195,7 @@ fn vocals_up_to(tracks: &[VocalTrack], cap: impl Fn(&str) -> usize) -> Vec<Vocal
         }
         sorted.sort_by(|a, b| a.total_cmp(b));
         let floor = sorted[sorted.len() / 10].max(1e-5);
-        let speech: Vec<f32> = tr
-            .takes
-            .iter()
-            .map(|&(a, b, _)| level(tr.env, a, b))
-            .collect();
+        let speech: Vec<f32> = tr.takes.iter().map(|&(a, b)| level(tr.env, a, b)).collect();
         let speech_db = if speech.is_empty() {
             db(sorted[sorted.len() * 95 / 100])
         } else {
@@ -393,7 +383,7 @@ mod tests {
                 ("done".into(), 10.5, 11.0),
                 ("Mh-hm".into(), 20.0, 20.5),
             ],
-            takes: vec![(10.0, 14.0, false)],
+            takes: vec![(10.0, 14.0)],
         }
     }
 

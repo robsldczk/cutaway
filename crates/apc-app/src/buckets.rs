@@ -301,13 +301,13 @@ pub fn spot(
                 .doc()
                 .buckets
                 .values()
-                .find(|b| b.character.is_none() && b.name.eq_ignore_ascii_case(name))
+                .find(|b| b.name.eq_ignore_ascii_case(name))
                 .or_else(|| {
                     folder.as_ref().and_then(|f| {
                         svc.doc()
                             .buckets
                             .values()
-                            .find(|b| b.character.is_none() && b.folder.as_ref() == Some(f))
+                            .find(|b| b.folder.as_ref() == Some(f))
                     })
                 })
                 .map(|b| b.id.clone());
@@ -330,7 +330,6 @@ pub fn spot(
                         exclude: vec!["music".into(), "voices".into()],
                         ai_suggested: true,
                         order: svc.doc().buckets.len() as u32,
-                        character: None,
                         search_offset: 0,
                         folder,
                         loops: Default::default(),
@@ -346,7 +345,7 @@ pub fn spot(
             .doc()
             .buckets
             .values()
-            .filter(|b| b.ai_suggested && b.character.is_none())
+            .filter(|b| b.ai_suggested)
             .filter(|b| b.scene_ids.contains(&sc.id))
             .filter(|b| !groups.keys().any(|n| n.eq_ignore_ascii_case(&b.name)))
             .map(|b| b.id.clone())
@@ -404,7 +403,7 @@ fn asset_view(svc: &mut Service, a: &Asset) -> Value {
         "id": a.id, "name": crate::views::sound_name(&a.file),
         "file": a.file, "duration_s": a.duration_s, "provider": a.provider, "license": a.license,
         "source": a.source, "category": a.category, "peaks": peaks,
-        "tags": a.tags, "heard": a.prompt.clone().filter(|_| a.source == AssetSource::Recorded),
+        "tags": a.tags,
     })
 }
 
@@ -424,25 +423,13 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
         .buckets
         .values()
         .filter(|b| !crate::studio::is_ambience_bucket(svc, b))
-        .filter(|b| match (&sid, &b.character) {
-            (None, _) => true,
-            // a character's vocals belong to every scene the character speaks in
-            (Some(s), Some(ch)) => doc
-                .lines
-                .values()
-                .any(|l| &l.scene_id == s && l.character.as_deref() == Some(ch.as_str())),
-            // a bucket of no scene is for the whole show, so every scene can use it
-            (Some(s), None) => b.scene_ids.contains(s) || b.scene_ids.is_empty(),
+        // a bucket of no scene is for the whole show, so every scene can use it
+        .filter(|b| {
+            sid.as_ref()
+                .is_none_or(|s| b.scene_ids.contains(s) || b.scene_ids.is_empty())
         })
         .collect();
     let matched = crate::studio::matches(svc, sid.as_deref());
-    // characters' vocal buckets first, in cast order
-    let cast = |b: &SoundBucket| {
-        b.character
-            .as_ref()
-            .and_then(|c| doc.characters.get(c))
-            .map(|c| c.color_index)
-    };
     let first_scene = |b: &SoundBucket| {
         b.scene_ids
             .iter()
@@ -458,7 +445,6 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
         }
         _ => list.sort_by_key(|b| (first_scene(b), b.order)),
     }
-    list.sort_by_key(|b| cast(b).map(|i| (0, i)).unwrap_or((1, 0)));
     let mut out = Vec::new();
     for b in list {
         let mut sounds: Vec<Asset> = b
@@ -486,7 +472,7 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
                 sounds.push(a.clone());
             }
         }
-        let show_wide = b.scene_ids.is_empty() && b.character.is_none();
+        let show_wide = b.scene_ids.is_empty();
         if sounds.is_empty() && (loose || (sid.is_some() && show_wide)) {
             continue;
         }
@@ -513,7 +499,7 @@ pub fn view(svc: &mut Service, scene: Option<&str>, sort: &str) -> Result<Value>
             "id": b.id, "name": crate::studio::shown_name(b), "keywords": b.keywords, "scenes": scene_labels(&doc, b), "scene_ids": b.scene_ids,
             "kept": kept, "previews": previews, "length_min_s": b.length_min_s, "length_max_s": b.length_max_s,
             "exclude": b.exclude, "ai_suggested": b.ai_suggested, "folder": b.folder,
-            "character": b.character, "color_index": cast(b), "show_wide": show_wide,
+            "show_wide": show_wide,
             "anchors": b.cue_ids.iter().filter_map(|c| doc.cues.get(c)).filter_map(|c| c.anchor.clone()).collect::<Vec<_>>(),
         }));
     }
@@ -602,7 +588,6 @@ pub fn create(
         exclude,
         ai_suggested: false,
         order: svc.doc().buckets.len() as u32,
-        character: None,
         search_offset: 0,
         folder,
         loops: Default::default(),
@@ -662,17 +647,6 @@ fn normal_keywords(k: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// A character's vocal bucket holds the actor's own recordings only.
-pub fn only_sourced(b: &SoundBucket) -> Result<()> {
-    if b.character.is_some() {
-        return Err(AppError::Params(format!(
-            "{} holds the actor's own recordings only (found by the analysis); it can't be searched or generated",
-            b.name
-        )));
-    }
-    Ok(())
-}
-
 fn bucket(svc: &Service, id: &str) -> Result<SoundBucket> {
     svc.doc()
         .buckets
@@ -691,7 +665,6 @@ pub fn search(
     query: Option<Vec<String>>,
 ) -> Result<Value> {
     let snap = bucket(svc, bucket_id)?;
-    only_sourced(&snap)?;
     let new_keywords = query.as_deref().map(normal_keywords);
     let keywords = new_keywords
         .clone()
@@ -871,7 +844,6 @@ pub fn search_free(svc: &mut Service, query: &str, offset: usize) -> Result<Valu
 /// preview (nothing is downloaded) and survives the bucket's own searches.
 pub fn add_preview(svc: &mut Service, bucket_id: &str, p: Preview) -> Result<Value> {
     let snap = bucket(svc, bucket_id)?;
-    only_sourced(&snap)?;
     let folder_remote = crate::studio::folder_remote(svc, &snap);
     let added = Cell::new(false);
     edit_bucket(svc, bucket_id, |doc, b| {
@@ -962,7 +934,6 @@ pub fn generate(
     variations: Option<u32>,
 ) -> Result<Value> {
     let b = bucket(svc, bucket_id)?;
-    only_sourced(&b)?;
     let prompt = prompt
         .filter(|p| !p.trim().is_empty())
         .unwrap_or_else(|| b.keywords.join(", "));
@@ -1121,14 +1092,12 @@ pub fn play(
 }
 
 /// Places a bucket sound on the timeline. A preview downloads first (a background job with
-/// progress, "downloads on drop"); a kept sound is placed at once. A character's vocal
-/// goes on the adlib track, wherever it was dropped (D102).
+/// progress, "downloads on drop"); a kept sound is placed at once.
 pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<Value> {
     let crate::methods::PlaceFromBucketP {
         scene,
         asset_id,
         remote_id,
-        clip,
         bucket_id,
         cue_id,
         lane,
@@ -1140,22 +1109,6 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         offset_s,
         depth,
     } = q;
-    let vocal_of = bucket_id
-        .as_ref()
-        .and_then(|b| svc.doc().buckets.get(b))
-        .or_else(|| {
-            asset_id.as_ref().and_then(|a| {
-                svc.doc()
-                    .buckets
-                    .values()
-                    .find(|b| b.character.is_some() && b.kept.contains(a))
-            })
-        })
-        .and_then(|b| b.character.clone());
-    let (lane, character) = match vocal_of {
-        Some(ch) => (Some(Lane::Adlib), Some(ch)),
-        None => (lane, character),
-    };
     let p = crate::methods::PlaceSoundP {
         asset_id: String::new(),
         scene,
@@ -1170,9 +1123,6 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         depth,
         dropped: None,
     };
-    if let Some(c) = clip {
-        return crate::vocals::place_clip(svc, &c, p);
-    }
     if let Some(aid) = asset_id {
         let a = crate::sound::find_asset(svc, &aid)?;
         let dropped = Some(a.is_some_and(|a| loops(svc.doc(), bucket_id.as_deref(), &a)));

@@ -35,11 +35,6 @@ pub struct AnalysisPayload {
     /// With a line scope: notes and unmatched speech are replaced only for these sources.
     #[serde(default)]
     pub source_scope: Vec<String>,
-    /// Characters' vocal sounds cut from the recordings, and their vocal buckets.
-    #[serde(default)]
-    pub assets: Vec<Asset>,
-    #[serde(default)]
-    pub buckets: Vec<SoundBucket>,
 }
 
 /// A clip edge for trims.
@@ -548,7 +543,6 @@ impl Command {
             Command::ApplyAnalysis { payload } => json!({
                 "takes": payload.takes.len(), "notes": payload.notes.len(),
                 "unmatched": payload.unmatched.len(), "sessions": payload.sessions.len(),
-                "vocals": payload.assets.len(),
             }),
             Command::ApplyMatch {
                 sessions, sources, ..
@@ -1226,19 +1220,6 @@ impl Command {
             } => {
                 let mut b = bucket(tx, bucket_id)?;
                 b.kept.retain(|a| a != asset_id);
-                // a removed vocal stays out when the analysis runs again
-                if b.character.is_some() {
-                    if let Some(key) = tx
-                        .doc()
-                        .assets
-                        .get(asset_id)
-                        .and_then(|a| a.remote_id.clone())
-                    {
-                        if !b.dismissed.contains(&key) {
-                            b.dismissed.push(key);
-                        }
-                    }
-                }
                 tx.put(&b)?;
                 Ok(Value::Null)
             }
@@ -1473,8 +1454,7 @@ pub(crate) fn free_layer(doc: &Document, p: &Placement, pacing: &crate::timeline
             o.id != p.id
                 && o.scene_id == p.scene_id
                 && o.lane == p.lane
-                // one adlib track for the whole cast
-                && (o.character == p.character || p.lane == Lane::Adlib)
+                && o.character == p.character
                 && o.layer == layer
                 && {
                     let os = placement_start(&layout, o);
@@ -2442,12 +2422,6 @@ pub fn default_take<'a>(takes: &[&'a Take]) -> Option<&'a Take> {
 
 fn apply_analysis(tx: &mut Tx, payload: &AnalysisPayload) -> Result<Value> {
     let doc = tx.doc().clone();
-    for a in &payload.assets {
-        tx.put(a)?;
-    }
-    for b in &payload.buckets {
-        tx.put(b)?;
-    }
     for s in &payload.sessions {
         tx.put(s)?;
     }

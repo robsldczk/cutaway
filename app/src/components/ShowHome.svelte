@@ -127,7 +127,7 @@
       {#if migrating}
         <div class="mig glass">
           <div class="label">Copy a standalone episode into {ep?.label ?? 'an episode'}</div>
-          <p class="muted small">The original stays as it is. Its sounds go into the show's library; vocals stay with the episode.</p>
+          <p class="muted small">The original stays as it is. Its sounds go into the show's library.</p>
           <div class="row">
             {#if inTauri}
               <button class="btn" onclick={pickSource}>Choose episode…</button>
@@ -141,7 +141,7 @@
           {#if plan}
             <ul class="plan small">
               <li>{plan.files} files, {size(plan.bytes)}, into {plan.target}</li>
-              <li>{plan.sounds_to_show_library.length} sounds into the show's library, {plan.vocals_stay} vocals stay with the episode</li>
+              <li>{plan.sounds_to_show_library.length} sounds into the show's library{plan.vocals_stay ? `, ${plan.vocals_stay} vocals stay with the episode` : ''}</li>
               {#each plan.warnings as w (w)}<li class="warn">{w}</li>{/each}
             </ul>
             <button class="btn primary" onclick={copy} disabled={working}>{working ? 'Copying…' : 'Copy'}</button>

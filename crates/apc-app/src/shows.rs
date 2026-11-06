@@ -290,7 +290,7 @@ pub fn migrate(show: &Show, source: &Path, episode: &str, dry_run: bool) -> Resu
             .doc()
             .buckets
             .values()
-            .find(|b| b.character.is_none() && b.kept.contains(&a.id))
+            .find(|b| b.kept.contains(&a.id))
             .map(|b| b.id.clone());
         let dest = match bucket {
             Some(b) => crate::studio::bucket_dest(&mut svc, &b)?,

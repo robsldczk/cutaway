@@ -387,7 +387,7 @@ fn a_standalone_episode_is_copied_into_the_show() {
     env(&dir.path().join("local"));
     let root = pipeline(dir.path());
 
-    // a standalone episode with recordings, an analysis, vocals and a library sound
+    // a standalone episode with recordings, an analysis and a library sound
     let standalone = dir.path().join("Cutaway");
     let mut s = apc_app::Session::new("test");
     call(

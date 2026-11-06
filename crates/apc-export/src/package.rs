@@ -85,17 +85,15 @@ fn token(s: &str) -> String {
         .collect()
 }
 
-/// One file per character (adlibs together), or one for the dialogue when nobody speaks: the
+/// One file per character, or one for the dialogue when nobody speaks: the
 /// stack stays complete either way.
 fn voice_files(sched: &PlaySchedule) -> Vec<TrackFile> {
     let mut voices: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for c in sched.clips.iter().filter(|c| is_voice(&c.lane)) {
-        let name = if c.lane.starts_with("adlib") {
-            "Adlibs".to_string()
-        } else {
-            token(&c.lane)
-        };
-        voices.entry(name).or_default().insert(c.lane.clone());
+        voices
+            .entry(token(&c.lane))
+            .or_default()
+            .insert(c.lane.clone());
     }
     if voices.is_empty() {
         return vec![TrackFile {
@@ -375,7 +373,7 @@ fn lane_of(doc: &Document, f: &TrackFile) -> Option<(String, String)> {
                 if doc.characters.contains_key(lane) {
                     lane.clone()
                 } else {
-                    "ADLIB".into()
+                    "DIALOGUE".into()
                 },
                 label,
             ))

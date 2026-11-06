@@ -64,17 +64,14 @@
     if (on) void loadBuckets();
   });
 
-  /** The scene's effects first, then the adlibs (D102), then what's there for the whole show.
-   *  Colours go to the effects first, so the vocal buckets don't shift them. */
-  const effects = $derived(buckets?.buckets.filter((b) => !b.character) ?? []);
-  const adlibs = $derived(buckets?.buckets.filter((b) => b.character) ?? []);
-  const listed = $derived(buckets && { ...buckets, buckets: [...effects.filter((b) => !b.show_wide), ...adlibs, ...effects.filter((b) => b.show_wide)] });
-  const placeable = $derived([...effects, ...adlibs]);
+  /** The scene's effects first, then what's there for the whole show. */
+  const placeable = $derived(buckets?.buckets ?? []);
+  const listed = $derived(buckets && { ...buckets, buckets: [...placeable.filter((b) => !b.show_wide), ...placeable.filter((b) => b.show_wide)] });
   const toneOf = $derived(new Map(placeable.map((b, i) => [b.id, `--bucket-${(i % TONES) + 1}-rgb`])));
   /** A sound kept in several buckets counts for the first. */
   const bucketOfAsset = $derived(new Map(placeable.flatMap((b) => b.kept.map((k): [string, Bucket] => [k.id, b])).reverse()));
 
-  const placed = $derived(app.edit?.scene_id === app.sceneId ? app.edit.placements.filter((p) => p.lane === 'sfx' || p.lane === 'ambience' || p.lane === 'adlib') : []);
+  const placed = $derived(app.edit?.scene_id === app.sceneId ? app.edit.placements.filter((p) => p.lane === 'sfx' || p.lane === 'ambience') : []);
   const sounds = $derived(
     placed.map((p): Sound => {
       const b = bucketOfAsset.get(p.asset_id);
@@ -943,9 +940,9 @@
 
   async function place(at: NonNullable<ReturnType<typeof dropSpot>>, sound: DragSound) {
     const where = at.target ? { anchor_line_id: at.target.anchor.line_id, anchor_word: at.target.anchor.word, anchor_edge: at.target.anchor.edge, offset_s: at.target.offset_s ?? 0 } : { at_s: +at.t.toFixed(3) };
-    const params = { scene: app.sceneId, bucket_id: sound.bucket_id, asset_id: sound.asset_id, remote_id: sound.remote_id, clip: sound.clip, character: sound.character, depth: +depthAt(at.p.x, field).toFixed(3), ...where };
+    const params = { scene: app.sceneId, bucket_id: sound.bucket_id, asset_id: sound.asset_id, remote_id: sound.remote_id, depth: +depthAt(at.p.x, field).toFixed(3), ...where };
     let id: string | undefined;
-    if (sound.asset_id || sound.clip) {
+    if (sound.asset_id) {
       const r = await app.method<{ id: string }>('place_from_bucket', params);
       id = r?.id;
     } else {
@@ -960,7 +957,7 @@
     }
     if (!id) return;
     const placedHere = app.edit?.placements.find((p) => p.id === id);
-    if (placedHere && placedHere.lane !== 'sfx' && placedHere.lane !== 'ambience' && placedHere.lane !== 'adlib') {
+    if (placedHere && placedHere.lane !== 'sfx' && placedHere.lane !== 'ambience') {
       app.say('That one plays outside the room: find it on the Edit page');
       return;
     }

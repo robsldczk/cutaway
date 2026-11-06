@@ -35,7 +35,7 @@ fn sound(id: &str, lane: &str, extra: serde_json::Value) -> Placement {
     serde_json::from_value(v).unwrap()
 }
 
-/// Something on every lane: a voice, an adlib, effects near and far, a bed, a music cue.
+/// Something on every lane: a voice, effects near and far, a bed, a music cue.
 fn scene(dir: &Path) -> (Document, SourceSet) {
     let mut d = Document::default();
     let s: Scene = serde_json::from_value(json!({
@@ -52,11 +52,6 @@ fn scene(dir: &Path) -> (Document, SourceSet) {
     let mut set = SourceSet::new(RATE);
     let sounds = [
         sound("voice", "dialogue", json!({ "character": "PAUL" })),
-        sound(
-            "adlib",
-            "adlib",
-            json!({ "character": "PAUL", "at_s": 0.5, "depth": 0.3 }),
-        ),
         sound("door", "sfx", json!({ "pan": -0.6, "depth": 0.1 })),
         sound(
             "far",
@@ -184,7 +179,6 @@ fn lanes_fall_into_their_groups() {
     for (lane, g) in [
         ("PAUL", Dialogue),
         ("dialogue", Dialogue),
-        ("adlib1", Dialogue),
         ("sfx1", Effects),
         ("sfx12", Effects),
         ("ambience", Ambience),

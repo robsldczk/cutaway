@@ -245,22 +245,6 @@ fn free_search_results_dropped_into_buckets_survive_searches() {
         .unwrap();
     assert_eq!(s["results"][0]["buckets"], json!([bid]));
     assert_eq!(s["results"][9]["buckets"], json!([]));
-
-    // a character's vocal bucket takes no outside sounds
-    let v = svc.call("buckets", &json!({})).unwrap();
-    if let Some(vocal) = v["buckets"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|b| !b["character"].is_null())
-    {
-        assert!(svc
-            .call(
-                "bucket_add_preview",
-                &json!({ "bucket_id": vocal["id"], "preview": late }),
-            )
-            .is_err());
-    }
 }
 
 /// Spotted ambience stays in the document for Import › Rooms; it doesn't list as a bucket.

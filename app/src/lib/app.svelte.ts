@@ -145,7 +145,6 @@ class AppState {
   narrow = $state(typeof window !== 'undefined' && window.innerWidth <= 1100);
   private bucketOver = $state(false);
   /** What the docked bucket's search looks through. */
-  bucketSearch = $state<'sounds' | 'characters'>('sounds');
   editInspector = $state(false);
   mixer = $state(false);
   tool = $state<Tool>('pointer');

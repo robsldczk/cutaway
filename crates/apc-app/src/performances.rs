@@ -1,6 +1,6 @@
-//! The bucket's character search: "paul huh" finds where Paul's mic heard it, pre-clipped, with
-//! a stretch of audio either side to trim into (D101). Read-only; a drop goes through
-//! `place_from_bucket`'s `clip`.
+//! Searching the performances: "paul huh" finds where Paul's mic heard it, pre-clipped, with a
+//! stretch of audio either side (D101). Read-only; the mapping editor makes a take of what it
+//! finds (D104, D118).
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -165,10 +165,7 @@ fn sounds(
                     .iter()
                     .map(|w| (w.raw.clone(), w.t0, w.t1))
                     .collect(),
-                takes: takes_on(doc, &m.src.id)
-                    .into_iter()
-                    .map(|(a, b)| (a, b, false))
-                    .collect(),
+                takes: takes_on(doc, &m.src.id),
             })
         })
         .collect();
