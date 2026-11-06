@@ -518,7 +518,12 @@ mod tests {
         engine.play(0.0, None);
         std::thread::sleep(Duration::from_millis(250));
         assert!(engine.is_playing(), "still ringing after the clip's end");
-        std::thread::sleep(Duration::from_millis(350));
+        // the engine's clock is the device's: Bluetooth starts late and runs in bursts, so
+        // wall time says nothing about how far playback has got
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while engine.is_playing() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
         assert!(!engine.is_playing(), "stops when the tail is over");
         assert!(engine.position_s() >= 0.35, "{}", engine.position_s());
     }
