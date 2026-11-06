@@ -478,3 +478,25 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 **Verified:** `check.sh` green, Playwright 202 of 202. In the real webview with in-page events on a temp demo: a dot and a card dragged and landed, Esc changing nothing, undo of a move and a remove, and the wheel easing over a 100 px notch and back up over the gaps between cards.
 
 **Not verified:** a real trackpad and mouse, so how the glide feels is Rob's to judge (`GLIDE` and `FAST` in `Review.svelte` tune it). Dragging past the edge of a long scene is written but only exercised on the demo's short scene. A remove across two machines is tested with copied files, not Syncthing.
+## Welcome screen, Shelf B (2026-11-06, D144–D150)
+
+**Built:** the start screen from `tasks/Welcome`. A hero for the selected item and two rows of cover tiles, Recent episodes and Shows. A click selects; Edit, Review, ↩ and ⌥↩ open. A show takes over the first row, and Esc or the row's title brings it back. Single episodes group in one tile. New episode and New show are short sheets that make a project without opening it. Scripts and recordings dropped on the window start an episode, an image on a tile or the hero sets its cover, a review file goes to its episode. Missing items are dimmed with *Locate…*; a right click has *Set cover…* and *Remove from recents*. A full-screen transition shows while a project loads, for as long as it loads. On the CLI as `cutaway shelf` and `cutaway cover`, on the MCP as `welcome_view`, `set_cover` and `add_review_to`.
+
+**Conflicts with the app (all in D145):**
+- Launch still reopens what was open (D131), so the welcome screen shows after closing on purpose or with nothing left open. The handover calls it the first thing you see; say if you want it at every launch.
+- There was no stage in the app, so it's worked out from the work done (D146).
+- New single episodes and shows go to `~/Documents/Cutaway` unless *Choose…* says otherwise (D149).
+- New episodes in a show get no number unless the name carries one: numbers belong to the pipeline (D149).
+
+**Not built:** a view gathering notes across a show's episodes: Review on a show opens its home for review, as it did (D141). A focal point for covers: the handover says later.
+
+**Verified:** `check.sh` green. 9 Rust tests, 28 unit tests, 22 new Playwright specs. In the real webview, on a clone of Episode 2 in its show, with in-page events and Tauri's own drop events: launch selection, click, arrows, ⌘N, ⇧⌘N, Esc, ↩ and ⌥↩, a drop setting a cover on disk, Edit, Review of the episode and of the show, the transition. The clone's file had the same hash before and after a review. Screenshots at 1440×900 and 900×640, dark and light, on the real backdrop.
+
+**Not verified:** a real mouse, real key presses, a real Finder drag and the native file dialogs: those are all faked or absent from a session, so *Open…*, *Locate…*, *Choose…* and the cover picker have only run through the browser's stand-in. Nothing was run on the real share. A review file dropped in the real webview: Playwright only.
+
+**Manual checks for Rob:**
+- Close the episode. Is Episode 2 selected, and is the count on Review right?
+- Press ⌘O and pick a `.cutawayshow`; right-click a tile and use *Set cover…*: these are the native dialogs nobody has seen.
+- Drag an image from the Finder onto a tile, and a script onto the window.
+- Press ⌘N with the app focused: nothing should beat the page to it, but only your keyboard can show that.
+- Judge the look on `tm-2610`, in both themes.

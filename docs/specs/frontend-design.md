@@ -325,6 +325,10 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 
 *Changed in implementation (D143):* a page outside the page switch, reached from Export's *Open these scenes for review*, the episode menu's *Review…*, or Welcome's *Open project package in review mode*. Cards and the spine in the middle, notes in the margin (a thread is one block, pushed down rather than overlapped), the rail on the right, the transport across the bottom with a pin per note. Search (⌘K), the round picker, the reviewer chip, History, Send review and Done in the header. `M` marker, `N` note on the current line, `←→` scenes, `↑↓` lines, `⌘Z` your last note. A note drags by its dot, bracket or top row, and has a Remove (D144). The wheel glides through the scene, ⇧ faster (D145). Open notes show on the editing pages as badges on line cards, pins on the transport and the Edit ruler, a dot on the rail, and a **Notes** tab in the scene sounds panel. Spec: `tasks/Review/audioplay-cutter-handover-review.md`.
 
+## Welcome screen
+
+*Changed in implementation (D144–D150):* the start screen is a shelf: a hero for the selected item, a row of recent episodes, a row of shows. A click selects; Edit, Review, ↩ and ⌥↩ open. A show takes over the first row, Esc brings it back. New episode and New show are short sheets that make a project without opening it. Scripts and recordings dropped on the window start an episode, an image on a tile or the hero sets its cover, a review file goes to its episode. Covers are `Cover.jpg` in the project. It shows after closing on purpose and at a launch with nothing left open: D131 still reopens what was open. *Open project package in review mode* is now the Review button, and stays in the Show menu. Spec: `tasks/Welcome/audioplay-cutter-handover-welcome.md`.
+
 ## Keyboard map
 
 | Key | Action |

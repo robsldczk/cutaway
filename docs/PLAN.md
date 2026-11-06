@@ -736,24 +736,24 @@ Risks: a filter on a far voice has to sound like distance and not like a closed 
 The start screen becomes a shelf: a hero for the selected item, a row of recent episodes, a row of shows. A click selects; Edit, Review, ↩ and ⌥↩ open. Worked on branch `welcome`, a worktree, because `tauri dev` was running in the main folder.
 
 Backend (`apc-app/src/welcome.rs`):
-- [ ] `welcome_view`: stage, last edit, open notes and cover per episode, read-only, with what's waiting in the review folder folded in.
-- [ ] `create_episode` and `create_show` with `open: false`.
-- [ ] Covers: `Cover.jpg` in the project, `set_cover`, `cover_image` with a local cache of scaled copies, backdrop as a fallback.
-- [ ] `add_review_to`: a dropped review finds its episodes among what's on the shelf.
-- [ ] `cutaway shelf`, `cutaway cover`.
+- [x] `welcome_view`: stage, last edit, open notes and cover per episode, read-only, with what's waiting in the review folder folded in.
+- [x] `create_episode` and `create_show` with `open: false`.
+- [x] Covers: `Cover.jpg` in the project, `set_cover`, `cover_image` with a local cache of scaled copies, backdrop as a fallback.
+- [x] `add_review_to`: a dropped review finds its episodes among what's on the shelf.
+- [x] `cutaway shelf`, `cutaway cover`.
 
 UI:
-- [ ] `lib/welcome.ts`: rows, selection and moves as plain functions, with unit tests.
-- [ ] The screen: hero, rows, top buttons, footer, empty state, missing items, right-click menu.
-- [ ] New episode and New show sheets.
-- [ ] Keys, including the native menu's routes.
-- [ ] Drops: scripts and recordings, an image on a tile or the hero, a review file.
-- [ ] The opening transition, for as long as the load takes and no longer.
+- [x] `lib/welcome.ts`: rows, selection and moves as plain functions, with unit tests.
+- [x] The screen: hero, rows, top buttons, footer, empty state, missing items, right-click menu.
+- [x] New episode and New show sheets.
+- [x] Keys, including the native menu's routes.
+- [x] Drops: scripts and recordings, an image on a tile or the hero, a review file.
+- [x] The opening transition, for as long as the load takes and no longer.
 
 Verify:
-- [ ] Rust tests, unit tests, a Playwright spec, the old specs moved over.
-- [ ] Real webview, on a copy of the real show.
-- [ ] Specs, `DECISIONS.md`, `RUN_REPORT.md`.
+- [x] Rust tests, unit tests, a Playwright spec, the old specs moved over.
+- [x] Real webview, on a copy of the real show.
+- [x] Specs, `DECISIONS.md`, `RUN_REPORT.md`.
 
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
@@ -839,3 +839,4 @@ Verify:
 - 2026-11-06 Episode 2's seven old export folders renamed to D135's names at Rob's word, with the 14 paths inside their FCPXMLs and the manifests' checksums. Rehearsed on a clone; all 127 files and the paths check out on the share.
 - 2026-11-06 Review mode (D136–D143) on branch `review-mode`, a worktree because `tauri dev` was running: notes as events folded on read, anchored to words, pauses, sounds and scenes; a bus that takes notes only; packages reviewed on a private copy, never written to; `.cutawayreview` files, one per person, merged by one path, with Add review and Send review; rounds, search, threads, the Notes tab, markers on every page, all of it in the CLI and MCP. Driven in the real webview with in-page events and on a clone of Episode 2, whose file came out byte for byte the same. Not run on the real share, not tried across two machines, not listened to.
 - 2026-11-06 Notes can be removed and dragged, and the wheel glides in review (D144, D145). `remove` and `move` are events, so they reach other machines and undo there; format 2. The author or the editor only. A detached note comes back by dragging it in. The current line's card on Options gets its note badge.
+- 2026-11-06 Welcome screen, Shelf B (D144–D150) on branch `welcome`, a worktree because `tauri dev` was running: a hero and two rows of covers, a click selects and Edit, Review, ↩ and ⌥↩ open. Stage, last edit, open notes and covers come straight from the files, with what's waiting in `Reviews/` counted. Sheets make episodes and shows without opening them; drops start an episode, set a cover or add a review; missing items offer Locate. Driven in the real webview with in-page events and Tauri's drop events on a clone of Episode 2, whose file came out of a review byte for byte the same. A real mouse, keyboard, Finder drag and the native dialogs wait for Rob. A session with no network needs `SHERPA_ONNX_LIB_DIR`: the build script otherwise hangs on its download.
