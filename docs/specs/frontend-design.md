@@ -321,6 +321,10 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 
 *(Changed in implementation, D105: cards read the take's own words, as said, not the script's (this replaces D72). The mapping editor has a text field to correct them, with the script beside it, and saves to the current take (⌘⏎), to a new take (⏎), or deletes. The × and Delete… ask: delete take, or delete line.)*
 
+## Review page
+
+*Changed in implementation (D143):* a page outside the page switch, reached from Export's *Open these scenes for review*, the episode menu's *Review…*, or Welcome's *Open project package in review mode*. Cards and the spine in the middle, notes in the margin (a thread is one block, pushed down rather than overlapped), the rail on the right, the transport across the bottom with a pin per note. Search (⌘K), the round picker, the reviewer chip, History, Send review and Done in the header. `M` marker, `N` note on the current line, `←→` scenes, `↑↓` lines, `⌘Z` your last note. Open notes show on the editing pages as badges on line cards, pins on the transport and the Edit ruler, a dot on the rail, and a **Notes** tab in the scene sounds panel. Spec: `tasks/Review/audioplay-cutter-handover-review.md`.
+
 ## Keyboard map
 
 | Key | Action |

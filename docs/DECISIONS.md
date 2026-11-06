@@ -1087,3 +1087,67 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Older versions aren't renamed by the app,** as in D132: a version's FCPXML points at its own room stems by absolute path. A scene exported again under a new name opens a second folder, and History reads the manifests, so it lists both and the numbers carry on: checked on a copy of Episode 2.
 - **Episode 2's own folders were renamed once, by hand, at Rob's word.** Seven of the twelve had a place of two or more words. A plain rename would have broken their FCPXMLs, which hold two paths each into their own folder (22 in all, across every scene). So those paths were rewritten too, and each manifest's checksum for its FCPXML with them. Same length, so Syncthing sees the change by the file's new time. Rehearsed on a clone. After it, all 127 files match their manifests and all 22 paths resolve.
 - **Out of reach, as before:** `Episodes/Episode 2/Sound/` above `Exports` is the show's own layout. Labels on screen (`Sc03 v002`) aren't file names and keep their space.
+
+### D136 Notes are events, and their state is folded (Rob's handover, 2026-11-06)
+- **Handover:** `tasks/Review/audioplay-cutter-handover-review.md`. Reviewers leave notes on the live cut, anchored to words, pauses and sounds, and the notes come back through files.
+- **One row per event, not per note.** `Kind::ReviewEvent` is the only thing written: a note, reply, edit, tag, resolve, reopen. A note's state is `fold_notes`, worked out on every read, so the consolidated view can't go stale and nothing has to be kept in step.
+- **`Kind::Note` was taken,** by the room mic's notes. The review types are `ReviewEvent`, `ReviewRound` and `ReviewArrival`.
+- **The clock** is a hybrid logical clock kept as a string that sorts: `000001793972897.000000.Rob's Mac`. A machine with a late clock still comes after what it has seen.
+- **A reply can arrive before its note.** It waits in the document, and the note folds it in when it comes.
+- **Threads are computed too:** same element, or word ranges on it that touch. A whole line takes in its words. It's by word number, not time, so it holds for detached notes.
+
+### D137 A merge is nobody's undo step, and an undo is an event (2026-11-06)
+- **Merging can't go through a command:** Rob's ⌘Z would take back Albert's notes, and a merge arriving mid-edit would throw away the redo steps. `CommandBus::merge_review` writes rows and bumps `rev`, and logs its entry as `discarded`, a state undo and redo never look at. No schema change.
+- **Note commands stay ordinary commands,** so they undo like anything else. But an event that's already on another machine can't be unsaid by deleting a row: the union would bring it back, and the other side would keep it. So after an undo or redo of a note command, the service writes a `retract` event (`on` true or false), merged the same way. The latest retract per event wins.
+- **Considered and dropped:** a `retracted` flag on the row, set by a special Tx method, with the file writer diffing it against the file. More moving parts, and it needed the flag carried across a package refresh.
+
+### D138 What a note hangs on (2026-11-06)
+- **Anchors:** `Scene`, `Line`, `Words { from, to, to_line }`, `Pause { line, at }`, `Sound`. A word run dragged over several lines ends on `to_line`. Word numbers are the script's, resolved by `resolve_anchor`, so it's the same code as a glued sound and takes the same fallback when a take lacks the word.
+- **A direction isn't an anchor** in the handover's list. A click before the first line, on a direction, is a note on the scene.
+- **`print_of`:** a short hash of what the element is: take, comp, word edits, trims, gain, depth, splits, fades, and for a sound its asset, anchor, time, trims and levels. What only moves it (order, the pause before it) isn't in it, so the note goes along and doesn't claim anything changed. A pause's print is its length.
+- **The print is a whitelist,** not the whole box, so a field added later doesn't light every note up.
+- **`written_s` is seconds, on purpose:** the handover wants a last known position for a detached note. It's never used for a note that still resolves.
+- **A dropped line counts as deleted** (detached), as a muted one doesn't.
+- **One word is a marker:** a dot and one time code, though a word has an end. Found on a copy of Episode 2: every click drew a bracket, and the handover keeps brackets for ranges. So a drag that lands on a single word reads as a marker too.
+- **A scene with no spoken lines** takes scene notes only. Episode 2 has four of them (4, 7, 8, 10), all directions, which the demo can't show.
+
+### D139 Review mode is on the bus (2026-11-06)
+- `BusMode::Review` lets through the six note commands and nothing else, in `execute_fn`, so a CLI or a stray page can't get past it. Undo and redo in review reach only a note command: what was done before review is out of reach.
+- `Service::call` refuses earlier with a plainer message, for what never reaches the bus: exports, imports, versions, library writes. `Session::call` does the same for show-level writes, including at a show's home with no episode open.
+- **Error code `review_only`,** shown at the pointer the way `scene_locked` is.
+- **`set_reviewer`, `send_review` and `review_sync` are allowed:** they don't touch the cut. Add review is the editing side's.
+
+### D140 A package opened for review is never written to (2026-11-06)
+- **Why not just open it:** the handover's open question 1 asks about WAL, but the real case is worse. Albert's copy of `tm-2610` is a Syncthing share. Writing notes into his `.cutaway` would conflict with Rob's the moment both change.
+- **So there are two ways to be in review.** Rob enters it on the open episode (`enter_review`): same database, bus in review. Welcome's *Open project package in review mode* (`open_review`) runs on a private copy under the data folder, keyed by the package's path, with `paths` still pointing at the package for media. No lock is taken, no backups or checkpoint run, and the cache goes to the private folder too.
+- **Live:** `review_sync` compares the package's file and WAL stamps and takes a new copy when they move, carrying over what was said. The bus is swapped, so undo history ends there. A copy that fails (a sync tool mid-write) is tried on the next tick.
+- **The copy has no undo log:** the editor's steps aren't the reviewer's to undo.
+- **This answers question 1:** edit and review open on one computer are two people on two files, and a tick apart. No WAL sharing needed. Checked by a test that compares every byte of a show before and after a review of two episodes.
+- **Show package:** opening a show for review goes to its home, where Open reads Review and the editing tools are gone. Episodes open the same way.
+
+### D141 The handover's other open questions (2026-11-06)
+- **Who may resolve:** anyone in the notes. Every state change records who and when, and it can be reopened, so nothing's lost by being generous, and a director resolving their own note is the common case.
+- **Episode or show:** a round is one episode. A rolling file holds every episode a person reviewed, so a show-level view can gather them later. It isn't built: the handover says *can*.
+
+### D142 Review files (2026-11-06)
+- **The file is rewritten whole, not appended to.** gzip JSON can't be appended cheaply. The events are small (10,000 of them is a few hundred KB), and `write_atomic` means a reader never sees half a file. So there's no separate compaction step, and events are never dropped, which keeps merging simple. *Append-only* holds for the log, not the bytes.
+- **A file is only written when it has something new,** so a sync tool has nothing to carry. Its contents only ever grow.
+- **One file per person per show, not per episode,** since the handover's folder has one `anna-weber.cutawayreview`. So every event carries its episode, and a merge takes only its own.
+- **One person on two machines** would write one file from both. Not handled: it's a sync conflict copy, and conflict copies are merged like any other file, so nothing's lost.
+- **The episode's id** is a hash of its `created_at`, so a read-only package has one without anyone writing it down. A copy of an episode is the same episode, which is what's wanted.
+- **The folder is polled,** on the UI's existing 1.5 s tick, not watched with an OS API: file events are unreliable on network shares and through Syncthing's renames, and a stat per file is nothing. A file that hasn't changed isn't opened. The CLI and MCP have `review_sync`.
+- **Another project's file** is refused with its name; `anyway` adds it, detached. A file that can't be read is said in the history and tried again when it changes.
+- **`Reviews/Imported/` is a plain folder.** *Hidden* in the handover reads as out of the app's way; a dot folder would hide it from Rob in Finder too. A rolling file added by hand isn't moved: it isn't the editor's to take.
+- **Who's reviewing** is kept in `reviewer.json` in the data folder, not the web view's storage, so the CLI and MCP know the same person.
+
+### D143 The review screen (2026-11-06)
+- **A page of its own, not Arrange with things hidden.** The cards are simpler, and Arrange's 980 lines are mostly drag and edit. It reuses the spine (`spinePaths`), `TimeMap`, the rail, the transport and the tokens. Row heights are worked out, not measured, so the notes and spine have them at once.
+- **The rail goes to the right,** as the handover says twice, by a class on the same component. Its menu and lock buttons are off there: it only says things.
+- **The transport** is the same one, wide, with pins, and without the favorite and box editor buttons. Its middle says the scene, not the take.
+- **An earlier round is the live cut with that round's notes.** There's no snapshot to play, so *the current state is shown where things changed*, with *changed since note* doing the work. The current round shows every note on the scene: an open note from an older round still wants doing.
+- **Sounds show as small dots** by the spine, so a sound can be written on. The mockups have none, but the handover has the anchor.
+- **Left out of the mockup:** *Share link*: there's nothing behind it. *Send review* stands there.
+- **`Editor` is a seventh role,** offered only from the editing pages. The handover's six are for reviewers.
+- **Starting a round asks who first,** so it can say *picked by Rob* and not a login name. On a package, it's asked on entry.
+- **Packages stay out of Recent, the launch reopen and the remembered spot:** a review shouldn't come back as an editing session.
+- **`.cutawayreview` isn't a file association yet.** Dropping one on the window and Add review both work. Double-clicking needs the open-file event wired to a merge, and nothing asked for it.

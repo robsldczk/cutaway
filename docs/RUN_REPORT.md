@@ -436,3 +436,37 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 **Manual checks for Rob**
 
 1. **If a scene's FCPXML was already imported into Resolve** before the rename, its two room stems need relinking there. A fresh import needs nothing.
+
+## Review mode (2026-11-06, D136–D143)
+
+**Built, from `tasks/Review/audioplay-cutter-handover-review.md`:**
+- **Getting in:** *Open project package in review mode* on the start screen and in the Show menu, *Open these scenes for review* on the Export page (or *Then open for review* with an export), *Review…* in the episode menu. A round keeps each scene's version and timeline hash and marks it Review.
+- **Who's reviewing:** asked once, remembered per computer, a chip in the header to switch. Every note carries it.
+- **Read-only:** the bus takes the six note commands and nothing else, and says why. Show-level writes are refused too. A package runs on a private copy, so it's never written to.
+- **The screen:** cards and spine, margin notes in threads, filters, the rail on the right, the transport with pins, ⌘K search over scenes, lines and notes, the round picker, Review history, Send review.
+- **Notes stick:** to words, ranges, lines, pauses, sounds and scenes. They follow reordering, gaps, take swaps and sound moves, say *changed since note*, and stay as *detached* when the element goes.
+- **One feedback set:** folded from events on every read. Badges on line cards, pins on the transport and the Edit ruler, a dot on the rail, a **Notes** tab in the scene sounds panel, with a way into the bucket for sound and music notes. The Export page says when a locked scene has open notes.
+- **Getting reviews back:** `.cutawayreview` files, one per person, in `Reviews/`, merged by one path. Add review, or a drop on the window, archives to `Reviews/Imported/`. Importing twice changes nothing, not even the revision.
+- **CLI and MCP:** `cutaway note …`, `cutaway review …`, and 18 MCP tools.
+
+**The handover's open questions:** edit and review on one computer are two files a tick apart (D140). Anyone may resolve, and it's recorded (D141). A round is one episode (D141).
+
+**Verified:**
+- `check.sh` green. 19 integration tests, 10 core tests, 10 UI unit tests, and Playwright 197 of 197.
+- **In the real webview,** with in-page events on a temp demo: spine drag and click, typing a note, Enter, Esc, ⌘K, ⌘Z and ⇧⌘Z, the edit keys doing nothing, resolve and reopen, Done, then the same project as a package, with both people's files written. That build came before the last small change, a single word reading as a marker, which Playwright covers.
+- **On a clone of Episode 2 in its show,** through the bridge: 16 scenes, notes on all of them, a note on a sound, search. The episode file was byte for byte the same afterwards, and no other file outside `Reviews/` changed, not even its date. 3–4 ms for the review view, 55 ms for a warm scene view.
+
+**Not verified:**
+- **Nothing was run on the real share.** No `Reviews/` folder exists there yet.
+- **Two machines over Syncthing.** Tested with files copied between two project copies, and on one machine. Real sync timing and conflict copies are reasoned about.
+- **Real mouse and keyboard,** and the native Save dialog of *Send review*: a session can't drive them. The permission is in and it builds.
+- **Listening:** playback in review is the normal `play`, but nobody has heard it.
+- **Windows.**
+
+**What Rob needs to do:**
+1. On Export, tick a scene and press *Open these scenes for review*. Say who you are, click and drag on the wave, write a note, press Done, and find it on Arrange's Notes tab.
+2. Open Episode 2 with *Open project package in review mode* on another machine, or on this one with the app's editing window closed, and check that it plays.
+3. Press *Send review*, and check that the Save dialog comes up and the file lands.
+4. Drop a `.cutawayreview` on the window.
+
+**Worth deciding:** a double-click on a `.cutawayreview` does nothing yet (D143). The show-level view across episodes isn't built, though the files already hold what it needs (D141).

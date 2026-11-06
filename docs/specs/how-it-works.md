@@ -104,6 +104,8 @@ Rules:
 
 *(Changed in implementation, D104: a take can be marked by hand in the mapping editor (`TakeOrigin::Marked`): it's heard exactly as marked, without handles, and a re-run leaves it alone. A line can be added by hand (`adlib`) or deleted (`removed`: off the scene's order, its takes kept, so the matcher still claims its audio and a new script version doesn't bring it back).)*
 
+*Changed in implementation (D136–D138):* **review notes.** `ReviewEvent` (id, episode, note, round, author, device, hybrid clock, anchor, body), `ReviewRound` (number, who, when, scenes with version and timeline hash, status) and `ReviewArrival`. A note hangs on a scene, line, words, pause or sound, never on seconds: `locate` works out where it is from the layout, and a note whose element has left the cut is *detached*, with its quote and `written_s`. `print_of` tells *changed since note*.
+
 ## Audio rules
 
 - **Cut points:** snap to word boundaries, then to the nearest zero crossing.

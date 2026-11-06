@@ -18,6 +18,7 @@ The product name is **Cutaway**. It lives in one file, `brand.json` at the repo 
 | `displayName` | `Cutaway` | window title, menus, About, export metadata, MCP server name |
 | `slug` | `cutaway` | CLI binary, app-support folder, log prefixes |
 | `episodeExt` / `showExt` | `cutaway` / `cutawayshow` | episode and show file extensions |
+| `reviewExt` | `cutawayreview` | review files (D142) |
 | `bundleId` | `com.cutaway.app` | macOS/Windows bundle identifier |
 
 - Rust reads it at compile time (`apc-core` build script → `apc_core::brand`).
@@ -132,6 +133,15 @@ TARMAC/                              show
   - changed lines are re-matched, and their old picks are kept as suggestions;
   - new lines appear without takes; deleted lines move their takes to the unmatched bin.
 - A version switch shows a short change summary before it applies.
+
+## Review
+
+*Changed in implementation (D136–D143):* review mode is a mode of the same app.
+- **Notes are events.** `Kind::ReviewEvent` rows in the episode, folded into notes on read (`apc_core::review`). Rounds and arrivals are rows too.
+- **Modes.** `BusMode::Review` takes note commands only. The editor enters it on the open episode. A package opened for review (`open_review`) runs on a private copy under the data folder, so the package and its share are never written to.
+- **Files.** `TARMAC/Reviews/<person>.cutawayreview`: gzip JSON, a manifest and that person's events, one file per person per show. A standalone episode keeps its own `Reviews/` beside it. `reviews_folder` in the show file moves it. Add review archives to `Reviews/Imported/`.
+- **Merge.** One path, `review::merge`, for the folder and for Add review: the union of events by id. It's written with `CommandBus::merge_review`, so it's never an undo step.
+- **Sync.** `review_sync`, on the UI's 1.5 s tick: reads changed files, writes this machine's own, and refreshes a package's copy.
 
 ## Importer
 
