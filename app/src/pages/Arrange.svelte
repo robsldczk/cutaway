@@ -66,6 +66,10 @@
   let dropOn = $state<string | null>(null);
   let actPreview = $state<{ id: string; s: number } | null>(null);
   const actLen = (a: ItemView) => (actPreview?.id === a.line_id ? actPreview.s : a.spacer_s);
+  /** A direction's time, on top of its text: the block grows from the first tenth of a second.
+   *  One turned off takes no time until it's dragged. */
+  const ACT_PX_PER_S = 14;
+  const actRoom = (a: ItemView) => Math.round((a.spacer_enabled || actPreview?.id === a.line_id ? actLen(a) : 0) * ACT_PX_PER_S * sc);
 
   /** Sounds hanging on an action. */
   const tagsOf = (a: ItemView) => (on ? (app.edit?.placements ?? []).filter((p) => p.anchor?.line_id === a.line_id) : []);
@@ -297,7 +301,8 @@
     const y0 = e.clientY;
     track(
       e,
-      (ev) => (actPreview = { id, s: clamp(s0 + (ev.clientY - y0) / (26 * sc), 0.1, 30) }),
+      // the edge stays under the mouse
+      (ev) => (actPreview = { id, s: clamp(s0 + (ev.clientY - y0) / (ACT_PX_PER_S * sc), 0.1, 30) }),
       async () => {
         const s = actPreview ? Math.round(actPreview.s * 20) / 20 : s0;
         if (Math.abs(s - s0) < 0.001) {
@@ -417,7 +422,7 @@
 
 {#snippet action(a: ItemView)}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the playhead's keys reach it too) -->
-  <div class="act" class:over={dropOn === a.line_id} class:off={!a.spacer_enabled} style="min-height: {Math.round(actLen(a) * 14 * sc)}px" bind:this={actEls[a.line_id]} use:dropzone={actionZone(a)} onclick={() => on && app.scrubTo(a.start_s)} data-testid="action-row" title={on ? 'Drop a sound here to tag it to this action' : undefined}>
+  <div class="act" class:over={dropOn === a.line_id} class:off={!a.spacer_enabled} style="padding-bottom: {5 + actRoom(a)}px" bind:this={actEls[a.line_id]} use:dropzone={actionZone(a)} onclick={() => on && app.scrubTo(a.start_s)} data-testid="action-row" title={on ? 'Drop a sound here to tag it to this action' : undefined}>
     <span class="script atext">{a.text}</span>
     {#each tagsOf(a) as p (p.id)}<span class="tag ellip" data-testid="action-tag">{p.name}</span>{/each}
     <span class="aedge" role="slider" tabindex="-1" aria-label="Length of this direction" aria-valuenow={actLen(a)} title="Drag to change how long this direction takes" onmousedown={(e) => grabAction(e, a)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} data-testid="action-len"><span class="asec tn">{actLen(a).toFixed(1)} s</span></span>

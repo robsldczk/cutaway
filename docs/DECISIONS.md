@@ -906,3 +906,15 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **The colour:** blue, violet and green, as tokens in both themes. Amber was left out because the flagged dot already means that. The current scene keeps its ring, so it still reads when it's marked.
 - **The menu** opens beside the rail with the mark that's set ticked. The context menu key opens it too, and the arrows, Enter and Esc work in it.
 
+### D120 The room chip leaves the transport (Rob, 2026-11-06)
+- **Rob:** remove the room and wet indicator from the transport on Arrange. He doesn't need that setting there.
+- **Gone:** the chip and its quick size slider, with the helpers only it used. This replaces the shortcut of D81.
+- **Stays:** every room setting on Import › Rooms, and `scene_rooms` and `set_scene_room` for the CLI and MCP. The way from Arrange to the settings moves to the pan pop-out (D122).
+
+### D121 A longer direction is a bigger block (Rob, 2026-11-06)
+- **Rob:** making a direction longer on Arrange should make the block visibly bigger.
+- **Why it didn't:** D98 set the time as a *minimum* height, 14 px a second. A row's text already takes about 28 px, more when it wraps, so a direction under about 2 s, or a long one in wrapped text, didn't move at all.
+- **Now:** the time adds to the text, at the same 14 px a second, so every tenth of a second shows. Directions take a little more room in the column than they did: the default of 0.6 to 2.5 s adds 8 to 35 px each.
+- **The drag** goes at the same scale, so the edge stays under the mouse. It was 26 px a second and ran ahead of the row.
+- **A direction turned off** takes no time, so it has no extra height, until it's dragged (D98).
+

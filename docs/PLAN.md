@@ -706,8 +706,8 @@ The header folds into two or three rows over the page below about 1300 px, the E
 ### Arrange round: side by side, glue, pans, status (Rob, 2026-11-06; D119 onwards)
 Seven requests from one list, in this order. Decisions in `DECISIONS.md`.
 - [x] Scene status: in progress, review, finished; right click on the rail, the colour of the scene's cell (D119)
-- [ ] Room chip off the Arrange transport (D120)
-- [ ] A longer direction looks longer: the row's height grows with its time from the first second (D121)
+- [x] Room chip off the Arrange transport (D120)
+- [x] A longer direction looks longer: the row's height grows with its time from the first second (D121)
 - [ ] Character pan: a value per room, a custom one per scene, a pop-out in the transport, heard in playback and bounces (D122)
 - [ ] Glue: a sound hangs on the moment it was put, Snap only decides where it lands; a switch per sound turns it off (D123)
 - [ ] Opened sound: a scrubber that plays the sound alone, I and O trim to it, Enter closes (D124)

@@ -3,7 +3,6 @@
   import { fmt, clamp } from '../lib/format';
   import { charColor, charLabel, itemShade, rgba } from '../lib/colors';
   import { openEditor } from '../lib/keys';
-  import RoomChip from './RoomChip.svelte';
 
   let mapEl: HTMLDivElement | undefined = $state();
   let zoom = $state(1);
@@ -129,7 +128,6 @@
       </div>
     </div>
   </div>
-  {#if app.page === 'arrange' && app.soundsOn}<RoomChip />{/if}
   <div class="btns">
     <button class="icb" onclick={() => app.toggleFav()} aria-label="Favorite take (F)" title="Favorite (F)" style="color: {fav ? nameColor : 'var(--text-3)'}; background: {fav ? rgba(curShade, 0.16) : 'transparent'}">
       <svg width="20" height="20" viewBox="0 0 24 24" fill={fav ? nameColor : 'none'} stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><polygon points="12 3 14.8 8.7 21 9.6 16.5 14 17.6 20.2 12 17.3 6.4 20.2 7.5 14 3 9.6 9.2 8.7" /></svg>

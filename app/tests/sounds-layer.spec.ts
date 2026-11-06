@@ -676,10 +676,13 @@ test('directions: the bottom edge sets how long one takes, and what follows move
   await page.waitForTimeout(400);
   const steps = await undoSteps();
   const c = await centre(handle.locator('.asec'));
+  const tall = (await row.boundingBox())!.height;
   await page.mouse.move(c.x, c.y);
   await page.mouse.down();
-  for (let i = 1; i <= 4; i++) await page.mouse.move(c.x, c.y + 13 * i);
+  for (let i = 1; i <= 4; i++) await page.mouse.move(c.x, c.y + 7 * i);
   await expect(handle).toContainText(`${(was + 2).toFixed(1)} s`);
+  // the block grows with it, however short it was: the edge stays under the mouse
+  expect((await row.boundingBox())!.height).toBeCloseTo(tall + 28, -0.5);
   await page.mouse.up();
 
   await expect.poll(undoSteps).toBe(steps + 1);
@@ -1769,77 +1772,6 @@ test('reduced motion: the opened view and the glide do not animate', async ({ pa
   expect(await view(page).evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
   const glide = await page.locator('.world').evaluate((el) => getComputedStyle(el).transitionDuration);
   expect(glide).toBe('0s');
-});
-
-// ---- the room in the transport ----
-
-const chip = (page: Page) => page.getByTestId('room-chip');
-const roomOf = async () => (await rpc<{ room: { size: number; wet: number; damping: number } }[]>('scene_rooms'))[0].room;
-
-async function setSize(page: Page, v: number) {
-  await page.getByRole('slider', { name: "Size of this scene's room" }).evaluate((el: HTMLInputElement, x) => {
-    el.value = String(x);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-  }, v);
-}
-
-test('room: the transport reads the scene’s room, and only beside the sounds', async ({ page }) => {
-  const r = await roomOf();
-  await open(page);
-  await expect(chip(page)).toHaveText(`Room ${Math.round(r.size * 100)} · wet ${Math.round(r.wet * 100)}`);
-  await page.keyboard.press('s');
-  await expect(chip(page)).toBeHidden();
-  await page.keyboard.press('s');
-  await expect(chip(page)).toBeVisible();
-  await page.keyboard.press('1');
-  await expect(chip(page)).toBeHidden();
-});
-
-test('room: the quick size is one undo step and keeps the rest of the room', async ({ page }) => {
-  const r = await roomOf();
-  await open(page);
-  await chip(page).click();
-  const steps = await undoSteps();
-  await setSize(page, 0.81);
-  await expect.poll(undoSteps).toBe(steps + 1);
-  await expect.poll(roomOf).toEqual({ ...r, size: 0.81 });
-  await expect(chip(page)).toContainText('Room 81');
-  await page.getByRole('slider', { name: "Size of this scene's room" }).blur();
-  await page.keyboard.press('ControlOrMeta+z');
-  await expect.poll(roomOf).toEqual(r);
-  await expect(chip(page)).toContainText(`Room ${Math.round(r.size * 100)}`);
-});
-
-test('room: the shortcut opens the settings at this scene, and Back comes back', async ({ page }) => {
-  await open(page);
-  await chip(page).click();
-  await page.getByTestId('room-settings').click();
-  await expect(page.getByTestId('scene-room').first()).toBeVisible();
-  await expect(page.getByRole('slider', { name: 'Size of scene 1' })).toBeFocused();
-  await page.getByRole('button', { name: /Back to Arrange/ }).click();
-  await expect(page.getByTestId('arrange-row').first()).toBeVisible();
-});
-
-test('room: one source of truth, a change in the settings shows in the read-out', async ({ page }) => {
-  const r = await roomOf();
-  const sc = await rpc<{ id: string }[]>('list_scenes');
-  await open(page);
-  await rpc('command', { cmd: 'set_scene_room', scene_id: sc[0].id, room: { ...r, wet: 0.2 } });
-  await page.keyboard.press('ArrowDown');
-  await expect(chip(page)).toContainText('wet 20');
-  await rpc('undo');
-});
-
-test('room: Esc closes the pop-up and gives the focus back', async ({ page }) => {
-  await open(page);
-  await chip(page).focus();
-  await page.keyboard.press('Enter');
-  await expect(page.getByTestId('room-pop')).toBeVisible();
-  await page.getByRole('slider', { name: "Size of this scene's room" }).focus();
-  await page.keyboard.press('Escape');
-  await expect(page.getByTestId('room-pop')).toBeHidden();
-  await expect(chip(page)).toBeFocused();
 });
 
 test('one document: pan and depth show in the Edit inspector, and the reverse', async ({ page }) => {
