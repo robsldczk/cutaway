@@ -1151,3 +1151,21 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Starting a round asks who first,** so it can say *picked by Rob* and not a login name. On a package, it's asked on entry.
 - **Packages stay out of Recent, the launch reopen and the remembered spot:** a review shouldn't come back as an editing session.
 - **`.cutawayreview` isn't a file association yet.** Dropping one on the window and Add review both work. Double-clicking needs the open-file event wired to a merge, and nothing asked for it.
+
+### D144 Removing and moving a note (Rob, 2026-11-06)
+- **Rob:** I want to be able to remove and drag a comment.
+- **Both are events,** `remove` and `move`, so they reach the other machines, and ⌘Z takes them back there too (D137). A move's own anchor is the new spot, and it brings a new quote, speaker and print, so *changed since note* starts over on the new element. Only a `move` changes where a note is: a reply carries the anchor of its day and moves nothing.
+- **The file format is now 2.** An older build says it needs updating, not that the file is broken.
+- **They're the author's or the editor's.** Replies, resolves and reopens stay anyone's (D141), but these change what someone said. The core refuses them, and the UI doesn't offer them. A note's `author` given over the CLI or MCP can claim anything, as it could before: this is a guard against accidents, not a security line.
+- **Remove is one click, with no question:** it's undoable, and the toast says how. On the CLI and MCP it's destructive, like `delete_take`, and needs `confirm`. Replies go with the note, and a reply arriving later doesn't bring it back.
+- **A note drags by its dot, its bracket or the top row of its card.** The rest of the card stays selectable text. A press that goes nowhere on a dot goes to the note. Esc puts it back. Near the top or bottom of the column it scrolls on.
+- **It lands on what's said there,** as a new note would: a marker on the word, a range on the words, keeping its length. A note on the scene or on a sound becomes a marker. **A whole-line note goes line to line,** snapping as it moves: keeping its length in seconds landed it on the wrong line, because a long line moved onto a short one.
+- **A detached note comes back this way,** by dragging it onto the cut.
+- **No dragging of a range's ends:** Rob asked to move a comment. It can be done with `move_note` and `--to`.
+- **Found on the way:** the current line's big card on Options had no note badge, only the cards around it.
+
+### D145 Scrolling in review glides (Rob, 2026-11-06)
+- **Rob:** in review mode, default scroll should be smooth. It stepped a line at a time, as Options does.
+- **The wheel moves the column pixel for pixel,** and the playhead with it, with no sound. ⇧ is four times as fast. It keeps the page's scrub rule from Arrange: playing, it starts again from where the scroll stops.
+- **An eased glide, not a CSS transition:** a mouse notch is a 100 px jump, and a transition restarted on every trackpad event lags behind the finger. A frame loop eases towards a target, and handles both. With reduced motion it goes straight there.
+- **The height is kept, not worked out from the playhead.** Between cards no time passes, so a height can't be got back from a time, and slow upward scrolling caught on every gap. It's dropped when the playhead moves for any other reason.

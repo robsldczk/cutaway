@@ -470,3 +470,11 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 4. Drop a `.cutawayreview` on the window.
 
 **Worth deciding:** a double-click on a `.cutawayreview` does nothing yet (D143). The show-level view across episodes isn't built, though the files already hold what it needs (D141).
+
+## Removing and dragging notes, and a smooth scroll in review (2026-11-06, D144, D145)
+
+**Built:** *Remove* on a note, undoable. A note drags by its dot, bracket or top row, onto what's said there. Esc cancels, the column scrolls on near its edges, and a detached note comes back by dragging it in. Both are the author's or the editor's, and both are in the CLI (`cutaway note move`, `note remove`) and MCP. The wheel in review glides pixel for pixel, ⇧ faster. The current line's card on Options now has its note badge.
+
+**Verified:** `check.sh` green, Playwright 202 of 202. In the real webview with in-page events on a temp demo: a dot and a card dragged and landed, Esc changing nothing, undo of a move and a remove, and the wheel easing over a 100 px notch and back up over the gaps between cards.
+
+**Not verified:** a real trackpad and mouse, so how the glide feels is Rob's to judge (`GLIDE` and `FAST` in `Review.svelte` tune it). Dragging past the edge of a long scene is written but only exercised on the demo's short scene. A remove across two machines is tested with copied files, not Syncthing.
