@@ -25,6 +25,133 @@ pub struct Cli {
     pub cmd: Cmd,
 }
 
+/// Who's writing, when it isn't the reviewer this computer remembers.
+#[derive(clap::Args, Debug)]
+pub struct AuthorArgs {
+    /// A name.
+    #[arg(long = "as")]
+    pub author: Option<String>,
+    /// director, producer, writer, actor, client, editor or other.
+    #[arg(long, default_value = "other")]
+    pub role: String,
+}
+
+impl AuthorArgs {
+    fn json(&self) -> Value {
+        match &self.author {
+            Some(name) => json!({ "name": name, "role": self.role }),
+            None => Value::Null,
+        }
+    }
+}
+
+#[derive(Subcommand, Debug)]
+pub enum NoteCmd {
+    /// Write a note. --at and --to hang it on what's said there, --line and --sound on that
+    /// element, and with none of them it's about the scene.
+    Add {
+        text: String,
+        #[arg(long)]
+        scene: Option<String>,
+        /// Scene seconds.
+        #[arg(long)]
+        at: Option<f64>,
+        #[arg(long)]
+        to: Option<f64>,
+        #[arg(long)]
+        line: Option<String>,
+        /// A word of the line, numbered from 0.
+        #[arg(long)]
+        word: Option<usize>,
+        #[arg(long)]
+        to_word: Option<usize>,
+        #[arg(long)]
+        sound: Option<String>,
+        /// performance, timing, sound or music.
+        #[arg(long)]
+        tag: Option<String>,
+        #[command(flatten)]
+        author: AuthorArgs,
+    },
+    /// The one feedback set, in threads.
+    List {
+        #[arg(long)]
+        scene: Option<String>,
+        /// open or resolved.
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        tag: Option<String>,
+        #[arg(long)]
+        author: Option<String>,
+        #[arg(long)]
+        round: Option<String>,
+    },
+    Reply {
+        note: String,
+        text: String,
+        #[command(flatten)]
+        author: AuthorArgs,
+    },
+    Edit {
+        note: String,
+        text: String,
+        #[command(flatten)]
+        author: AuthorArgs,
+    },
+    Tag {
+        note: String,
+        tag: Option<String>,
+        #[command(flatten)]
+        author: AuthorArgs,
+    },
+    Resolve {
+        note: String,
+        #[command(flatten)]
+        author: AuthorArgs,
+    },
+    Reopen {
+        note: String,
+        #[command(flatten)]
+        author: AuthorArgs,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ReviewCmd {
+    /// Open scenes for review: keeps which cut they're in and marks them Review.
+    Start {
+        #[arg(required = true)]
+        scenes: Vec<String>,
+    },
+    /// Close a round. It stays in the history.
+    Close { round: String },
+    /// Who's reviewing here, or say so with a name.
+    Who {
+        name: Option<String>,
+        #[arg(long, default_value = "other")]
+        role: String,
+        /// Keep this person on this computer.
+        #[arg(long)]
+        remember: bool,
+    },
+    /// Rounds, arrivals, and the counts per scene and reviewer.
+    History,
+    /// Search scenes, lines and notes across every round.
+    Search { query: String },
+    /// Merge what's new in the shared folder and write this machine's own file.
+    Sync,
+    /// Add a review file: merged, then archived in Reviews/Imported.
+    Add {
+        file: PathBuf,
+        /// Even if it belongs to another project.
+        #[arg(long)]
+        anyway: bool,
+    },
+    /// Save the current reviewer's notes as one review file.
+    Send { path: PathBuf },
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Cmd {
     /// Show commands.
@@ -124,6 +251,16 @@ pub enum Cmd {
     Mark {
         scene: String,
         status: Option<String>,
+    },
+    /// Review notes: write them, answer them, settle them.
+    Note {
+        #[command(subcommand)]
+        cmd: NoteCmd,
+    },
+    /// Review rounds, who's reviewing, and the review files.
+    Review {
+        #[command(subcommand)]
+        cmd: ReviewCmd,
     },
     /// Every scene's lock and export history.
     Exports,
@@ -945,6 +1082,95 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                     "set_scene_status",
                     json!({ "scene": scene, "status": status }),
                 ),
+                Cmd::Note { cmd } => match cmd {
+                    NoteCmd::Add {
+                        text,
+                        scene,
+                        at,
+                        to,
+                        line,
+                        word,
+                        to_word,
+                        sound,
+                        tag,
+                        author,
+                    } => call(
+                        &mut sess,
+                        "add_note",
+                        json!({
+                            "text": text, "scene": scene, "at_s": at, "to_s": to, "line_id": line,
+                            "word": word, "to_word": to_word, "placement_id": sound, "tag": tag,
+                            "author": author.json(),
+                        }),
+                    ),
+                    NoteCmd::List {
+                        scene,
+                        status,
+                        tag,
+                        author,
+                        round,
+                    } => call(
+                        &mut sess,
+                        "list_notes",
+                        json!({ "scene": scene, "status": status, "tag": tag, "author": author, "round": round }),
+                    ),
+                    NoteCmd::Reply { note, text, author } => call(
+                        &mut sess,
+                        "reply_note",
+                        json!({ "note": note, "text": text, "author": author.json() }),
+                    ),
+                    NoteCmd::Edit { note, text, author } => call(
+                        &mut sess,
+                        "edit_note",
+                        json!({ "note": note, "text": text, "author": author.json() }),
+                    ),
+                    NoteCmd::Tag { note, tag, author } => call(
+                        &mut sess,
+                        "tag_note",
+                        json!({ "note": note, "tag": tag, "author": author.json() }),
+                    ),
+                    NoteCmd::Resolve { note, author } => call(
+                        &mut sess,
+                        "resolve_note",
+                        json!({ "note": note, "author": author.json() }),
+                    ),
+                    NoteCmd::Reopen { note, author } => call(
+                        &mut sess,
+                        "reopen_note",
+                        json!({ "note": note, "author": author.json() }),
+                    ),
+                },
+                Cmd::Review { cmd } => match cmd {
+                    ReviewCmd::Start { scenes } => {
+                        call(&mut sess, "start_review_round", json!({ "scenes": scenes }))
+                    }
+                    ReviewCmd::Close { round } => {
+                        call(&mut sess, "close_review_round", json!({ "round": round }))
+                    }
+                    ReviewCmd::Who {
+                        name: Some(name),
+                        role,
+                        remember,
+                    } => call(
+                        &mut sess,
+                        "set_reviewer",
+                        json!({ "name": name, "role": role, "remember": remember }),
+                    ),
+                    ReviewCmd::Who { name: None, .. } => call(&mut sess, "reviewer", json!({})),
+                    ReviewCmd::History => call(&mut sess, "review_history", json!({})),
+                    ReviewCmd::Search { query } => {
+                        call(&mut sess, "review_search", json!({ "q": query }))
+                    }
+                    ReviewCmd::Sync => call(&mut sess, "review_sync", json!({})),
+                    ReviewCmd::Add { file, anyway } => call(
+                        &mut sess,
+                        "add_review",
+                        json!({ "path": s(file), "anyway": anyway }),
+                    ),
+                    ReviewCmd::Send { path } => {
+                        call(&mut sess, "send_review", json!({ "path": s(path) }))
+                    }
+                },
                 Cmd::Exports => call(&mut sess, "export_status", json!({})),
                 Cmd::Pipeline { set } => match set {
                     Some(p) => call(
