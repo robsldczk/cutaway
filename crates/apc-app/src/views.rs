@@ -709,6 +709,8 @@ pub struct PlacementView {
     pub len_s: f64,
     pub anchored: bool,
     pub anchor: Option<Anchor>,
+    /// Its glue is turned off: it stays at its time, also when moved.
+    pub unglued: bool,
     /// Seconds after the anchor (or after `at_s` when pinned).
     pub offset_s: f64,
     pub cue_id: Option<String>,
@@ -801,6 +803,7 @@ pub fn edit_view(svc: &mut Service, scene_key: &str) -> Result<EditView> {
             len_s: p.len_s,
             anchored: p.anchor.is_some(),
             anchor: p.anchor.clone(),
+            unglued: p.unglued,
             offset_s: p.offset_s,
             cue_id: p.cue_id.clone(),
             fade_in_s: p.fade_in_s,

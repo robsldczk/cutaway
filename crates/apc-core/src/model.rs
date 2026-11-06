@@ -1101,6 +1101,10 @@ pub struct Placement {
     /// Repeats its file: the one kind of sound that may outlast its source.
     #[serde(default)]
     pub looped: bool,
+    /// Glue turned off by hand: it stays at its time, and moving it doesn't hang it on a line
+    /// again (D123).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unglued: bool,
 }
 entity!(Placement, Placement, parent = scene_id);
 

@@ -307,7 +307,7 @@
   function stateOf(id: string): OpenState {
     const s = byId.get(id);
     if (!s) throw new Error(`no sound ${id}`);
-    return { id, start_s: s.start_s, len_s: s.len_s, offset_s: s.offset_s, anchor: s.anchor, depth: s.depth, pan: s.pan, gain_db: s.gain_db, in_s: s.in_s, asset_len_s: s.asset_len_s, looped: s.looped, fade_in_s: s.fade_in_s, fade_out_s: s.fade_out_s, auto_fade: s.auto_fade };
+    return { id, start_s: s.start_s, len_s: s.len_s, offset_s: s.offset_s, anchor: s.anchor, unglued: s.unglued, depth: s.depth, pan: s.pan, gain_db: s.gain_db, in_s: s.in_s, asset_len_s: s.asset_len_s, looped: s.looped, fade_in_s: s.fade_in_s, fade_out_s: s.fade_out_s, auto_fade: s.auto_fade };
   }
 
   function point(e: Pick<MouseEvent, 'clientX' | 'clientY'>) {
@@ -939,7 +939,7 @@
   }
 
   async function place(at: NonNullable<ReturnType<typeof dropSpot>>, sound: DragSound) {
-    const where = at.target ? { anchor_line_id: at.target.anchor.line_id, anchor_word: at.target.anchor.word, anchor_edge: at.target.anchor.edge, offset_s: at.target.offset_s ?? 0 } : { at_s: +at.t.toFixed(3) };
+    const where = at.target ? { anchor_line_id: at.target.anchor.line_id, anchor_word: at.target.anchor.word, anchor_edge: at.target.anchor.edge, offset_s: at.target.offset_s ?? 0 } : { at_s: +at.t.toFixed(3), glue: true };
     const params = { scene: app.sceneId, bucket_id: sound.bucket_id, asset_id: sound.asset_id, remote_id: sound.remote_id, depth: +depthAt(at.p.x, field).toFixed(3), ...where };
     let id: string | undefined;
     if (sound.asset_id) {

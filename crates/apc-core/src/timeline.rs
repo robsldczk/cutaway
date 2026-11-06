@@ -906,22 +906,95 @@ pub fn resolve_anchor(layout: &SceneLayout, anchor: &Anchor) -> Option<f64> {
     if item.pieces.is_empty() && item.kind == ItemKind::Box {
         return None;
     }
-    match anchor.word {
-        Some(w) => {
-            let word = item
+    let edge_of = |start: f64, end: f64| match anchor.edge {
+        Edge::Start => start,
+        Edge::End => end,
+    };
+    let word = anchor.word.and_then(|w| {
+        item.words
+            .iter()
+            .find(|x| x.script_idx == Some(w) && !x.deleted)
+            .or_else(|| item.words.iter().find(|x| x.idx == w))
+            // this take doesn't have the word: the nearest it does have, so the sound stays
+            // on its line and doesn't fall back to a time from an older cut
+            .or_else(|| {
+                item.words
+                    .iter()
+                    .filter(|x| !x.deleted)
+                    .filter_map(|x| Some((x.script_idx?.abs_diff(w), x)))
+                    .min_by_key(|(d, _)| *d)
+                    .map(|(_, x)| x)
+            })
+    });
+    Some(match word {
+        Some(x) => edge_of(x.start_s, x.end_s),
+        None => edge_of(item.start_s, item.end_s),
+    })
+}
+
+/// What a sound at scene time `t` hangs on, and how far past it: the word being said, a direction
+/// with time of its own, or the edge of the nearest line. `None` in a scene with nothing to hang
+/// on. Where two lines overlap it's the one that started last.
+pub fn glue_point(layout: &SceneLayout, t: f64) -> Option<(Anchor, f64)> {
+    let at = |line: &LayoutItem, word, edge, from: f64| {
+        let line_id = line.item_id.clone();
+        (
+            Anchor {
+                line_id,
+                word,
+                edge,
+            },
+            t - from,
+        )
+    };
+    let spoken = || {
+        layout
+            .items
+            .iter()
+            .filter(|i| i.kind == ItemKind::Box && !i.pieces.is_empty() && i.end_s > i.start_s)
+    };
+    let directions = || layout.items.iter().filter(|i| i.kind == ItemKind::Spacer);
+    if let Some(line) = spoken()
+        .filter(|i| i.start_s <= t && t < i.end_s)
+        .max_by(|a, b| a.start_s.total_cmp(&b.start_s))
+    {
+        let said = line
+            .words
+            .iter()
+            .filter(|w| !w.deleted && w.start_s <= t)
+            .filter_map(|w| Some((w.script_idx?, w.start_s)))
+            .max_by(|a, b| a.1.total_cmp(&b.1));
+        // the anchor resolves to the first kept word with this index
+        let first = said.and_then(|(idx, _)| {
+            let w = line
                 .words
                 .iter()
-                .find(|x| x.script_idx == Some(w) && !x.deleted)
-                .or_else(|| item.words.iter().find(|x| x.idx == w))?;
-            Some(match anchor.edge {
-                Edge::Start => word.start_s,
-                Edge::End => word.end_s,
-            })
+                .find(|w| w.script_idx == Some(idx) && !w.deleted)?;
+            Some((idx, w.start_s))
+        });
+        return Some(match first {
+            Some((idx, start)) => at(line, Some(idx), Edge::Start, start),
+            None => at(line, None, Edge::Start, line.start_s),
+        });
+    }
+    if let Some(d) = directions().find(|i| i.start_s <= t && t < i.end_s) {
+        return Some(at(d, None, Edge::Start, d.start_s));
+    }
+    let before = spoken()
+        .filter(|i| i.end_s <= t)
+        .max_by(|a, b| a.end_s.total_cmp(&b.end_s));
+    let after = spoken()
+        .filter(|i| i.start_s > t)
+        .min_by(|a, b| a.start_s.total_cmp(&b.start_s));
+    match (before, after) {
+        (Some(b), Some(a)) if a.start_s - t < t - b.end_s => {
+            Some(at(a, None, Edge::Start, a.start_s))
         }
-        None => Some(match anchor.edge {
-            Edge::Start => item.start_s,
-            Edge::End => item.end_s,
-        }),
+        (Some(b), _) => Some(at(b, None, Edge::End, b.end_s)),
+        (None, Some(a)) => Some(at(a, None, Edge::Start, a.start_s)),
+        (None, None) => directions()
+            .min_by(|a, b| (a.start_s - t).abs().total_cmp(&(b.start_s - t).abs()))
+            .map(|d| at(d, None, Edge::Start, d.start_s)),
     }
 }
 
@@ -1403,6 +1476,7 @@ pub(crate) mod tests {
             auto_fade: false,
             added: 0,
             looped: false,
+            unglued: false,
         };
         let before = placement_start(&layout_scene(&d, &sc, &p), &pl);
         d.boxes.get_mut("b").unwrap().gap_s = Some(2.0);

@@ -39,6 +39,25 @@ pub struct MoveSoundP {
     /// Seconds after the anchor or time.
     #[serde(default)]
     pub offset_s: Option<f64>,
+    /// With `at_s`: hang it on whatever is said at that moment, so it follows the dialogue.
+    #[serde(default)]
+    pub glue: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct SoundGlueP {
+    pub placement_id: String,
+    /// On hangs it on the moment it stands at; off leaves it at its time, even when it's moved.
+    pub glued: bool,
+}
+
+impl From<SoundGlueP> for Command {
+    fn from(p: SoundGlueP) -> Command {
+        Command::SetSoundGlue {
+            placement_id: p.placement_id,
+            glued: p.glued,
+        }
+    }
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -138,6 +157,7 @@ impl From<MoveSoundP> for Command {
             }),
             at_s: p.at_s,
             offset_s: p.offset_s,
+            glue: p.glue,
         }
     }
 }
@@ -373,6 +393,8 @@ pub struct SoundView {
     /// Where it plays now, in scene seconds.
     pub start_s: f64,
     pub anchor: Option<Anchor>,
+    /// Its glue is turned off: it stays at its time, also when moved.
+    pub unglued: bool,
     pub offset_s: f64,
     pub len_s: f64,
     pub in_s: f64,
@@ -423,6 +445,7 @@ pub fn list(svc: &mut Service, scene_key: &str) -> Result<Vec<SoundView>> {
                 fade_out_s: p.fade_out_s,
                 auto_fade: p.auto_fade,
                 looped: p.looped,
+                unglued: p.unglued,
                 muted: p.muted,
             }
         })

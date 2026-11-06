@@ -128,6 +128,7 @@ fn whatever_moves_something_in_a_locked_scene_is_refused() {
             anchor: None,
             at_s: Some(4.0),
             offset_s: None,
+            glue: false,
         },
         Command::TrimPlacement {
             placement_id: "pl".into(),

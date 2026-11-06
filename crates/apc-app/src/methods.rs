@@ -18,7 +18,7 @@ use crate::error::{AppError, Result};
 use crate::service::Service;
 use crate::sound_edit::{
     BatchSoundsP, MoveSoundP, PlacementP, SceneRoomP, SlipSoundP, SoundDepthP, SoundFadesP,
-    SoundGainP, SoundPanP, TrimSoundP,
+    SoundGainP, SoundGlueP, SoundPanP, TrimSoundP,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -406,6 +406,9 @@ pub struct PlaceSoundP {
     pub at_s: Option<f64>,
     #[serde(default)]
     pub offset_s: f64,
+    /// With `at_s`: hang it on whatever is said at that moment, so it follows the dialogue.
+    #[serde(default)]
+    pub glue: bool,
     /// Where it starts in the room: 0 close … 1 far.
     #[serde(default)]
     pub depth: f64,
@@ -661,6 +664,9 @@ pub struct PlaceFromBucketP {
     /// Seconds after the anchor or time.
     #[serde(default)]
     pub offset_s: f64,
+    /// With `at_s`: hang it on whatever is said at that moment, so it follows the dialogue.
+    #[serde(default)]
+    pub glue: bool,
     /// Where it starts in the room: 0 close … 1 far.
     #[serde(default)]
     pub depth: f64,
@@ -1026,7 +1032,7 @@ registry! {
     "fetch_sound", FetchP, Write, true, "Download a remote search result (Epidemic Sound) into the library as licensed, and attach it to a cue.";
     "list_library", LibraryP, Read, true, "Library sounds, optionally filtered by a query.";
     "delete_asset", DeleteAssetP, Destructive, true, "Remove a sound from the library (the file moves to Backups/Trash).";
-    "place_sound", PlaceSoundP, Write, true, "Place a sound on the timeline, anchored to a line/word or at an absolute time.";
+    "place_sound", PlaceSoundP, Write, true, "Place a sound on the timeline, anchored to a line/word or at an absolute time. With glue, the time hangs it on whatever is said at that moment.";
     "export_fcpxml", ExportP, Write, true, "Export FCPXML 1.9 for DaVinci Resolve and Logic (one lane per role).";
     "export_srt", ExportP, Write, true, "Export SRT subtitles from the final word timings.";
     "export_cut_list", ExportP, Write, true, "Export the as-cut transcript / cut list (format csv or md).";
@@ -1079,7 +1085,8 @@ registry! {
     "stop_sound", NoParams, Read, false, "Stop the preview player.";
     "sound_playhead", NoParams, Read, false, "The preview player's sound, position and state.";
     "list_sounds", SceneP, Read, true, "The sounds placed in a scene with their ids, timing, anchor, gain, pan, depth and fades.";
-    "move_sound", MoveSoundP, Write, true, "Move a placed sound: onto an anchor (a word, a line edge, or the pause after a word: anchor_word with anchor_edge end), to free time (at_s), or by offset_s from where it hangs. Anchored sounds follow their line.";
+    "move_sound", MoveSoundP, Write, true, "Move a placed sound: onto an anchor (a word, a line edge, or the pause after a word: anchor_word with anchor_edge end), to free time (at_s), or by offset_s from where it hangs. Anchored sounds follow their line. With glue, at_s hangs it on whatever is said at that moment, unless its glue is off.";
+    "set_sound_glue", SoundGlueP, Write, true, "Turn a sound's glue on or off. On, it hangs on the word or line at the moment it stands at and follows the dialogue. Off, it stays at its time, also when it's moved.";
     "trim_sound", TrimSoundP, Write, true, "Trim a placed sound's start or end. Never longer than the source; the automatic fade follows.";
     "set_sound_fades", SoundFadesP, Write, true, "Set a sound's fades. A fade out set by hand turns auto off; auto true hands it back to the length.";
     "set_sound_gain", SoundGainP, Write, true, "Set a sound's loudness, -24 to +6 dB.";
@@ -1862,6 +1869,7 @@ impl Service {
                 Ok(serde_json::to_value(crate::sound_edit::list(self, &sc)?)?)
             }
             "move_sound" => self.sound_edit::<MoveSoundP>(params),
+            "set_sound_glue" => self.sound_edit::<SoundGlueP>(params),
             "trim_sound" => self.sound_edit::<TrimSoundP>(params),
             "set_sound_fades" => self.sound_edit::<SoundFadesP>(params),
             "set_sound_gain" => self.sound_edit::<SoundGainP>(params),

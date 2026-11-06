@@ -42,26 +42,8 @@
 
   async function follow(on: boolean) {
     if (!sound) return;
-    if (!on) {
-      await app.cmd({ cmd: 'unanchor_placement', placement_id: sound.id });
-      return app.loadEdit();
-    }
-    // anchor to the word that starts nearest the sound
-    let best: { line_id: string; word: number | null; d: number } | null = null;
-    for (const it of v?.items ?? []) {
-      if (it.kind === 'spacer') {
-        const d = Math.abs(it.start_s - sound.start_s);
-        if (!best || d < best.d) best = { line_id: it.line_id, word: null, d };
-      }
-      for (const w of it.words) {
-        if (w.deleted || w.script_idx == null) continue;
-        const d = Math.abs(w.start_s - sound.start_s);
-        if (!best || d < best.d) best = { line_id: it.line_id, word: w.script_idx, d };
-      }
-    }
-    if (!best) return;
-    const at = (v?.items.find((i) => i.line_id === best!.line_id)?.words.find((w) => w.script_idx === best!.word)?.start_s ?? v?.items.find((i) => i.line_id === best!.line_id)?.start_s) ?? sound.start_s;
-    await patch({ anchor: { line_id: best.line_id, word: best.word, edge: 'start' }, offset_s: +(sound.start_s - at).toFixed(3) });
+    await app.cmd({ cmd: 'set_sound_glue', placement_id: sound.id, glued: on });
+    return app.loadEdit();
   }
 
   async function setTone(gain: number) {

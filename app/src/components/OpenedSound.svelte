@@ -199,6 +199,12 @@
     ops.apply(r.patch, [r.cmd], r.patch.auto_fade ? 'Auto fade on' : 'Auto fade off');
   }
 
+  /** On, the sound hangs on what's said where it stands; off, it stays at its time for good. */
+  function toggleGlue() {
+    const glued = !s.anchor;
+    ops.apply({}, [{ cmd: 'set_sound_glue', placement_id: s.id, glued }], glued ? 'Glued to the dialogue' : 'Glue off: stays at its time');
+  }
+
   // ---- keys: the layer asks here first while the view is open ----
 
   export function key(e: KeyboardEvent): boolean {
@@ -281,6 +287,7 @@
       <button class="sc" class:on={quickOn(q.kind, s, lines)} aria-pressed={quickOn(q.kind, s, lines)} onclick={() => quick(q.kind)} onmousedown={(e) => e.preventDefault()}>{q.label}</button>
     {/each}
     <button class="sc" class:on={s.auto_fade} aria-pressed={s.auto_fade} onclick={toggleAuto} onmousedown={(e) => e.preventDefault()}>Auto fade</button>
+    {#if !s.looped}<button class="sc" class:on={!!s.anchor} aria-pressed={!!s.anchor} title={s.anchor ? 'Follows the dialogue. Off, it stays at its time' : 'Stays at its time. On, it follows the dialogue'} onclick={toggleGlue} onmousedown={(e) => e.preventDefault()} data-testid="opened-glue">Glue</button>{/if}
   </div>
 </div>
 

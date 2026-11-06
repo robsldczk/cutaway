@@ -779,7 +779,7 @@
     if (!v || r.lane === 'roomtone' || !r.lane) return;
     const t = timeAt(e.clientX);
     const snap = snapAt(t);
-    const where = snap ? { anchor_line_id: snap.line_id, anchor_word: snap.word ?? undefined } : { at_s: +t.toFixed(3) };
+    const where = snap ? { anchor_line_id: snap.line_id, anchor_word: snap.word ?? undefined } : { at_s: +t.toFixed(3), glue: true };
     // a dialogue lane takes the sound as that character's (a vocal sits with their lines)
     const lane = r.lane;
     const character = r.lane === 'dialogue' ? r.char : undefined;

@@ -105,7 +105,7 @@
       const sound = { asset_id: first.id, bucket_id, name: stem(first.file), duration_s: first.duration_s };
       if (app.page === 'arrange') await app.soundsUi?.placeFile(sound, job.x, job.y);
       else if (app.page === 'edit') {
-        await app.method('place_from_bucket', { scene: app.sceneId, asset_id: first.id, bucket_id, at_s: +app.pos.toFixed(3) });
+        await app.method('place_from_bucket', { scene: app.sceneId, asset_id: first.id, bucket_id, at_s: +app.pos.toFixed(3), glue: true });
         await app.loadEdit();
       }
     }

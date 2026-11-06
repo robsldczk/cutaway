@@ -144,6 +144,7 @@ Lanes are grouped, top to bottom, and each group is visually separated by color 
 - **Nudge:** Option+Left/Right moves 10 ms, Shift+Option moves 100 ms. Clips snap to dialogue word boundaries when close.
 - **Edges and fades:** trim the clip edges, drag the fade handles, drag the gain line per clip.
 - **Anchors:** a thin line connects each sound to its anchor in the dialogue. If the dialogue moves, the sound moves with it.
+  - *Changed in implementation (D123):* every sound dropped or moved on Arrange hangs on the exact moment it was put, snapped or not: Snap decides where it lands, glue whether it follows. Glue in the opened sound turns it off for one sound.
 - **Overlaps:** two sounds that overlap in one lane split onto separate layers automatically, so nothing hides another.
 - **Dialogue moves:** dragging a dialogue clip changes its gap. With ripple on (default), everything after it follows; hold Option to move it alone, which lets it overlap its neighbours.
 

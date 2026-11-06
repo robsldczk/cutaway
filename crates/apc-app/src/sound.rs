@@ -9,7 +9,7 @@ use apc_ai::task::{
 };
 use apc_core::ids::new_id;
 use apc_core::project::SHOW_PREFIX;
-use apc_core::sounds::{DROP_CROP_S, DROP_SHORT_S};
+use apc_core::sounds::{glue_to, takes_glue, DROP_CROP_S, DROP_SHORT_S};
 use apc_core::timeline::{layout_scene, placement_start};
 use apc_core::*;
 use apc_sound::epidemic::EpidemicProvider;
@@ -449,6 +449,7 @@ pub fn import(
                 anchor_edge: Edge::Start,
                 at_s: Some(t),
                 offset_s: 0.0,
+                glue: false,
                 depth: 0.0,
                 dropped: Some(first.loops_by_default()),
             },
@@ -565,10 +566,16 @@ pub fn placement_of(svc: &Service, a: &Asset, p: &PlaceSoundP) -> Result<Placeme
         auto_fade: !vocal,
         added: 0,
         looped: false,
+        unglued: false,
     };
     let mut placement = placement;
     if let Some(looping) = p.dropped {
         shape_drop(svc, &scene, looping, &mut placement);
+    }
+    // after the drop rules: a loop runs to the end of the scene and has nothing to follow
+    if p.glue && placement.anchor.is_none() && takes_glue(&placement) {
+        let layout = layout_scene(svc.doc(), &scene, &svc.config().pacing());
+        glue_to(&mut placement, &layout, p.at_s.unwrap_or(0.0) + p.offset_s);
     }
     Ok(placement)
 }

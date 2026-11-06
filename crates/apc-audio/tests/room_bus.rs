@@ -71,6 +71,7 @@ fn sound(id: &str, scene_id: &str, at_s: f64, depth: f64) -> Placement {
         auto_fade: false,
         added: 0,
         looped: false,
+        unglued: false,
     }
 }
 

@@ -631,6 +631,7 @@ mod tests {
                 auto_fade: false,
                 added: 0,
                 looped: false,
+                unglued: false,
             },
         );
         doc.locations.insert(

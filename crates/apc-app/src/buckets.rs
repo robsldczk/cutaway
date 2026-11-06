@@ -1107,6 +1107,7 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         anchor_word,
         anchor_edge,
         offset_s,
+        glue,
         depth,
     } = q;
     let p = crate::methods::PlaceSoundP {
@@ -1120,6 +1121,7 @@ pub fn place(svc: &mut Service, q: crate::methods::PlaceFromBucketP) -> Result<V
         anchor_edge,
         at_s,
         offset_s,
+        glue,
         depth,
         dropped: None,
     };

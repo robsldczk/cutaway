@@ -435,6 +435,15 @@ pub enum SfxCmd {
         /// Seconds after the anchor or time.
         #[arg(long, allow_negative_numbers = true)]
         offset: Option<f64>,
+        /// With --at: hang it on whatever is said at that moment.
+        #[arg(long)]
+        glue: bool,
+    },
+    /// Turn a sound's glue on where it stands, or with --off leave it at its time for good.
+    Glue {
+        id: String,
+        #[arg(long)]
+        off: bool,
     },
     /// Trim a sound's start or end by seconds (positive moves the edge later).
     Trim {
@@ -554,13 +563,19 @@ fn sound_call(sess: &mut Session, cmd: &SfxCmd) -> Option<anyhow::Result<Value>>
             end,
             at,
             offset,
+            glue,
         } => call(
             sess,
             "move_sound",
             json!({
                 "placement_id": id, "anchor_line_id": line, "anchor_word": word,
-                "anchor_edge": anchor_edge(*end), "at_s": at, "offset_s": offset,
+                "anchor_edge": anchor_edge(*end), "at_s": at, "offset_s": offset, "glue": glue,
             }),
+        ),
+        SfxCmd::Glue { id, off } => call(
+            sess,
+            "set_sound_glue",
+            json!({ "placement_id": id, "glued": !off }),
         ),
         SfxCmd::Trim { id, edge, delta } => call(
             sess,

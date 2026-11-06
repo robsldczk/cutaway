@@ -709,7 +709,7 @@ Seven requests from one list, in this order. Decisions in `DECISIONS.md`.
 - [x] Room chip off the Arrange transport (D120)
 - [x] A longer direction looks longer: the row's height grows with its time from the first second (D121)
 - [x] Character pan: a value per room, a custom one per scene, a pop-out in the transport, heard in playback and bounces (D122)
-- [ ] Glue: a sound hangs on the moment it was put, Snap only decides where it lands; a switch per sound turns it off (D123)
+- [x] Glue: a sound hangs on the moment it was put, Snap only decides where it lands; a switch per sound turns it off (D123)
 - [ ] Opened sound: a scrubber that plays the sound alone, I and O trim to it, Enter closes (D124)
 - [ ] Side by side: drag a line next to another on Arrange, two at most, the second can be offset (D125)
 

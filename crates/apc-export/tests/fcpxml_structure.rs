@@ -271,6 +271,7 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             auto_fade: false,
             added: 0,
             looped: false,
+            unglued: false,
         },
     );
     (paths, d)

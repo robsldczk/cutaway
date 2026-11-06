@@ -171,7 +171,7 @@ See the architecture spec for the details. In short:
 - **Spotting:** an AI pass reads each scene and suggests sound cues anchored to script lines, which go into a per-scene wish list (the bucket).
 - **Show library:** cues and sounds live at show level and are reused across scenes and episodes.
 - **Sourcing:** sounds come from the library, from drag-in files, from search providers (e.g. Epidemic Sound) or from generation providers (e.g. ElevenLabs, Magnific).
-- **Placement:** placed sounds anchor to dialogue, so they follow the cut when timing changes.
+- **Placement:** placed sounds anchor to dialogue, so they follow the cut when timing changes. *Changed in implementation (D123):* the anchor is the word at the moment the sound was put, plus an exact offset, and glue can be turned off per sound.
 
 New data model entities:
 

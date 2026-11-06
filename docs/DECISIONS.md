@@ -929,3 +929,16 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **New scenes:** a scene that appears in a new script version takes the room's values from a scene in the same place.
 - **Room settings…** moved here from the room chip (D120), the way from Arrange to Import › Rooms.
 
+### D123 Glue: a sound stays on the moment it was put (Rob, 2026-11-06)
+- **Rob:** sounds should glue to the exact moment of the block where he puts them, even when things change later. He turns glue off per sound in the opened sound if he needs to.
+- **What was wrong:** a sound only followed the dialogue if it caught a snap target: a line's start or end, a pause in a line, or a direction. Anywhere else, or with Snap off or ⌥ held, it was pinned to a time and stayed behind when the lines moved. Dragging an anchored sound off its target freed it too (D78, D99).
+- **Now Snap decides where a sound lands, and glue whether it follows.** A drop or a move on Arrange hangs the sound on the word being said at that moment, with an offset for exactly how far into the word it is. Outside a word it hangs on the line's start, and between lines on the nearer edge. In a direction with time of its own it hangs on that direction. Where two lines overlap, on the one that started last. The rule is `timeline::glue_point`, so UI, CLI and MCP share it. This replaces D78's "a move that doesn't snap frees the sound" and D99's "a sound put down free has no anchor".
+- **The exact offset isn't rounded to milliseconds,** so turning glue on doesn't move a sound, and a locked scene's timing doesn't change.
+- **`Placement.unglued`:** glue turned off by hand, with the Glue button in the opened sound or Pin to time on Edit (`set_sound_glue`, on the CLI as `sfx glue`). The sound stays at its time, and moving it, even onto a snap target, doesn't hang it on anything again. Without this flag a move would glue it straight back.
+- **What takes glue:** sounds on SFX lanes and dialogue lanes. Ambience, music and loops run under the scene, with nothing to follow.
+- **`glue` on `move_sound`, `place_sound` and `place_from_bucket`:** a time with `glue` hangs the sound there. Without it, `at_s` is still a plain time, so scripts that mean a time keep working.
+- **A copy (⌘D) hangs on the moment it lands on.** This replaces D107's "a copy stands at its own time". It still answers no cue.
+- **A word the take doesn't have:** a take swap could leave an anchor with no word to find, and the sound fell back to a time from an older cut. It now takes the nearest word of the line, then the line's edge. It only falls back to the time if the line has left the timeline.
+- **Edit:** drops there glue too, and Follows dialogue / Pin to time are the same command. Moving a sound on Edit keeps what it had: an anchored one takes a new offset, a pinned one stays pinned.
+- **Sounds already in a file aren't changed.** One that was pinned stays pinned until it's moved on Arrange or its Glue is turned on, because rewriting placements in a production file without being asked isn't safe. Rob decides whether to convert the ones in Episode 2: a batch of `set_sound_glue` does it, undoably.
+

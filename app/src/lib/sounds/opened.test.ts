@@ -175,7 +175,7 @@ describe('moving the middle', () => {
     const s = sound({ anchor: { line_id: 'x', word: null, edge: 'start' } });
     const t = target(12);
     expect(reshapeCommands('move', s, reshape('move', s, 0, t))).toEqual([{ cmd: 'move_sound', placement_id: 'a', anchor: t.anchor, offset_s: 0 }]);
-    expect(reshapeCommands('move', s, reshape('move', s, 12.5))).toEqual([{ cmd: 'move_sound', placement_id: 'a', at_s: 12.5 }]);
+    expect(reshapeCommands('move', s, reshape('move', s, 12.5))).toEqual([{ cmd: 'move_sound', placement_id: 'a', at_s: 12.5, glue: true }]);
   });
 
   it('keeps the anchor on a key press', () => {

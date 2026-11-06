@@ -362,6 +362,8 @@ export interface PlacementView {
   len_s: number;
   anchored: boolean;
   anchor: Anchor | null;
+  /** Its glue is turned off: it stays at its time, also when moved. */
+  unglued: boolean;
   offset_s: number;
   cue_id: string | null;
   fade_in_s: number;

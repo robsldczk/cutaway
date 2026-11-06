@@ -17,6 +17,8 @@ export interface SoundState {
   len_s: number;
   offset_s: number;
   anchor: Anchor | null;
+  /** Its glue is off: moving it doesn't hang it on anything. */
+  unglued?: boolean;
   depth: number;
   pan: number;
   gain_db: number;
@@ -85,14 +87,15 @@ export function timeDrag(sounds: { id: string; start_s: number }[], grabId: stri
 
 const ms = (x: number) => Math.round(x * 1000) / 1000;
 
-/** The grabbed sound hangs on the target, or goes free when nothing snapped. The others keep
- *  their distance: anchored ones stay on their line by a new offset. */
+/** The grabbed sound hangs on the target, or on what's said where it lands: snapping decides
+ *  where it goes, not whether it follows (D123). The others keep their distance: anchored ones
+ *  stay on their line by a new offset. A sound with its glue off stays free. */
 export function moveCommands(sounds: SoundState[], delta: number, grabId: string | null, target: SnapTarget | null): Cmd[] {
   return sounds.map((s) => {
     const placement_id = s.id;
-    if (s.id === grabId && target) return { cmd: 'move_sound', placement_id, anchor: target.anchor, offset_s: target.offset_s ?? 0 };
+    if (s.id === grabId && target && !s.unglued) return { cmd: 'move_sound', placement_id, anchor: target.anchor, offset_s: target.offset_s ?? 0 };
     if (s.anchor && s.id !== grabId) return { cmd: 'move_sound', placement_id, offset_s: ms(s.offset_s + delta) };
-    return { cmd: 'move_sound', placement_id, at_s: ms(s.start_s + delta) };
+    return { cmd: 'move_sound', placement_id, at_s: ms(s.start_s + delta), glue: true };
   });
 }
 

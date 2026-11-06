@@ -11,7 +11,9 @@ use crate::bus::Tx;
 use crate::commands::{free_layer, ms, placement};
 use crate::error::{CoreError, Result};
 use crate::model::*;
-use crate::timeline::{layout_scene, placement_start, resolve_anchor, Pacing};
+use crate::timeline::{
+    glue_point, layout_scene, placement_start, resolve_anchor, Pacing, SceneLayout,
+};
 
 /// Loudness range of a sound. The Edit page's gain tool reaches further (D77).
 pub const SOUND_GAIN_MIN_DB: f64 = -24.0;
@@ -109,12 +111,62 @@ fn check_anchor(doc: &Document, p: &Placement, a: &Anchor) -> Result<()> {
     Ok(())
 }
 
+/// A sound that follows the dialogue when it's put down. Beds don't: ambience and music run under
+/// the scene, and a loop lasts to its end. Glue turned off by hand stays off.
+pub fn takes_glue(p: &Placement) -> bool {
+    !p.unglued && !p.looped && matches!(p.lane, Lane::Sfx | Lane::Dialogue)
+}
+
+/// Hangs a sound on the moment `t`, exactly: the offset is what's left after the anchor. Says
+/// whether there was anything to hang on.
+pub fn glue_to(p: &mut Placement, layout: &SceneLayout, t: f64) -> bool {
+    let Some((anchor, offset)) = glue_point(layout, t) else {
+        return false;
+    };
+    // the fallback if the line ever leaves the timeline: stay about here
+    p.at_s = ms(t - offset);
+    p.offset_s = offset;
+    p.anchor = Some(anchor);
+    true
+}
+
+/// Turns a sound's glue on, where it stands, or off, which leaves it at its time for good.
+pub(crate) fn set_glue(
+    tx: &mut Tx,
+    placement_id: &str,
+    glued: bool,
+    pacing: &Pacing,
+) -> Result<Value> {
+    let mut p = placement(tx, placement_id)?;
+    let scene = tx
+        .doc()
+        .scenes
+        .get(&p.scene_id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("scene", &p.scene_id))?;
+    let layout = layout_scene(tx.doc(), &scene, pacing);
+    let start = placement_start(&layout, &p);
+    p.unglued = !glued;
+    if !glued {
+        p.anchor = None;
+        p.at_s = start;
+        p.offset_s = 0.0;
+    } else if p.anchor.is_none() && !glue_to(&mut p, &layout, start) {
+        return Err(CoreError::invalid(
+            "this scene has nothing to glue a sound to",
+        ));
+    }
+    tx.put(&p)?;
+    Ok(json!({ "glued": p.anchor.is_some(), "start_s": start }))
+}
+
 pub(crate) fn move_sound(
     tx: &mut Tx,
     placement_id: &str,
     anchor: Option<&Anchor>,
     at_s: Option<f64>,
     offset_s: Option<f64>,
+    glue: bool,
     pacing: &Pacing,
 ) -> Result<Value> {
     let mut p = placement(tx, placement_id)?;
@@ -138,11 +190,16 @@ pub(crate) fn move_sound(
             }
             p.anchor = Some(a.clone());
             p.offset_s = ms(offset.unwrap_or(0.0));
+            p.unglued = false;
         }
         (None, Some(t)) => {
             p.anchor = None;
             p.at_s = ms(finite("at_s", t)?.max(0.0));
             p.offset_s = ms(offset.unwrap_or(0.0));
+            if glue && takes_glue(&p) {
+                let at = p.at_s + p.offset_s;
+                glue_to(&mut p, &layout, at);
+            }
         }
         (None, None) => {
             let Some(o) = offset else {
@@ -428,6 +485,7 @@ mod tests {
             auto_fade: true,
             added: 0,
             looped: false,
+            unglued: false,
         }
     }
 
@@ -465,6 +523,7 @@ mod tests {
             }),
             at_s: None,
             offset_s: None,
+            glue: false,
         })
         .unwrap();
         let p = one_step(
@@ -474,6 +533,7 @@ mod tests {
                 anchor: None,
                 at_s: Some(3.25),
                 offset_s: None,
+                glue: false,
             },
         );
         assert_eq!(p.anchor, None);
@@ -521,6 +581,7 @@ mod tests {
                     anchor: Some(anchor.clone()),
                     at_s: None,
                     offset_s: Some(0.25),
+                    glue: false,
                 })
                 .unwrap();
             assert!((r.result["start_s"].as_f64().unwrap() - want - 0.25).abs() < 1e-9);
@@ -536,6 +597,7 @@ mod tests {
                 anchor: None,
                 at_s: None,
                 offset_s: Some(0.5),
+                glue: false,
             },
         );
     }
@@ -560,6 +622,7 @@ mod tests {
             }),
             at_s: None,
             offset_s: None,
+            glue: false,
         })
         .unwrap();
         let before = start(&bus);
@@ -597,6 +660,7 @@ mod tests {
                     anchor,
                     at_s,
                     offset_s,
+                    glue: false,
                 })
                 .is_err());
         }
@@ -610,6 +674,7 @@ mod tests {
             anchor: anchor("a", None),
             at_s: None,
             offset_s: None,
+            glue: false,
         });
         assert!(elsewhere.is_err(), "a line of another scene");
     }
@@ -624,6 +689,7 @@ mod tests {
                 anchor: None,
                 at_s: Some(-4.0),
                 offset_s: None,
+                glue: false,
             },
         );
         assert_eq!(p.at_s, 0.0);
@@ -1016,12 +1082,14 @@ mod tests {
                     anchor: None,
                     at_s: Some(2.0),
                     offset_s: None,
+                    glue: false,
                 },
                 Command::MoveSound {
                     placement_id: "q".into(),
                     anchor: None,
                     at_s: Some(6.0),
                     offset_s: None,
+                    glue: false,
                 },
             ],
         })
@@ -1339,6 +1407,162 @@ mod tests {
         })
         .unwrap();
         assert_eq!(sc(&bus, heading).unwrap().room, room);
+    }
+
+    fn start_of(bus: &CommandBus, id: &str) -> f64 {
+        let doc = bus.doc();
+        let p = &doc.placements[id];
+        let layout = layout_scene(doc, &doc.scenes[&p.scene_id], &Pacing::default());
+        placement_start(&layout, p)
+    }
+
+    /// Where a word of a line is said.
+    fn word_at(bus: &CommandBus, line: &str, word: usize) -> f64 {
+        let doc = bus.doc();
+        let scene = &doc.scenes[&doc.lines[line].scene_id];
+        let layout = layout_scene(doc, scene, &Pacing::default());
+        let item = layout.item(line).unwrap();
+        item.words
+            .iter()
+            .find(|w| w.script_idx == Some(word))
+            .unwrap()
+            .start_s
+    }
+
+    fn glue_at(placement_id: &str, at_s: f64) -> Command {
+        Command::MoveSound {
+            placement_id: placement_id.into(),
+            anchor: None,
+            at_s: Some(at_s),
+            offset_s: None,
+            glue: true,
+        }
+    }
+
+    #[test]
+    fn glue_keeps_the_exact_moment_in_the_word_through_later_changes() {
+        let (_d, mut bus) = setup();
+        // a little way into the second word of b
+        let t = word_at(&bus, "b", 1) + 0.137;
+        bus.execute(&glue_at("p", t)).unwrap();
+        let p = bus.doc().placements["p"].clone();
+        let a = p.anchor.clone().unwrap();
+        assert_eq!((a.line_id.as_str(), a.word), ("b", Some(1)));
+        assert!((p.offset_s - 0.137).abs() < 1e-9);
+        assert!((start_of(&bus, "p") - t).abs() < 1e-9);
+
+        // the pause before it grows: the sound stays on the same spot of the word
+        let from_word = |bus: &CommandBus| start_of(bus, "p") - word_at(bus, "b", 1);
+        bus.execute(&Command::SetGap {
+            line_id: "b".into(),
+            gap_s: Some(3.0),
+        })
+        .unwrap();
+        assert!(start_of(&bus, "p") > t + 1.0);
+        assert!((from_word(&bus) - 0.137).abs() < 1e-9);
+
+        // so does a trim of the line's head
+        bus.execute(&Command::SetTrim {
+            line_id: "b".into(),
+            head_s: 0.1,
+            tail_s: 0.0,
+        })
+        .unwrap();
+        assert!((from_word(&bus) - 0.137).abs() < 1e-9);
+    }
+
+    #[test]
+    fn between_lines_a_sound_hangs_on_the_nearest_edge() {
+        let (_d, mut bus) = setup();
+        let doc = bus.doc();
+        let layout = layout_scene(doc, doc.scenes.values().next().unwrap(), &Pacing::default());
+        let (a_end, b_start) = (
+            layout.item("a").unwrap().end_s,
+            layout.item("b").unwrap().start_s,
+        );
+        assert!(b_start - a_end > 0.1);
+        let edge = |bus: &CommandBus| {
+            let a = bus.doc().placements["p"].anchor.clone().unwrap();
+            (a.line_id, a.edge)
+        };
+        bus.execute(&glue_at("p", a_end + 0.01)).unwrap();
+        assert_eq!(edge(&bus), ("a".to_string(), Edge::End));
+        bus.execute(&glue_at("p", b_start - 0.01)).unwrap();
+        assert_eq!(edge(&bus), ("b".to_string(), Edge::Start));
+        assert!((start_of(&bus, "p") - (b_start - 0.01)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn glue_off_stays_off_through_moves_and_on_again_where_it_stands() {
+        let (_d, mut bus) = setup();
+        bus.execute(&glue_at("p", word_at(&bus, "b", 0))).unwrap();
+        let t = start_of(&bus, "p");
+        let glue = |glued| Command::SetSoundGlue {
+            placement_id: "p".into(),
+            glued,
+        };
+
+        let p = one_step(&mut bus, glue(false));
+        assert!(p.anchor.is_none() && p.unglued);
+        assert!((start_of(&bus, "p") - t).abs() < 1e-9);
+
+        // the dialogue moves, the sound doesn't, and a move doesn't hang it on anything
+        bus.execute(&Command::SetGap {
+            line_id: "b".into(),
+            gap_s: Some(3.0),
+        })
+        .unwrap();
+        assert!((start_of(&bus, "p") - t).abs() < 1e-9);
+        bus.execute(&glue_at("p", t + 0.5)).unwrap();
+        assert!(bus.doc().placements["p"].anchor.is_none());
+
+        let at = start_of(&bus, "p");
+        let p = one_step(&mut bus, glue(true));
+        assert!(p.anchor.is_some() && !p.unglued);
+        assert!(
+            (start_of(&bus, "p") - at).abs() < 1e-9,
+            "it stays where it is"
+        );
+    }
+
+    #[test]
+    fn beds_do_not_take_glue() {
+        let (_d, mut bus) = setup();
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            let mut p = tx.doc().placements["p"].clone();
+            p.lane = Lane::Ambience;
+            tx.put(&p)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        bus.execute(&glue_at("p", 1.0)).unwrap();
+        assert!(bus.doc().placements["p"].anchor.is_none());
+    }
+
+    #[test]
+    fn a_word_this_take_lacks_keeps_the_sound_on_its_line() {
+        let (_d, mut bus) = setup();
+        bus.execute(&Command::MoveSound {
+            placement_id: "p".into(),
+            anchor: Some(Anchor {
+                line_id: "b".into(),
+                word: Some(1),
+                edge: Edge::Start,
+            }),
+            at_s: None,
+            offset_s: Some(0.0),
+            glue: false,
+        })
+        .unwrap();
+        // the take is recut so the word isn't in it any more
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            let mut t = tx.doc().takes["tb"].clone();
+            t.words.truncate(1);
+            tx.put(&t)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        assert!((start_of(&bus, "p") - word_at(&bus, "b", 0)).abs() < 1e-9);
     }
 
     /// Scenes s1 and s2 in one place, s3 in another, and a character.

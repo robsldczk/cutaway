@@ -289,7 +289,8 @@ pub enum Command {
         at_s: f64,
     },
     /// Moves a sound: onto an anchor (a word, a line edge or the pause after a word), to free
-    /// scene time with `at_s`, or just `offset_s` from where it hangs.
+    /// scene time with `at_s`, or just `offset_s` from where it hangs. With `glue`, `at_s` hangs
+    /// it on whatever is said at that moment, unless its glue is off.
     MoveSound {
         placement_id: String,
         #[serde(default)]
@@ -298,6 +299,13 @@ pub enum Command {
         at_s: Option<f64>,
         #[serde(default)]
         offset_s: Option<f64>,
+        #[serde(default)]
+        glue: bool,
+    },
+    /// Turns a sound's glue on where it stands, or off, which leaves it at its time for good.
+    SetSoundGlue {
+        placement_id: String,
+        glued: bool,
     },
     /// Fades of a sound. Setting the fade out by hand turns auto off; `auto: true` hands the
     /// fade out back to the length.
@@ -520,6 +528,7 @@ impl Command {
             Command::DeletePlacement { .. } => "delete_placement",
             Command::SplitPlacement { .. } => "split_placement",
             Command::MoveSound { .. } => "move_sound",
+            Command::SetSoundGlue { .. } => "set_sound_glue",
             Command::SetSoundFades { .. } => "set_sound_fades",
             Command::SetSoundGain { .. } => "set_sound_gain",
             Command::SetSoundPan { .. } => "set_sound_pan",
@@ -1138,6 +1147,7 @@ impl Command {
                 p.anchor = None;
                 p.at_s = at;
                 p.offset_s = 0.0;
+                p.unglued = true;
                 tx.put(&p)?;
                 Ok(json!({ "at_s": at }))
             }
@@ -1177,7 +1187,20 @@ impl Command {
                 anchor,
                 at_s,
                 offset_s,
-            } => sounds::move_sound(tx, placement_id, anchor.as_ref(), *at_s, *offset_s, &pacing),
+                glue,
+            } => sounds::move_sound(
+                tx,
+                placement_id,
+                anchor.as_ref(),
+                *at_s,
+                *offset_s,
+                *glue,
+                &pacing,
+            ),
+            Command::SetSoundGlue {
+                placement_id,
+                glued,
+            } => sounds::set_glue(tx, placement_id, *glued, &pacing),
             Command::SetSoundFades {
                 placement_id,
                 fade_in_s,
@@ -2064,7 +2087,7 @@ fn duplicate_sounds(
     for (p, start) in sounds.iter().zip(&starts) {
         let mut c = Placement {
             id: new_id("pl"),
-            // a cue has its sound; a copy is one more, standing at its own time
+            // a cue has its sound; a copy is one more, hanging on the moment it lands on
             cue_id: None,
             anchor: None,
             at_s: ms(start + to - from),
@@ -2072,6 +2095,9 @@ fn duplicate_sounds(
             ..p.clone()
         };
         sounds::check_new(tx.doc(), &mut c)?;
+        if sounds::takes_glue(&c) {
+            sounds::glue_to(&mut c, &layout, ms(start + to - from));
+        }
         c.layer = free_layer(tx.doc(), &c, pacing);
         tx.put(&c)?;
         copies.push(c.id);
@@ -3582,7 +3608,7 @@ mod tests {
             .unwrap();
         let id = &copies(&r)[0];
         let c = &bus.doc().placements[id];
-        assert_eq!(c.at_s, 3.5);
+        assert!((placement_start(&lay(&bus), c) - 3.5).abs() < 1e-9);
         assert_eq!((c.len_s, c.gain_db, c.pan, c.depth), (1.5, -3.0, 0.5, 0.25));
         assert_eq!(
             c.layer, 0,
@@ -3603,14 +3629,15 @@ mod tests {
             })
             .unwrap();
         let ids = copies(&r);
-        let at: Vec<f64> = ids.iter().map(|i| bus.doc().placements[i].at_s).collect();
-        assert_eq!(at, [5.0, 7.0]);
+        let layout = lay(&bus);
+        let at = |i: usize| placement_start(&layout, &bus.doc().placements[&ids[i]]);
+        assert!((at(0) - 5.0).abs() < 1e-9 && (at(1) - 7.0).abs() < 1e-9);
         bus.undo().unwrap();
         assert_eq!(bus.doc().placements.len(), 2);
     }
 
     #[test]
-    fn a_copy_of_an_anchored_sound_stands_at_its_own_time_off_the_cue() {
+    fn a_copy_hangs_on_the_moment_it_lands_on_off_the_cue() {
         let (_d, mut bus) = setup();
         let scene = sounds_at(&mut bus, &[("p", 0.0, 1.0)]);
         bus.execute_fn("seed", &Value::Null, |tx| {
@@ -3636,8 +3663,9 @@ mod tests {
             })
             .unwrap();
         let c = &bus.doc().placements[&copies(&r)[0]];
-        assert!(c.anchor.is_none() && c.cue_id.is_none());
-        assert!((c.at_s - (start + 1.0)).abs() < 0.002, "{} {start}", c.at_s);
+        assert!(c.anchor.is_some() && c.cue_id.is_none());
+        let at = placement_start(&lay(&bus), c);
+        assert!((at - (start + 1.0)).abs() < 0.002, "{at} {start}");
     }
 
     #[test]

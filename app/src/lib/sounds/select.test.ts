@@ -81,16 +81,20 @@ describe('what a gesture commits', () => {
     expect(moveCommands([s('a')], 1, 'a', target)).toEqual([{ cmd: 'move_sound', placement_id: 'a', anchor: target.anchor, offset_s: 0 }]);
   });
 
-  it('sets a sound free when nothing snapped', () => {
+  it('leaves a sound with its glue off free, also on a target', () => {
+    expect(moveCommands([s('a', { unglued: true })], 1, 'a', target)).toEqual([{ cmd: 'move_sound', placement_id: 'a', at_s: 6, glue: true }]);
+  });
+
+  it('asks for glue where it lands when nothing snapped', () => {
     const anchored = s('a', { anchor: { line_id: 'l', word: null, edge: 'start' } });
-    expect(moveCommands([anchored], 0.25, 'a', null)).toEqual([{ cmd: 'move_sound', placement_id: 'a', at_s: 5.25 }]);
+    expect(moveCommands([anchored], 0.25, 'a', null)).toEqual([{ cmd: 'move_sound', placement_id: 'a', at_s: 5.25, glue: true }]);
   });
 
   it('keeps the others at their distance, anchored ones on their line', () => {
     const anchored = s('b', { anchor: { line_id: 'l', word: null, edge: 'start' }, offset_s: 0.2 });
     const c = moveCommands([s('a'), anchored, s('c', { start_s: 9 })], 1, 'a', target);
     expect(c[1]).toEqual({ cmd: 'move_sound', placement_id: 'b', offset_s: 1.2 });
-    expect(c[2]).toEqual({ cmd: 'move_sound', placement_id: 'c', at_s: 10 });
+    expect(c[2]).toEqual({ cmd: 'move_sound', placement_id: 'c', at_s: 10, glue: true });
   });
 
   it('a nudge with nothing grabbed keeps every anchor', () => {

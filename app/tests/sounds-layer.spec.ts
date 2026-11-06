@@ -35,7 +35,7 @@ function wav(path: string, seconds: number) {
   writeFileSync(path, b);
 }
 
-type Sound = { id: string; lane: string; start_s: number; len_s: number; depth: number; pan: number; gain_db: number; anchor: { line_id: string; word: number | null; edge: string } | null; fade_out_s: number; auto_fade: boolean };
+type Sound = { id: string; lane: string; start_s: number; offset_s: number; len_s: number; depth: number; pan: number; gain_db: number; anchor: { line_id: string; word: number | null; edge: string } | null; fade_out_s: number; auto_fade: boolean };
 const list = () => rpc<Sound[]>('list_sounds', { scene: '1' });
 
 let asset = '';
@@ -761,7 +761,8 @@ test('snap: ⌥ lets a sound go exactly where it is put, for one move', async ({
   const tip = await ontoLine(page, a, true);
   expect(tip).toContain('Starts at');
   await expect.poll(async () => (await sound(a)).start_s).toBeGreaterThan(0.2);
-  expect((await sound(a)).anchor).toBeNull();
+  // no snap, but it still hangs on what's said there
+  expect((await sound(a)).anchor).not.toBeNull();
   expect((await sound(a)).pan).toBe(0);
 });
 
@@ -775,7 +776,7 @@ test('snap: the button turns it off, and it stays off', async ({ page }) => {
   await page.waitForTimeout(400);
   expect(await ontoLine(page, a)).toContain('Starts at');
   await expect.poll(async () => (await sound(a)).start_s).toBeGreaterThan(0.2);
-  expect((await sound(a)).anchor).toBeNull();
+  expect((await sound(a)).anchor).not.toBeNull();
 
   await page.reload();
   await expect(page.getByTestId('current-box')).toBeVisible();
@@ -799,9 +800,9 @@ test('move: a ball snaps to a line, names it, and hangs on it', async ({ page })
   expect((await sound(a)).anchor?.line_id).toBe(lines[1].line_id);
 });
 
-test('move: dropped where nothing snaps, a sound is free', async ({ page }) => {
+test('glue: dropped where nothing snaps, a sound stays on that moment when the dialogue moves', async ({ page }) => {
   const a = await place(0.5, 0.3);
-  await rpc('move_sound', { placement_id: a, anchor_line_id: (await rpc<{ line_id: string }[]>('list_lines', { scene: '1' }))[0].line_id, offset_s: 0.4 });
+  await rpc('move_sound', { placement_id: a, anchor_line_id: (await rpc<{ line_id: string }[]>('list_lines', { scene: '1' }))[1].line_id, offset_s: 0.4 });
   await open(page);
   // the distance below is free of targets only from where the ball comes to rest
   let y = 0;
@@ -816,7 +817,41 @@ test('move: dropped where nothing snaps, a sound is free', async ({ page }) => {
     )
     .toBeLessThan(0.5);
   const after = await oneStep(page, () => centre(ballOf(page, a)).then((c) => drag(page, c, 0, 44)));
-  expect(after.find((x) => x.id === a)!.anchor).toBe(null);
+  const put = after.find((x) => x.id === a)!;
+  expect(put.anchor).not.toBeNull();
+
+  // the pause before its line grows: the sound goes with the line and keeps its spot on it
+  const lines = await rpc<{ line_id: string }[]>('list_lines', { scene: '1' });
+  expect(lines[0].line_id).not.toBe(put.anchor!.line_id);
+  await rpc('set_gap', { line_id: put.anchor!.line_id, gap_s: 3 });
+  const now = await sound(a);
+  expect(now.start_s).toBeGreaterThan(put.start_s + 1);
+  expect(now.anchor).toEqual(put.anchor);
+  expect(now.offset_s).toBe(put.offset_s);
+});
+
+test('glue: off in the opened sound, it stays at its time and through a move, and comes back', async ({ page }) => {
+  const a = await place(1, 0.3);
+  await rpc('set_sound_glue', { placement_id: a, glued: true });
+  await open(page);
+  await ballOf(page, a).dblclick();
+  const glue = page.getByTestId('opened-glue');
+  await expect(glue).toHaveAttribute('aria-pressed', 'true');
+  const at = (await sound(a)).start_s;
+
+  await glue.click();
+  await expect(glue).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(async () => (await sound(a)).anchor).toBeNull();
+  expect((await sound(a)).start_s).toBeCloseTo(at, 3);
+
+  await page.keyboard.press('Escape');
+  await ontoLine(page, a);
+  await expect.poll(async () => (await sound(a)).start_s).toBeGreaterThan(at);
+  expect((await sound(a)).anchor).toBeNull();
+
+  await ballOf(page, a).dblclick();
+  await glue.click();
+  await expect.poll(async () => (await sound(a)).anchor).not.toBeNull();
 });
 
 test('trim: the tail trims, the fade follows, the rest of the source shows dashed', async ({ page }) => {
