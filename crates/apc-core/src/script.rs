@@ -577,6 +577,12 @@ pub fn apply_version(
             tone: old.and_then(|s| s.tone.clone()),
             lock,
             status: old.and_then(|s| s.status),
+            // a new scene in a known place stands the characters as the room does
+            room_pan: old
+                .or_else(|| doc.scenes.values().find(|s| s.location == sc.location))
+                .map(|s| s.room_pan.clone())
+                .unwrap_or_default(),
+            voice_pan: old.map(|s| s.voice_pan.clone()).unwrap_or_default(),
         })?;
     }
     for s in doc.scenes.values() {

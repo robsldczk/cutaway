@@ -1062,6 +1062,8 @@ pub(crate) mod tests {
             tone: None,
             lock: None,
             status: None,
+            room_pan: Default::default(),
+            voice_pan: Default::default(),
         };
         (d, sc)
     }

@@ -202,7 +202,7 @@ impl PlaySchedule {
                     fade_out_s: p.fade_out_s,
                     lane: item.character.clone().unwrap_or_else(|| "dialogue".into()),
                     loop_len_s: None,
-                    pan: 0.0,
+                    pan: item.character.as_deref().map_or(0.0, |c| scene.pan_of(c)),
                     linear_fade: false,
                     owner: item.item_id.clone(),
                     space: voice_space(doc, item.character.as_deref()),
@@ -255,7 +255,13 @@ impl PlaySchedule {
                         Lane::Dialogue => p.character.clone().unwrap_or_else(|| "dialogue".into()),
                     },
                     loop_len_s: file_end.map(|_| p.len_s),
-                    pan: p.pan,
+                    // an actor's breath stands where the actor does
+                    pan: (p.pan
+                        + p.character
+                            .as_deref()
+                            .filter(|_| p.lane == Lane::Dialogue)
+                            .map_or(0.0, |c| scene.pan_of(c)))
+                    .clamp(-1.0, 1.0),
                     linear_fade: false,
                     owner: p.id.clone(),
                     space,
@@ -439,6 +445,8 @@ mod tests {
             tone: None,
             lock: None,
             status: None,
+            room_pan: Default::default(),
+            voice_pan: Default::default(),
         };
         (d, s)
     }
@@ -508,6 +516,32 @@ mod tests {
         assert_eq!(s.clips[0].owner, "b");
         assert!((s.clips[0].start_s - 1.8).abs() < 1e-9);
         assert!((s.duration_s - 3.8).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_voice_stands_where_the_scene_puts_it_and_the_lane_adds_to_that() {
+        use apc_core::LaneMix;
+        let (mut doc, mut scene) = sample_doc();
+        let pan_of = |doc: &Document, scene: &Scene| {
+            PlaySchedule::from_scene(doc, scene, &flat(), &MixSettings::default()).clips[0].pan
+        };
+        assert_eq!(pan_of(&doc, &scene), 0.0);
+        scene.room_pan.insert("PAUL".into(), -0.5);
+        assert_eq!(pan_of(&doc, &scene), -0.5);
+        // the scene's own value wins over the room's
+        scene.voice_pan.insert("PAUL".into(), 0.25);
+        assert_eq!(pan_of(&doc, &scene), 0.25);
+        doc.lane_mix.insert(
+            "PAUL".into(),
+            LaneMix {
+                id: "PAUL".into(),
+                volume_db: 0.0,
+                pan: 0.25,
+                mute: false,
+                solo: false,
+            },
+        );
+        assert_eq!(pan_of(&doc, &scene), 0.5);
     }
 
     #[test]

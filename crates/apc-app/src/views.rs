@@ -176,6 +176,20 @@ pub struct CharacterView {
     pub profile: String,
 }
 
+/// Where a character of the scene stands (the pan pop-out on Arrange).
+#[derive(Serialize)]
+pub struct VoicePanView {
+    pub character: String,
+    pub label: String,
+    pub color_index: usize,
+    /// What's heard in this scene.
+    pub pan: f64,
+    /// The value of the room, which a scene inherits.
+    pub room: f64,
+    /// This scene has a value of its own.
+    pub custom: bool,
+}
+
 /// Story context of the open scene (Inspector).
 #[derive(Serialize)]
 pub struct SceneStoryView {
@@ -215,11 +229,37 @@ pub struct SceneView {
     pub unmatched: Vec<UnmatchedView>,
     pub scenes: Vec<SceneSummary>,
     pub characters: Vec<CharacterView>,
+    /// The characters who speak in this scene and where they stand.
+    pub pans: Vec<VoicePanView>,
     pub story: SceneStoryView,
     pub rev: i64,
     pub can_undo: bool,
     pub can_redo: bool,
     pub breath_gap_s: f64,
+}
+
+/// The characters with a line in a scene, in cast order, and where they stand.
+pub fn voice_pans(doc: &Document, scene: &Scene) -> Vec<VoicePanView> {
+    let speaking: std::collections::BTreeSet<&str> = doc
+        .lines_of_scene(&scene.id)
+        .into_iter()
+        .filter(|l| l.kind == LineKind::Dialogue && !l.removed)
+        .filter_map(|l| l.character.as_deref())
+        .collect();
+    let mut out: Vec<VoicePanView> = speaking
+        .into_iter()
+        .filter_map(|id| doc.characters.get(id))
+        .map(|c| VoicePanView {
+            character: c.id.clone(),
+            label: c.label.clone(),
+            color_index: c.color_index,
+            pan: scene.pan_of(&c.id),
+            room: scene.room_pan.get(&c.id).copied().unwrap_or(0.0),
+            custom: scene.voice_pan.contains_key(&c.id),
+        })
+        .collect();
+    out.sort_by_key(|p| p.color_index);
+    out
 }
 
 fn flagged_in(doc: &Document, scene_id: &str) -> usize {
@@ -625,6 +665,7 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
             .collect(),
         scenes: summaries,
         characters: chars,
+        pans: voice_pans(&doc, &scene),
         rev: svc.bus.rev(),
         can_undo: svc.bus.can_undo()?,
         can_redo: svc.bus.can_redo()?,

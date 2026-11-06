@@ -918,3 +918,14 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **The drag** goes at the same scale, so the edge stays under the mouse. It was 26 px a second and ran ahead of the row.
 - **A direction turned off** takes no time, so it has no extra height, until it's dragged (D98).
 
+### D122 Where the characters stand (Rob, 2026-11-06)
+- **Rob:** set the pan of the characters per room, from a small pop-out behind an icon in the Arrange transport. The pans inherit per room, and when he changes one, that scene has a custom one.
+- **Two values:** `Scene.room_pan` is the room's, and every scene of a location holds the same copy, the way the room itself does (D97). `Scene.voice_pan` is the scene's own. A scene plays its own, or else the room's, or else the centre. Both are left out of the file when empty.
+- **The pop-out** lists the characters who speak in the scene. *This scene* writes the scene's own value, and an arrow takes it back to the room's. *Whole room* writes what the place's scenes inherit. It opens on This scene, which is what he asked a change to do. The other option was to have a first change write to the room, but then nothing shows which of the two a slider is setting.
+- **A room's value doesn't touch a scene with its own,** or a custom value wouldn't stay custom.
+- **`set_character_pan`,** one undo step per release, `scene_pans` to read them, on the CLI as `sfx voice-pan`, on MCP. It isn't timing, so a locked scene takes it, as sound pan already does (D108).
+- **In the mix:** on the voice's clips in `PlaySchedule`, so playback, bounces and stems all have it. It adds to the lane pan on Edit, which stays for the whole episode, the way a sound's pan adds to its lane. A sound on an actor's dialogue lane stands with them. A take auditioned alone stays centred so takes compare fairly (D90's reason).
+- **FCPXML carries no pan,** for voices or for sounds, as before. Pan set here won't reach Resolve through it. Stems and the mix have it.
+- **New scenes:** a scene that appears in a new script version takes the room's values from a scene in the same place.
+- **Room settings…** moved here from the room chip (D120), the way from Arrange to Import › Rooms.
+

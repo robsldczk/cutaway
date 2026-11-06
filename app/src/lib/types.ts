@@ -163,6 +163,17 @@ export interface SceneSummary {
 
 export type SceneStatus = 'in_progress' | 'review' | 'finished';
 
+/** Where a character stands in a scene: what's heard, and the room's value it inherits. */
+export interface VoicePan {
+  character: string;
+  label: string;
+  color_index: number;
+  pan: number;
+  room: number;
+  /** The scene has a value of its own. */
+  custom: boolean;
+}
+
 export interface CharacterView {
   id: string;
   label: string;
@@ -214,6 +225,8 @@ export interface SceneView {
   unmatched: UnmatchedView[];
   scenes: SceneSummary[];
   characters: CharacterView[];
+  /** The characters who speak in this scene and where they stand. */
+  pans: VoicePan[];
   story: SceneStoryView;
   rev: number;
   can_undo: boolean;

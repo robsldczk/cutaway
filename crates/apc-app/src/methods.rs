@@ -821,6 +821,18 @@ pub struct SceneStatusP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct CharacterPanP {
+    pub scene: String,
+    pub character: String,
+    /// −1 left … +1 right; left out, the value goes.
+    #[serde(default)]
+    pub pan: Option<f64>,
+    /// The room's value, not this scene's.
+    #[serde(default)]
+    pub room: bool,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct CharacterWetP {
     pub character: String,
     /// 0 dry … 1.
@@ -1082,6 +1094,8 @@ registry! {
     "import_ambience", ImportAmbienceP, Write, true, "Bring a file in as an ambience: into the room tone folder, and looping under a scene's location if one is given.";
     "suggest_bucket", SuggestBucketP, Read, true, "The bucket a file name points to, or a name for a new one (bucket_id null). The same name always gives the same answer.";
     "voice_rooms", NoParams, Read, true, "Each character and how much of the scene's room their voice takes.";
+    "scene_pans", SceneP, Read, true, "Where the characters of a scene stand: what's heard (pan), the room's value it inherits, and whether the scene has its own.";
+    "set_character_pan", CharacterPanP, Write, true, "Set where a character stands, -1 left to +1 right: in this scene, or with room true in every scene of its location that has no value of its own. Leave pan out to take the value away. On top of the lane's pan on Edit. Heard in playback and bounces; FCPXML carries no pan.";
     "set_character_wet", CharacterWetP, Write, true, "Set how much of the scene's room a character's voice takes, 0 dry to 1.";
     "set_scene_tone", SceneToneP, Write, true, "Set the ambience looping under a scene's location, from a library sound, and its level: every scene of the place shares it, or give night to set the place's night scenes or the others apart.";
     "bucket_set_loop", BucketLoopP, Write, true, "Set whether a bucket sound loops. Dropped, a sound over 6 s with Loop on goes on the ambience lane and repeats to the end of the scene.";
@@ -1886,6 +1900,28 @@ impl Service {
                 let p: SceneStatusP = parse(params)?;
                 let scene_id = scene_id(self, Some(&p.scene))?;
                 Ok(self.exec(&Command::SetSceneStatus { scene_id, status: p.status })?.result)
+            }
+            "scene_pans" => {
+                let p: SceneP = parse(params)?;
+                let id = scene_id(self, p.scene.as_deref())?;
+                let doc = self.doc();
+                let scene = doc
+                    .scenes
+                    .get(&id)
+                    .ok_or_else(|| AppError::Params(format!("no scene '{id}'")))?;
+                Ok(serde_json::to_value(crate::views::voice_pans(doc, scene))?)
+            }
+            "set_character_pan" => {
+                let p: CharacterPanP = parse(params)?;
+                let scene_id = scene_id(self, Some(&p.scene))?;
+                Ok(self
+                    .exec(&Command::SetCharacterPan {
+                        scene_id,
+                        character_id: p.character,
+                        pan: p.pan,
+                        room: p.room,
+                    })?
+                    .result)
             }
             "set_character_wet" => {
                 let p: CharacterWetP = parse(params)?;

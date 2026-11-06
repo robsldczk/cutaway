@@ -221,6 +221,8 @@ fn setup(dir: &Path) -> (apc_core::project::EpisodePaths, Document) {
             tone: None,
             lock: None,
             status: None,
+            room_pan: Default::default(),
+            voice_pan: Default::default(),
         },
     );
     d.assets.insert(

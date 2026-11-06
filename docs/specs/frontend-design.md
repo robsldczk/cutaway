@@ -183,7 +183,7 @@ A floating glass bar at the bottom centre (`min(820px, 94%)`, 30 px radius):
 
 **Other controls:** gap/pacing and the room-tone toggle sit in the settings sheet (⚙), not in the main bar.
 
-*(Changed in implementation, D120: the room's read-out left the transport. D81 had put it there. Its settings are on Import › Rooms.)*
+*(Changed in implementation, D120, D122: the room's read-out left the transport. D81 had put it there. Its settings are on Import › Rooms. On Arrange the transport has a pan icon instead: a pop-out with each character's pan in this scene or the whole room.)*
 
 ## Box editor (overlay)
 

@@ -211,6 +211,24 @@ pub struct Scene {
     /// How far along the editor says it is. `None` until they say (D119).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<SceneStatus>,
+    /// Where the characters stand in this room, by character id, −1 left … +1 right. Every scene
+    /// of a location holds the same values (D122).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub room_pan: BTreeMap<String, f64>,
+    /// This scene's own values, over the room's.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub voice_pan: BTreeMap<String, f64>,
+}
+
+impl Scene {
+    /// Where a character's voice sits in this scene: its own value, or the room's.
+    pub fn pan_of(&self, character: &str) -> f64 {
+        self.voice_pan
+            .get(character)
+            .or_else(|| self.room_pan.get(character))
+            .copied()
+            .unwrap_or(0.0)
+    }
 }
 
 /// Where a scene stands, as the editor marks it on the scene rail.

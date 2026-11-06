@@ -343,6 +343,16 @@ pub enum Command {
         tone: Option<SceneTone>,
     },
     /// How much of the scene's room a character's voice takes.
+    /// Where a character stands: in this scene, or with `room` in every scene of its location
+    /// that has no value of its own. `pan: None` takes the value away.
+    SetCharacterPan {
+        scene_id: String,
+        character_id: String,
+        #[serde(default)]
+        pan: Option<f64>,
+        #[serde(default)]
+        room: bool,
+    },
     SetCharacterWet {
         character_id: String,
         wet: f64,
@@ -517,6 +527,7 @@ impl Command {
             Command::SlipSound { .. } => "slip_sound",
             Command::SetSceneRoom { .. } => "set_scene_room",
             Command::SetRoomAmbience { .. } => "set_room_ambience",
+            Command::SetCharacterPan { .. } => "set_character_pan",
             Command::SetCharacterWet { .. } => "set_character_wet",
             Command::SetSceneTone { .. } => "set_scene_tone",
             Command::PutBucket { .. } => "put_bucket",
@@ -1189,6 +1200,12 @@ impl Command {
                 night,
                 tone,
             } => sounds::set_ambience(tx, scene_id, *night, tone),
+            Command::SetCharacterPan {
+                scene_id,
+                character_id,
+                pan,
+                room,
+            } => sounds::set_voice_pan(tx, scene_id, character_id, *pan, *room),
             Command::SetCharacterWet { character_id, wet } => {
                 sounds::set_voice_wet(tx, character_id, *wet)
             }

@@ -242,6 +242,49 @@ pub(crate) fn set_room(tx: &mut Tx, scene_id: &str, room: &SceneRoom) -> Result<
     Ok(serde_json::to_value(scene.room)?)
 }
 
+/// A character's pan: this scene's own, or with `room` the value of its whole room, which the
+/// other scenes of the location inherit. `None` takes the value away. A scene's own value stays
+/// when the room's changes: that's what makes it its own.
+pub(crate) fn set_voice_pan(
+    tx: &mut Tx,
+    scene_id: &str,
+    character: &str,
+    pan: Option<f64>,
+    room: bool,
+) -> Result<Value> {
+    if !tx.doc().characters.contains_key(character) {
+        return Err(CoreError::not_found("character", character));
+    }
+    let mut scene = tx
+        .doc()
+        .scenes
+        .get(scene_id)
+        .cloned()
+        .ok_or_else(|| CoreError::not_found("scene", scene_id))?;
+    let pan = pan
+        .map(|p| finite("pan", p).map(|p| p.clamp(-1.0, 1.0)))
+        .transpose()?;
+    let write = |values: &mut std::collections::BTreeMap<String, f64>| match pan {
+        Some(p) => {
+            values.insert(character.to_string(), p);
+        }
+        None => {
+            values.remove(character);
+        }
+    };
+    if room {
+        for mut other in same_place(tx, &scene) {
+            write(&mut other.room_pan);
+            tx.put(&other)?;
+        }
+        write(&mut scene.room_pan);
+    } else {
+        write(&mut scene.voice_pan);
+    }
+    tx.put(&scene)?;
+    Ok(json!({ "pan": scene.pan_of(character) }))
+}
+
 /// The other scenes of a scene's location.
 fn same_place(tx: &Tx, scene: &Scene) -> Vec<Scene> {
     tx.doc()
@@ -1296,5 +1339,60 @@ mod tests {
         })
         .unwrap();
         assert_eq!(sc(&bus, heading).unwrap().room, room);
+    }
+
+    /// Scenes s1 and s2 in one place, s3 in another, and a character.
+    fn setup_two_rooms() -> (tempfile::TempDir, CommandBus) {
+        let (d, mut bus) = setup();
+        let scene = bus.doc().scenes.values().next().cloned().unwrap();
+        bus.execute_fn("seed", &Value::Null, |tx| {
+            for (id, location) in [("s1", "LAB"), ("s2", "LAB"), ("s3", "ROOF")] {
+                tx.put(&Scene {
+                    id: id.into(),
+                    location: location.into(),
+                    ..scene.clone()
+                })?;
+            }
+            tx.put(&serde_json::from_value::<Character>(json!({
+                "id": "PAUL", "label": "Paul", "color_index": 0, "aliases": [],
+            }))?)?;
+            Ok(Value::Null)
+        })
+        .unwrap();
+        (d, bus)
+    }
+
+    #[test]
+    fn a_scene_inherits_its_rooms_pan_until_it_has_its_own() {
+        let (_d, mut bus) = setup_two_rooms();
+        let pan = |scene: &str, pan: Option<f64>, room: bool| Command::SetCharacterPan {
+            scene_id: scene.into(),
+            character_id: "PAUL".into(),
+            pan,
+            room,
+        };
+        // the room's value reaches the other scene of the place, not another place
+        bus.execute(&pan("s1", Some(-0.4), true)).unwrap();
+        let of = |bus: &CommandBus, s: &str| bus.doc().scenes[s].pan_of("PAUL");
+        assert_eq!(of(&bus, "s1"), -0.4);
+        assert_eq!(of(&bus, "s2"), -0.4);
+        assert_eq!(of(&bus, "s3"), 0.0);
+
+        // a scene's own value wins, and a later room value leaves it alone
+        bus.execute(&pan("s2", Some(0.7), false)).unwrap();
+        bus.execute(&pan("s1", Some(0.1), true)).unwrap();
+        assert_eq!(of(&bus, "s1"), 0.1);
+        assert_eq!(of(&bus, "s2"), 0.7);
+
+        // taken away, it goes back to the room
+        bus.execute(&pan("s2", None, false)).unwrap();
+        assert_eq!(of(&bus, "s2"), 0.1);
+
+        // out of range is brought back, nonsense is refused, undo is one step
+        bus.execute(&pan("s3", Some(4.0), false)).unwrap();
+        assert_eq!(of(&bus, "s3"), 1.0);
+        assert!(bus.execute(&pan("s3", Some(f64::NAN), false)).is_err());
+        bus.undo().unwrap();
+        assert_eq!(of(&bus, "s3"), 0.0);
     }
 }

@@ -479,6 +479,16 @@ pub enum SfxCmd {
     Rooms,
     /// How much of the scene's room a character's voice takes (0 dry … 1).
     VoiceWet { character: String, wet: f64 },
+    /// Where a character stands in a scene (−1 left … +1 right), or with --room in its whole
+    /// room. Without a value, it goes.
+    VoicePan {
+        scene: String,
+        character: String,
+        #[arg(allow_negative_numbers = true)]
+        pan: Option<f64>,
+        #[arg(long)]
+        room: bool,
+    },
     /// Loop a scene's room tone from a library sound. Without --sound it plays its location's.
     RoomTone {
         scene: String,
@@ -599,6 +609,16 @@ fn sound_call(sess: &mut Session, cmd: &SfxCmd) -> Option<anyhow::Result<Value>>
             sess,
             "set_character_wet",
             json!({ "character": character, "wet": wet }),
+        ),
+        SfxCmd::VoicePan {
+            scene,
+            character,
+            pan,
+            room,
+        } => call(
+            sess,
+            "set_character_pan",
+            json!({ "scene": scene, "character": character, "pan": pan, "room": room }),
         ),
         SfxCmd::RoomTone { scene, sound, gain } => call(
             sess,
