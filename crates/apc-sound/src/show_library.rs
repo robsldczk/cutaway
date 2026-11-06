@@ -159,13 +159,18 @@ fn rel_of(root: &Path, p: &Path) -> String {
         .unwrap_or_else(|_| p.to_string_lossy().into_owned())
 }
 
-/// Where a show keeps its machine-local files (`CUTAWAY_DATA_DIR` overrides; tests use it).
-pub fn local_dir(show: &Show) -> PathBuf {
-    let base = std::env::var_os(format!("{}_DATA_DIR", apc_core::brand::SLUG.to_uppercase()))
+/// Where this machine keeps what isn't part of any project (`CUTAWAY_DATA_DIR` overrides; tests
+/// use it).
+pub fn data_root() -> PathBuf {
+    std::env::var_os(format!("{}_DATA_DIR", apc_core::brand::SLUG.to_uppercase()))
         .map(PathBuf::from)
         .or_else(|| dirs::data_dir().map(|d| d.join(apc_core::brand::SLUG)))
-        .unwrap_or_else(|| std::env::temp_dir().join(apc_core::brand::SLUG));
-    base.join("shows").join(&show.data.id)
+        .unwrap_or_else(|| std::env::temp_dir().join(apc_core::brand::SLUG))
+}
+
+/// Where a show keeps its machine-local files.
+pub fn local_dir(show: &Show) -> PathBuf {
+    data_root().join("shows").join(&show.data.id)
 }
 
 /// A track's stems folder (`ES_Home Straight - Jon Bjork/` next to the `.wav` or `.zip` of

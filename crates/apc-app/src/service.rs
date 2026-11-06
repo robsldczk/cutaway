@@ -53,6 +53,8 @@ pub struct Service {
     pub warnings: Vec<String>,
     /// This UI session holds the episode's lock file (studio mode).
     locked: bool,
+    /// Who's reviewing, and how this session stands to the review files.
+    pub review: crate::review::ReviewLocal,
 }
 
 fn default_secrets() -> Arc<dyn apc_sound::secrets::SecretStore> {
@@ -84,7 +86,26 @@ impl Service {
         Self::from_store(paths, store, client)
     }
 
+    /// A session on a private copy of someone's package (review mode): nothing in the package
+    /// is written, so it takes no lock and makes no backups.
+    pub(crate) fn from_private(
+        paths: EpisodePaths,
+        store: EpisodeStore,
+        client: &str,
+    ) -> Result<Self> {
+        Self::start(paths, store, client, true)
+    }
+
     fn from_store(paths: EpisodePaths, store: EpisodeStore, client: &str) -> Result<Self> {
+        Self::start(paths, store, client, false)
+    }
+
+    fn start(
+        paths: EpisodePaths,
+        store: EpisodeStore,
+        client: &str,
+        private: bool,
+    ) -> Result<Self> {
         let bus = CommandBus::new(store, client)?;
         let backups = BackupManager::new(&paths, RotationPolicy::default(), Box::new(SystemClock));
         let show_lib = match &paths.show {
@@ -104,11 +125,12 @@ impl Service {
             show_lib,
             warnings: Vec::new(),
             locked: false,
+            review: crate::review::ReviewLocal::new(private),
         };
         if svc.paths.show.is_some() {
             svc.warnings = crate::studio::sync_warnings(&svc.paths);
             // the UI holds the lock; the CLI, MCP and background jobs share the episode
-            if client == "ui" {
+            if client == "ui" && !private {
                 if let Some(w) = crate::studio::take_lock(&svc.paths)? {
                     svc.warnings.insert(0, w);
                 }
@@ -143,6 +165,11 @@ impl Service {
         ProjectConfig::from_doc(self.doc())
     }
 
+    /// The bus takes notes and nothing else.
+    pub fn in_review(&self) -> bool {
+        self.bus.mode() == apc_core::bus::BusMode::Review
+    }
+
     /// Executes a command and runs the autosave check.
     pub fn exec(&mut self, cmd: &Command) -> Result<Executed> {
         let r = self.bus.execute(cmd)?;
@@ -156,6 +183,10 @@ impl Service {
     /// `Backups/` (every command is already on disk; this keeps the last minutes restorable).
     pub fn close(&mut self) -> Result<Value> {
         crate::player::stop(self)?;
+        if self.review.private {
+            // the private copy stays for next time; the package was never touched
+            return Ok(json!({ "file": self.paths.file.to_string_lossy(), "snapshot": null }));
+        }
         let snap = self.backups.flush(self.bus.store())?;
         // a sync tool copies the episode file alone: fold the log into it
         self.bus.store().checkpoint()?;
@@ -167,6 +198,9 @@ impl Service {
     }
 
     pub fn after_write(&mut self) -> Result<()> {
+        if self.review.private {
+            return Ok(());
+        }
         self.backups.note_change();
         if self.backups.maybe_autosave(self.bus.store())?.is_some() && self.paths.show.is_some() {
             self.bus.store().checkpoint()?;

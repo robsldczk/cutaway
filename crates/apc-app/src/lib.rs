@@ -14,6 +14,7 @@ pub mod mapping;
 pub mod methods;
 pub mod performances;
 pub mod player;
+pub mod review;
 pub mod service;
 pub mod shows;
 pub mod sound;

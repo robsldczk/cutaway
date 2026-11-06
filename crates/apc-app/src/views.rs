@@ -169,6 +169,8 @@ pub struct SceneSummary {
     pub lock: Option<SceneLock>,
     /// How far along the editor has marked it.
     pub status: Option<SceneStatus>,
+    /// Review notes on it that nobody has resolved.
+    pub open_notes: usize,
 }
 
 #[derive(Serialize)]
@@ -237,6 +239,8 @@ pub struct SceneView {
     pub characters: Vec<CharacterView>,
     /// The characters who speak in this scene and where they stand.
     pub pans: Vec<VoicePanView>,
+    /// The scene's open review notes, where they are on the cut now.
+    pub notes: Vec<crate::review::NoteMark>,
     pub story: SceneStoryView,
     pub rev: i64,
     pub can_undo: bool,
@@ -282,6 +286,7 @@ fn flagged_in(doc: &Document, scene_id: &str) -> usize {
 }
 
 pub fn scene_summaries(doc: &Document) -> Vec<SceneSummary> {
+    let notes = crate::review::counts(doc);
     doc.scenes_in_order()
         .iter()
         .map(|s| {
@@ -307,6 +312,7 @@ pub fn scene_summaries(doc: &Document) -> Vec<SceneSummary> {
                 synopsis: s.story.synopsis.clone(),
                 lock: s.lock.clone(),
                 status: s.status,
+                open_notes: notes.get(&s.id).map(|c| c.1).unwrap_or(0),
             }
         })
         .collect()
@@ -675,6 +681,7 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
         scenes: summaries,
         characters: chars,
         pans: voice_pans(&doc, &scene),
+        notes: crate::review::marks(&doc, &layout),
         rev: svc.bus.rev(),
         can_undo: svc.bus.can_undo()?,
         can_redo: svc.bus.can_redo()?,

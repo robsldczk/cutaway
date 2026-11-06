@@ -16,4 +16,4 @@ pub use providers::{
     GenerateRequest, GeneratedSound, SoundCandidate, SoundGenerateProvider, SoundQuery,
     SoundSearchProvider,
 };
-pub use show_library::ShowLibrary;
+pub use show_library::{data_root, ShowLibrary};

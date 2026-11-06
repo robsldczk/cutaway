@@ -15,6 +15,7 @@ use apc_core::*;
 use apc_export::{bounce, cutlist, fcpxml, srt, EpisodeTimeline, ExportScope};
 
 use crate::error::{AppError, Result};
+use crate::review;
 use crate::service::Service;
 use crate::sound_edit::{
     BatchSoundsP, MoveSoundP, PlacementP, SceneRoomP, SlipSoundP, SoundDepthP, SoundFadesP,
@@ -1138,6 +1139,28 @@ registry! {
     "edit_take", EditTakeP, Write, true, "Change a take where it stands: its in and out points, its mic, or what it says (to correct a misheard word). Its number, favorite and notes stay. A re-run of the analysis leaves it alone.";
     "delete_take", DeleteTakeP, Destructive, true, "Delete one take of a line; the line stays. The next take is picked, undo brings it back, and a re-run of the analysis doesn't.";
     "add_line", AddLineP, Write, true, "Add a line that isn't in the script, from a stretch of a character's mic, after a line or action of the scene. A re-run of the analysis leaves it alone.";
+    "open_review", PathP, Read, true, "Open an episode or show package for review, read-only: the cut can be played and written on, nothing else. The package itself is never written to; notes leave through the reviewer's own review file.";
+    "enter_review", NoParams, Write, false, "Put the open episode in review mode: only note commands get through.";
+    "leave_review", NoParams, Write, false, "Back to editing the open episode.";
+    "reviewer", NoParams, Read, true, "Who's reviewing on this computer, and who was here last.";
+    "set_reviewer", review::SetReviewerP, Write, true, "Say who's writing notes: name, role (director, producer, writer, actor, client, editor, other), and remember to keep them on this computer.";
+    "start_review_round", review::StartRoundP, Write, true, "Open scenes for review: starts a round that keeps which cut they're in (scene versions and timeline hashes), and marks them Review.";
+    "close_review_round", review::CloseRoundP, Write, true, "Close a review round. It stays in the history, and new notes no longer go to it.";
+    "note_target", review::TargetP, Read, false, "What a note at this spot would hang on: the word, run of words, pause, line or sound, with its quote and time.";
+    "add_note", review::AddNoteP, Write, true, "Write a note on the cut. Give at_s (and to_s for a range) to hang it on what's said there, or line_id (with word, to_word), or placement_id, or just the scene. It follows its element through reordering, take swaps and gap changes. Undoable.";
+    "reply_note", review::NoteTextP, Write, true, "Reply to a note. Undoable.";
+    "edit_note", review::NoteTextP, Write, true, "Change a note's text. Undoable.";
+    "tag_note", review::NoteTagP, Write, true, "Change a note's tag: performance, timing, sound or music. Undoable.";
+    "resolve_note", review::NoteP, Write, true, "Resolve a note. It records who and when, and shows as done in review at once. Undoable.";
+    "reopen_note", review::NoteP, Write, true, "Reopen a resolved note. It records who and when, and shows as open on the editing pages. Undoable.";
+    "list_notes", review::ListNotesP, Read, true, "The one feedback set: every note of every reviewer and round as it stands now, in threads, with where each is on the cut, and detached and changed-since-note flags. Filter by scene, round, status, tag or author.";
+    "review_view", review::ReviewViewP, Read, false, "Everything the review screen shows around a scene.";
+    "review_search", review::SearchP, Read, true, "Search scenes, lines and notes across every round.";
+    "review_history", NoParams, Read, true, "Each round (date, scenes, cut, reviewers) with open, resolved and reopened counts per scene and reviewer, and each arrival of a review.";
+    "review_sync", NoParams, Write, true, "Merge what's new in the shared Reviews folder and write this machine's own review file. A review session also picks up a package that changed. The app does this all the time.";
+    "add_review", review::AddReviewP, Write, true, "Add a .cutawayreview file: merged by the same rules as the shared folder, then archived in Reviews/Imported. Adding it again changes nothing.";
+    "send_review", review::SendReviewP, Write, true, "Save the current reviewer's notes as one .cutawayreview file, ready to hand over.";
+    "set_reviews_folder", PathP, Write, true, "Point the show's review files at another shared folder.";
     "delete_line", DeleteLineP, Destructive, true, "Take a line out of the cut. The script and the recordings stay as they are, a new script version doesn't bring it back, and undo does. Sounds hanging on it move to the next line.";
 }
 
@@ -1162,7 +1185,7 @@ fn need_confirm(name: &str, confirm: bool) -> Result<()> {
     }
 }
 
-fn scene_id(svc: &Service, key: Option<&str>) -> Result<String> {
+pub(crate) fn scene_id(svc: &Service, key: Option<&str>) -> Result<String> {
     let doc = svc.doc();
     match key {
         Some(k) => doc
@@ -1241,8 +1264,40 @@ impl Service {
         if info.access != Access::Read {
             self.bus.refresh()?;
         }
+        if self.in_review()
+            && info.access != Access::Read
+            && !review::REVIEW_METHODS.contains(&name)
+        {
+            return Err(refused_in_review(name));
+        }
         match name {
             "project_status" => self.status(),
+            "enter_review" => review::enter(self),
+            "leave_review" => review::leave(self),
+            "reviewer" => Ok(review::reviewer_view(self)),
+            "set_reviewer" => review::set_reviewer(self, parse(params)?),
+            "start_review_round" => review::start_round(self, parse(params)?),
+            "close_review_round" => {
+                let p: review::CloseRoundP = parse(params)?;
+                Ok(self.exec(&Command::CloseReviewRound { round_id: p.round })?.result)
+            }
+            "note_target" => review::target_view(self, &parse(params)?),
+            "add_note" => review::add_note(self, parse(params)?),
+            "reply_note" => review::reply_note(self, parse(params)?),
+            "edit_note" => review::edit_note(self, parse(params)?),
+            "tag_note" => review::tag_note(self, parse(params)?),
+            "resolve_note" => review::resolve_note(self, parse(params)?),
+            "reopen_note" => review::reopen_note(self, parse(params)?),
+            "list_notes" => review::list_notes(self, parse(params)?),
+            "review_view" => review::review_view(self, parse(params)?),
+            "review_search" => {
+                let p: review::SearchP = parse(params)?;
+                review::search(self, &p.q)
+            }
+            "review_history" => review::history(self),
+            "review_sync" => review::sync(self),
+            "add_review" => review::add_review(self, parse(params)?),
+            "send_review" => review::send_review(self, parse(params)?),
             "list_scenes" => Ok(serde_json::to_value(crate::views::scene_summaries(self.doc()))?),
             "import_script" => {
                 let p: ImportScriptP = parse(params)?;
@@ -1530,7 +1585,10 @@ impl Service {
             }
             "undo" | "redo" => {
                 let r = if name == "undo" { self.bus.undo()? } else { self.bus.redo()? };
-                if r.is_some() {
+                if let Some(s) = &r {
+                    if apc_core::bus::REVIEW_COMMANDS.contains(&s.name.as_str()) {
+                        review::after_step(self, s.seq, name == "undo")?;
+                    }
                     self.after_write()?;
                 }
                 Ok(json!({ "done": r.as_ref().map(|s| s.name.clone()), "rev": self.bus.rev() }))
@@ -1548,6 +1606,7 @@ impl Service {
                 let p: RevertP = parse(params)?;
                 need_confirm("revert", p.confirm)?;
                 let pre = self.backups.revert(&mut self.bus, &p.backup_id)?;
+                self.review.forget_files();
                 Ok(json!({ "reverted_to": p.backup_id, "pre_revert_backup": pre.id }))
             }
             "set_config" => {
@@ -2078,8 +2137,16 @@ impl Service {
             "pan_room": self.config().pacing.pan_room,
             "ai_warning": ai_warning,
             "jobs": self.jobs.list(),
+            "review": review::mode_view(self),
         }))
     }
+}
+
+fn refused_in_review(name: &str) -> AppError {
+    AppError::Core(CoreError::ReviewOnly(format!(
+        "Review mode only takes notes: {} isn't available here.",
+        name.replace('_', " ")
+    )))
 }
 
 /// A client session: maybe an open show, maybe an open episode, plus the project-level
@@ -2091,6 +2158,8 @@ pub struct Session {
     pub client: String,
     /// Jobs of the show, which outlive any one episode.
     show_jobs: crate::jobs::Jobs,
+    /// Opened for review: episodes open read-only, from the show's home too.
+    review: bool,
 }
 
 impl Session {
@@ -2100,7 +2169,45 @@ impl Session {
             show: None,
             client: client.to_string(),
             show_jobs: Default::default(),
+            review: false,
         }
+    }
+
+    /// Opens an episode or a show for review. Nothing in it is written.
+    fn open_review(&mut self, path: &Path) -> Result<Value> {
+        if let Some(svc) = self.service.as_mut() {
+            svc.close()?;
+        }
+        self.service = None;
+        let is_show = path.extension().and_then(|e| e.to_str()) == Some(apc_core::brand::SHOW_EXT)
+            || (path.is_dir()
+                && apc_core::project::find_episode_file(path).is_err()
+                && apc_core::show::Show::open(path).is_ok());
+        self.review = true;
+        if is_show {
+            let show = apc_core::show::Show::open(path)?;
+            let v = crate::shows::view(&show, None);
+            self.show = Some(show);
+            return Ok(json!({ "show": v }));
+        }
+        let svc = review::open_package(path, &self.client)?;
+        let file = svc.paths.file.to_string_lossy().into_owned();
+        self.show = svc.paths.show.clone();
+        self.service = Some(svc);
+        Ok(json!({ "file": file }))
+    }
+
+    /// In review, nothing of the show or the episodes around it changes either.
+    fn check_review(&self, name: &str) -> Result<()> {
+        let held = self
+            .service
+            .as_ref()
+            .map_or(self.review, Service::in_review);
+        let writes = method(name).is_some_and(|m| m.access != Access::Read);
+        if held && writes && !review::REVIEW_METHODS.contains(&name) && name != "open_episode" {
+            return Err(refused_in_review(name));
+        }
+        Ok(())
     }
 
     /// Opens an episode file or folder, or a show folder or file.
@@ -2179,7 +2286,26 @@ impl Session {
     }
 
     pub fn call(&mut self, name: &str, params: &Value) -> Result<Value> {
+        self.check_review(name)?;
         match name {
+            "open_review" => {
+                let p: PathP = parse(params)?;
+                self.open_review(Path::new(&p.path))
+            }
+            "set_reviews_folder" => {
+                let p: PathP = parse(params)?;
+                let show = self
+                    .show
+                    .as_mut()
+                    .ok_or_else(|| AppError::Params("no show is open (open_show)".into()))?;
+                show.set_reviews_folder(Path::new(&p.path))?;
+                let dir = show.reviews_dir();
+                if let Some(svc) = self.service.as_mut() {
+                    svc.paths.show = Some(show.clone());
+                    svc.review.forget_files();
+                }
+                Ok(json!({ "folder": dir.to_string_lossy() }))
+            }
             "create_show" => {
                 let p: CreateShowP = parse(params)?;
                 let root = match (&p.root, &p.parent, &p.name) {
@@ -2199,13 +2325,15 @@ impl Session {
                 let p: ShowPathP = parse(params)?;
                 let show = apc_core::show::Show::open(Path::new(&p.path))?;
                 self.close_episode_outside(&show.root)?;
+                self.review = false;
                 let v = crate::shows::view(&show, self.service.as_ref());
                 self.show = Some(show);
                 Ok(v)
             }
             "show_view" => {
                 let show = apc_core::show::Show::open(&self.need_show()?.file)?;
-                let v = crate::shows::view(&show, self.service.as_ref());
+                let mut v = crate::shows::view(&show, self.service.as_ref());
+                v["review"] = json!(self.review);
                 self.show = Some(show);
                 Ok(v)
             }
@@ -2233,6 +2361,7 @@ impl Session {
                 let show = self.need_show()?.clone();
                 let info = show.episode_info(&p.episode);
                 let svc = match &info.file {
+                    Some(f) if self.review => review::open_package(f, &self.client)?,
                     Some(f) => Service::open(f, &self.client)?,
                     None if p.create => {
                         Service::create(&show.root, &p.episode, Some(&show.root), &self.client)?
@@ -2256,6 +2385,7 @@ impl Session {
                 }
                 self.service = None;
                 self.show = None;
+                self.review = false;
                 Ok(json!({ "closed": true }))
             }
             "migrate_episode" => {
@@ -2286,6 +2416,7 @@ impl Session {
             "open_project" => {
                 let p: OpenP = parse(params)?;
                 let svc = Service::open(Path::new(&p.path), &self.client)?;
+                self.review = false;
                 self.open_service(svc)
             }
             "close_project" => {
@@ -2297,6 +2428,8 @@ impl Session {
                 }
                 let r = svc.close()?;
                 self.service = None;
+                // a review of one episode ends here; a show stays open for review at its home
+                self.review = self.review && self.show.is_some();
                 Ok(r)
             }
             "job_status" => {

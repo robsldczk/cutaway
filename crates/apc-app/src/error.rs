@@ -48,6 +48,7 @@ impl AppError {
             AppError::Core(apc_core::CoreError::NotFound { .. }) => "not_found",
             AppError::Core(apc_core::CoreError::Invalid(_)) => "invalid",
             AppError::Core(apc_core::CoreError::SceneLocked(_)) => "scene_locked",
+            AppError::Core(apc_core::CoreError::ReviewOnly(_)) => "review_only",
             _ => "error",
         }
     }

@@ -91,6 +91,11 @@ fn history(paths: &EpisodePaths, ep: EpisodeTag) -> History {
     History::new(records)
 }
 
+/// Every version of the open episode.
+pub fn episode_history(svc: &Service) -> History {
+    history(&svc.paths, episode_tag(&svc.name(), &svc.paths))
+}
+
 fn record_view(r: &ExportRecord) -> Value {
     json!({
         "version": r.manifest.version,
@@ -168,7 +173,10 @@ pub fn status(svc: &Service) -> Result<Value> {
         "pipeline": svc.paths.show.as_ref().map(pipeline_fields),
         "presets": cfg.export.presets,
         "defaults": ExportSettings::default(),
-        "warnings": lane_warning(doc).into_iter().collect::<Vec<_>>(),
+        "warnings": lane_warning(doc)
+            .into_iter()
+            .chain(crate::review::locked_with_notes(doc))
+            .collect::<Vec<_>>(),
         "ffmpeg": ffmpeg_available(),
     }))
 }
