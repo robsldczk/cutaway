@@ -302,6 +302,8 @@ cutaway sfx rooms                              each scene's room
 cutaway sfx room S2 --size 0.8 --wet 0.3       set a scene's room
 cutaway export fcpxml --scene S1               export a rough cut
 cutaway deliver --scene 2 --as stems            export as the Export page does (--dry-run first)
+cutaway deliver --as one-file                   the episode as a single mix
+cutaway deliver --status finished               only the scenes marked so
 cutaway deliver --episode "Episode 2" --to pipeline   a show export
 cutaway lock 2                                  lock a scene's timing (unlock 2 --yes)
 cutaway exports                                 locks and export history

@@ -285,6 +285,8 @@ A glass sheet in three steps:
 
 *Changed in implementation (D108, D109):* Export is the fourth page (`4`; ⌘E goes there, and on it exports), one sheet with Range, Export as, Tracks, Format, Also export and Save to. It replaces this panel and the header's Export button. An exported scene locks: a quiet banner on Options, Arrange and Edit, a lock in the scene list, no trim handles, and a refused edit says why at the pointer. From the show home, Export for the show saves to the confirmed pipeline folder.
 
+*Changed in implementation (D133, D134):* Range is a list of boxes with All, None, Invert and the scene marks above it; every box ticked is the whole episode, so the Whole episode switch is gone. ⇧ click takes a run and a press sweeps. Export as has One file.
+
 *Changed in implementation (D127):* the sheet lies wide: three columns read left to right (Range and History; Export as and Tracks; Format, Also export and Save to), labels above their controls. It's never taller than the window: the columns scroll inside it and the footer stays in view.
 
 *Changed in implementation (D119):* a right click on a scene marks it in progress, review or finished, and the mark is the colour of its cell.

@@ -383,3 +383,35 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 4. **Side by side on a real scene:** half a column is narrow beside the sounds, so check the cards read well with long lines.
 5. **Episode 2's glued sounds:** change a pause in one of scenes 1, 2, 3, 12, 14, 15 or 16 and check its effects follow.
 
+
+## The Range's boxes, one file, and folders without spaces (2026-11-06, D132–D134)
+
+**What was built**
+
+- **Boxes instead of chips,** on the Export page and in the show export: a list with each scene's number, place, lock, mark and length.
+- **All, None and Invert,** and the marks: In progress, Review and Finished, with their counts. A click takes the scenes marked so, ⌘ click adds them.
+- **Multi-select:** a click ticks one box, ⇧ click takes a run, a press sweeps across boxes.
+- **Every box ticked is the whole episode,** so the Whole episode switch is gone.
+- **Export as → One file:** the range as a single mix, scene after scene with a 2 s pause, as an episode version. WAV, FLAC or MP3. Its SRT and FCPXML fit the file.
+- **Folders need no quoting:** `Sc03_Colonels_Office/v002_2026-11-06`.
+- `deliver --as one-file`, `deliver --status finished`, and `status` and `one_file` on `export_plan` and `export_scenes` for agents.
+
+**Not built**
+
+- A limiter: One file reaches its loudness by gain alone (see check 1).
+- The 2 s pause as a setting. Stems of a whole episode as one file each.
+- Marks across a whole show: each episode has its own buttons.
+- Old folders aren't renamed. Episode 2's `Exports` was empty when this was tried, so nothing is left in the old form there.
+
+**How it was verified**
+
+- `check.sh` green. Playwright 183 of 183. 35 end-to-end export tests, 12 of them new; putting the old scene spacing back fails 3 of them.
+- On a copy of Episode 2, never the share: all 16 scenes are byte for byte their own mix inside the one file, with exactly 2 s of digital silence between them. An MP3 of it has the same length, and `--status finished` takes the 6 finished scenes.
+- In the real app (WKWebView, in-page events, the same copy): All, None, Invert, the marks, ⇧ runs, a sweep and a one-file export.
+
+**Manual checks for Rob**
+
+1. **Loudness of One file.** Episode 2 stops at −23.8 LUFS when −16 is asked for, because one peak holds the whole gain back. The page says so. Either find and turn down that peak, or say if you want a limiter.
+2. **Sweep with the real mouse.** The test events can't show how a press across the boxes feels, or that WebKit starts no text selection on the way.
+3. **Listen to the joins.** The pause is 2 s of digital silence. It may want room tone, or another length.
+4. **Open the one file's FCPXML in Resolve** beside the WAV, and check they line up to the end.

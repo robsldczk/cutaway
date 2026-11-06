@@ -1042,3 +1042,38 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **The record of what was open is cleared before opening and written back after,** so an episode that brings the app down isn't opened at every launch.
 - **A spot that no longer fits:** a playhead past the end stops at the end, a line that has gone gives way to the line at the playhead, and a scene that has gone falls back to the first, on the same page.
 - **Not remembered:** selections, open drawers and the scroll of Arrange and Options, which follow the current line anyway. Edit has its own scroll, so it now brings the playhead into sight when it opens. That also applies when coming from another page.
+
+### D132 Export folders a machine can read (Rob, 2026-11-06)
+- **Rob:** the export folder names shouldn't have spaces, so they stay machine readable.
+- **The names:** `Sc03_Colonels_Office/v002_2026-11-06`, and `Episode/v002_2026-11-06`. Conflict with the handover and D117, which draw `Sc02 Canteen/v003 2026-11-05`: Rob's word goes.
+- **Spaces weren't the only problem:** Episode 2 has `Colonel’s Office` and `Nina’s Bedroom`, and a curly apostrophe needs quoting as much as a space does. So the rule is ASCII letters, digits and hyphens, with `_` between words. An apostrophe belongs to its word (`Colonels`); anything else is a break. The half-written folder follows it too.
+- **Options for accents:** keep them, as file names keep `ÉMILE`; drop the letter; or fold to ASCII. Folded: a name with `ü` can reach Syncthing as two different byte strings, which is the machine-readability Rob is after. `deunicode` does it (BSD-3-Clause), rather than a table of our own. It folds `Küche` to `Kuche`, not `Kueche`: it's a name for a folder, and the number says which scene it is.
+- **File names don't change:** `E02_S02_v003_Dialogue.wav` never had a space. A character's name in a file keeps its accents (`token`), since Rob asked about folders.
+- **Older versions stay where they are.** History comes from the manifests, not the folder names, so they still count and the next version numbers on. They aren't renamed: a version's FCPXML can point at its own stems by absolute path, and those are delivered files.
+- **Out of reach:** the path above `Exports` (`Episodes/Episode 2/Sound/`) is the show's own layout, shared with Jetplane.
+
+### D133 The Range is a list of boxes (Rob, 2026-11-06)
+- **Rob:** boxes to select instead of the chips, a select all button, multi-select, an inverse selection, and all scenes by completion tag.
+- **A list, not a grid of tiles:** Episode 2 has 16 scenes, some named `Time Spring Command`, in a column 300 px wide. A row has the box, the number, the place, the lock, the mark and the length, so the choice is made without leaving the page.
+- **Whole episode is gone as a switch:** with All beside it, it would look the same as every box ticked and quietly write something else, because only Whole episode wrote the `Episode` version. Now every box ticked is the whole episode, and the page says so ("The episode becomes v004"). This changes the handover's "Whole episode, or Scenes". The same goes for a show export: every box of an episode ticked sends the episode.
+- **Multi-select:** a click ticks one box and leaves the others, as a box does, so ⌘ click is the same click. ⇧ click takes the run from the last box touched, in the direction the clicked box goes, as on Arrange (D130). A press sweeps: the boxes crossed become what the first became.
+- **Marks:** a click takes exactly the scenes marked so, and ⌘ or ⇧ adds them, or takes them off once they're all ticked. Adding on a plain click would keep the current scene, which is ticked when the page opens, and that's the stray tick that goes out by mistake. Each mark shows its count and is greyed out at zero. **No "unmarked" button:** nothing asked for it, and Invert reaches it.
+- **None** wasn't asked for, but without it the only way to empty the list is All and Invert.
+- **A scene with nothing in it** has a greyed-out box, and All, Invert and the marks pass it by. The current scene isn't ticked if it's one.
+- **Buttons, not inputs:** `role="checkbox"` on a button, so a press is one event carrying its modifiers, with no label and input to keep apart during a sweep. Tried in WKWebView with in-page events; a session can't send it real mouse input.
+- **`status` on `export_plan` and `export_scenes`, `--status` on `deliver`:** the handover wants every option in the CLI and MCP. It narrows the range, so it isn't the whole episode. One episode at a time: `--status` with `--episode` is refused, as `--dry-run` is.
+- **The columns:** 0.9 / 1.24 / 0.86, so the marks fit one row and Tracks keeps its width. The list grows with the window, up to about 16 scenes, then scrolls. D127's three columns and fixed footer still hold.
+
+### D134 An episode as one file (Rob, 2026-11-06)
+- **Rob:** a possibility to export the episode as one file. On the morning of the 6th, Whole episode with Mix only had written 16 separate mixes and an `Episode` folder with only a manifest in it.
+- **Export as → One file** (`one_file`, `--as one-file`). Mix only stays one mix per scene. It's a way of exporting, not a kind of range, so it takes whatever is ticked, and picks of scenes work the same as the whole episode.
+- **The file is each scene's own mix,** from the same render path, laid end to end. Checked on a copy of Episode 2: all 16 scenes are byte for byte their own mix inside the file, with exactly 2 s of digital silence between them.
+- **The spacing had to change:** `EpisodeTimeline` spaces scenes by their lines, but a sound can run on past the last line, and the room rings after that. On those offsets one scene would play under the next, and a scene of sounds alone would drop out. `EpisodeTimeline::joined` spaces them by what's heard, plus `SCENE_GAP_S`, and the file, its SRT and its FCPXML all come from it. `build` is unchanged, so a whole-episode FCPXML reads as before; it still lets such scenes overlap.
+- **Rob might want another pause:** 2 s is the timeline's constant. It isn't a setting yet.
+- **It's a version of the episode,** in `Episode/v004_…` and on the episode's counter, since it's one thing. The scenes get no version, so `manifest.scenes` holds them with version 0: nothing was rendered per scene, and naming their last versions would claim the file was made from those.
+- **Its timeline hash** is one over the scenes' hashes, so "unchanged since" works for the same scenes. A whole-episode version has no hash and doesn't count.
+- **Locks:** the checkbox holds. Those scenes have no version to name, so the lock names none. A scene already locked keeps the version its lock names.
+- **MP3 is allowed:** it's a mix, and D111's reason is that MP3 can't hold a stem to the sample. "Also export" still applies: Rob's defaults put an SRT and an FCPXML beside the file, on the original recordings.
+- **Loudness applies once, to the whole file,** so the scenes keep their balance. **Known and left as it is:** it's a gain, not a limiter (D110), so one loud peak anywhere holds back the whole episode. Episode 2 stops at −23.8 LUFS when −16 is asked for, and the page says so. Reaching −16 needs a limiter, or that peak turned down.
+- **In memory:** the whole mix is held once, about 1.4 GB an hour at 48 kHz in 32-bit floats. Episode 2's 9:22 peaked at 886 MB and took 28 s in a debug build.
+- **History** now lists the episode's versions too (`Ep. v004`), which it never showed: with no scene versions, the file would have had no Reveal.
