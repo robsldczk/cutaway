@@ -8,7 +8,7 @@
   import { charColor, rgba } from '../lib/colors';
   import { clamp } from '../lib/format';
   import { partKey } from '../lib/sounds/keymap';
-  import { autoFadeToggle, fadeLevel, keepWindow, nearestIn, openWindow, partAt, partText, quickLen, quickOn, readout, reshape, reshapeCommands, snapTol, tOf, yOf, type OpenState, type Ops, type Part, type Quick, type Reshaped, type Win } from '../lib/sounds/opened';
+  import { autoFadeToggle, fadeLevel, keepWindow, nearestIn, openWindow, partAt, partText, quickLen, quickOn, readout, reshape, reshapeCommands, scrubLimits, snapTol, sourceAt, tOf, yOf, type OpenState, type Ops, type Part, type Quick, type Reshaped, type Win } from '../lib/sounds/opened';
   import { clipLines, columnWave, peakAt, spinePaths } from '../lib/sounds/paths';
   import { dbText, panText, ringOf, zone } from '../lib/sounds/select';
   import type { SnapTarget } from '../lib/sounds/snap';
@@ -36,6 +36,10 @@
   const SOUND_HALF = 62;
   const DIALOGUE_X = 40;
   const DIALOGUE_AMP = 14;
+  /** The scrubber's rail, left of the sound. */
+  const RAIL_W = 16;
+  /** A drag restarts the sound no more often than this, so it stays a sound and not a click. */
+  const SCRUB_MS = 90;
   const PRESS_PX = 2;
   const PEAK_PX = 2;
   const MAX_PEAKS = 2000;
@@ -176,6 +180,12 @@
     const g = grab;
     if (!g) return;
     stop();
+    // a click on the sound puts the scrubber there
+    if (g.part === 'move' && !g.moved) {
+      ops.cancel();
+      headTo(timeAtY(g.y0));
+      return;
+    }
     const cmds = g.moved && g.r ? reshapeCommands(g.now, g.base, g.r) : [];
     ops.finish(cmds, g.r && cmds.length ? partText(g.now, g.base, g.r) : '');
   }
@@ -199,6 +209,76 @@
     ops.apply(r.patch, [r.cmd], r.patch.auto_fade ? 'Auto fade on' : 'Auto fade off');
   }
 
+  // ---- the scrubber: the sound alone, on the preview player ----
+
+  let over = $state<HTMLDivElement>();
+  let rail = $state<HTMLDivElement>();
+  let headT = $state(untrack(() => s.start_s));
+  let scrubbing = false;
+  const limits = $derived(scrubLimits(s));
+  const headY = $derived(y(headT));
+  const alone = $derived(app.previewing(assetId));
+  const canTrim = $derived(!app.sceneLocked);
+
+  const timeAtY = (clientY: number) => tOf(win, H, clamp(clientY - (over?.getBoundingClientRect().top ?? 0), 0, H));
+  const headTo = (t: number) => (headT = clamp(t, limits.from, limits.to));
+  const playAt = (t: number) => app.playSound({ asset_id: assetId }, sourceAt(s, t), { name, duration_s: s.asset_len_s, peaks });
+
+  // while it plays, the scrubber goes with it
+  $effect(() => {
+    const p = app.preview;
+    if (p?.playing && p.id === assetId && !scrubbing) headT = untrack(() => limits.from) + p.pos;
+  });
+
+  function playPause() {
+    if (alone) return void app.stopSound();
+    // from the end there's nothing left to hear: start from the in point
+    if (headT >= limits.to - 0.02) headT = s.start_s;
+    void playAt(headT);
+  }
+
+  function scrubDown(e: MouseEvent) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    rail?.focus();
+    const was = alone;
+    let last = 0;
+    let dragged = false;
+    scrubbing = true;
+    headTo(timeAtY(e.clientY));
+    const move = (ev: MouseEvent) => {
+      headTo(timeAtY(ev.clientY));
+      dragged = true;
+      const now = performance.now();
+      if (now - last < SCRUB_MS) return;
+      last = now;
+      void playAt(headT);
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      scrubbing = false;
+      // playing, it goes on from here; a scrub ends with the mouse
+      if (was) void playAt(headT);
+      else if (dragged) void app.stopSound();
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  }
+
+  /** I and O: the sound's in or out at the scrubber. */
+  function setEdge(part: 'in' | 'out') {
+    if (!canTrim) return app.say('This scene is locked');
+    const r = reshape(part, s, headT);
+    const cmds = reshapeCommands(part, s, r);
+    if (cmds.length) ops.apply(r.patch, cmds, partText(part, s, r));
+  }
+
+  onMount(() => () => {
+    if (app.previewing(assetId)) void app.stopSound();
+  });
+
   /** On, the sound hangs on what's said where it stands; off, it stays at its time for good. */
   function toggleGlue() {
     const glued = !s.anchor;
@@ -218,7 +298,24 @@
     if (!el || !card?.contains(el)) return false;
     if (e.key === 'Tab') return wrap(e, el);
     // Enter here is not "play the line"; a button reached with Tab never gets this far
-    if (e.key === 'Enter') return true;
+    if (e.key === 'Enter') {
+      onclose(true);
+      return true;
+    }
+    const mod = e.metaKey || e.ctrlKey;
+    if (e.key === ' ' && !e.shiftKey && !mod) {
+      playPause();
+      return true;
+    }
+    const letter = !mod && !e.altKey && !e.shiftKey ? e.key.toLowerCase() : '';
+    if (letter === 'i' || letter === 'o') {
+      setEdge(letter === 'i' ? 'in' : 'out');
+      return true;
+    }
+    if (el === rail && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      headTo(headT + (e.key === 'ArrowUp' ? -1 : 1) * (e.altKey ? 0.01 : 0.1));
+      return true;
+    }
     const part = el.dataset.part as Part | undefined;
     const k = part ? partKey(e, part) : null;
     if (!k) return false;
@@ -228,7 +325,7 @@
 
   /** Tab stays in the view; Esc is the way out. */
   function wrap(e: KeyboardEvent, el: HTMLElement) {
-    const stops = [...(card?.querySelectorAll<HTMLElement>('button, [data-part]') ?? [])];
+    const stops = [...(card?.querySelectorAll<HTMLElement>('button, [data-part], [data-scrub]') ?? [])];
     const i = stops.indexOf(el);
     const last = stops.length - 1;
     const next = e.shiftKey ? (i <= 0 ? last : -1) : i === last ? 0 : -1;
@@ -250,7 +347,7 @@
   <div class="hd">
     <span class="dot"></span>
     <span class="title ellip">{name}</span>
-    <button class="close muted" onclick={() => onclose(true)} data-testid="opened-close"><span class="kb">Esc</span>close</button>
+    <button class="close muted" title="Enter or Esc" onclick={() => onclose(true)} data-testid="opened-close"><span class="kb">Esc</span>close</button>
   </div>
   <div class="loud muted tn ellip" data-testid="opened-reading">{reading}</div>
   <span class="col muted" style="left: 14px; top: {HEAD - 16}px">Dialogue</span>
@@ -266,9 +363,15 @@
     {#each ticks as t (t.t)}<path d="M{rulerX} {t.y.toFixed(1)}h8" class="tick" />{/each}
     {#if snapT != null}<path d="M{DIALOGUE_X - 14} {y(snapT).toFixed(1)}H{xr + 4}" class="snap" />{/if}
     {#if head >= 0 && head <= H}<path d="M12 {head.toFixed(1)}H{box.width - 12}" class="head" data-testid="opened-playhead" />{/if}
+    {#if headY >= 0 && headY <= H}<path d="M{xl - RAIL_W} {headY.toFixed(1)}H{xr}" class="scrubhead" data-testid="opened-scrubhead" />{/if}
   </svg>
-  <div class="over" style="top: {HEAD}px; height: {H}px">
+  <div class="over" bind:this={over} style="top: {HEAD}px; height: {H}px">
     {#each ticks as t (t.t)}<span class="rl tn" style="left: {rulerX + 12}px; top: {t.y.toFixed(1)}px">{t.t}</span>{/each}
+    <!-- svelte-ignore a11y_no_static_element_interactions (the rail is the keyboard's way) -->
+    <div class="zone" style="left: {xl}px; width: {xr - xl}px" onmousedown={scrubDown}></div>
+    <div class="rail" bind:this={rail} role="slider" tabindex="0" aria-label="Scrubber" aria-orientation="vertical" aria-valuemin={secs(sourceAt(s, limits.from))} aria-valuemax={secs(sourceAt(s, limits.to))} aria-valuenow={secs(sourceAt(s, headT))} aria-valuetext="{sourceAt(s, headT).toFixed(2)} seconds into the sound" title="Drag to hear the sound alone · Space plays it · I and O trim to here" style="left: {xl - RAIL_W}px; width: {RAIL_W}px" onmousedown={scrubDown} data-scrub data-testid="opened-scrub">
+      {#if headY >= 0 && headY <= H}<span class="dot-head" class:live={alone} style="top: {headY.toFixed(1)}px"></span>{/if}
+    </div>
     {#if !app.sceneLocked}
       {@render handle('in', 'Start of the sound', 'bar', `left: ${xl}px; width: ${xr - xl}px; top: ${(y(tIn) - 6).toFixed(1)}px`, s.start_s, Math.max(0, src0), tOut, `${s.start_s.toFixed(2)} seconds`, 'Trim the start')}
       {@render handle('move', 'Place of the sound, ⌥ arrows slip the audio inside', 'body', `left: ${xl}px; width: ${xr - xl}px; top: ${body.top.toFixed(1)}px; height: ${body.height.toFixed(1)}px`, s.start_s, 0, Math.max(s.start_s, app.view?.duration_s ?? 0), `Starts at ${s.start_s.toFixed(2)} seconds, ${s.in_s.toFixed(2)} into the source`, 'Drag to move · ⌥ drag to slip the sound inside')}
@@ -385,6 +488,11 @@
   .snap {
     fill: none;
   }
+  .scrubhead {
+    stroke: var(--locator);
+    stroke-width: 1.5;
+    fill: none;
+  }
   .fades {
     stroke: var(--playhead);
     stroke-width: 1.5;
@@ -406,6 +514,35 @@
     position: absolute;
     left: 0;
     width: 100%;
+  }
+  /* what's under the handles, and the strip left of the sound: both move the scrubber */
+  .zone,
+  .rail {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+  }
+  .rail {
+    border-radius: 6px;
+    background: rgb(var(--ink-rgb) / 0.06);
+    cursor: ns-resize;
+  }
+  .rail:focus-visible {
+    outline: 2px solid var(--playhead);
+    outline-offset: 1px;
+  }
+  .dot-head {
+    position: absolute;
+    left: 50%;
+    width: 12px;
+    height: 12px;
+    margin: -6px 0 0 -6px;
+    border-radius: 50%;
+    background: var(--locator);
+    pointer-events: none;
+  }
+  .dot-head.live {
+    box-shadow: 0 0 0 3px var(--locator-soft);
   }
   .rl {
     position: absolute;

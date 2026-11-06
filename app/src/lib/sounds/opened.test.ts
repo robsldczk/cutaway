@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { autoFadeOut } from './select';
-import { autoFadeToggle, fadeLevel, fadesAt, keepWindow, maxLen, MIN_TRIM_S, nearestIn, openWindow, partAt, partText, quickLen, quickOn, readout, reshape, reshapeCommands, snapTol, tOf, yOf, type OpenState, type Win } from './opened';
+import { scrubLimits, sourceAt, autoFadeToggle, fadeLevel, fadesAt, keepWindow, maxLen, MIN_TRIM_S, nearestIn, openWindow, partAt, partText, quickLen, quickOn, readout, reshape, reshapeCommands, snapTol, tOf, yOf, type OpenState, type Win } from './opened';
 import type { SnapTarget } from './snap';
 
 const sound = (over: Partial<OpenState> = {}): OpenState => ({ id: 'a', start_s: 10, len_s: 2, offset_s: 0, anchor: null, depth: 0, pan: 0, gain_db: 0, in_s: 1, asset_len_s: 5, fade_in_s: 0.02, fade_out_s: 0.3, auto_fade: true, ...over });
@@ -315,5 +315,25 @@ describe('what the view reads', () => {
     expect(partText('fadeIn', s, reshape('fadeIn', s, 10.5))).toBe('Fade in 0.50 s');
     expect(partText('slip', s, reshape('slip', s, partAt('slip', s) + 0.5))).toContain('0.50');
     expect(partText('move', s, reshape('move', s, 0, target(11)))).toBe('Start 11');
+  });
+});
+
+describe('the scrubber', () => {
+  const sound = { start_s: 10, len_s: 2, in_s: 1, asset_len_s: 5 };
+
+  it('reads a scene time as a place in the file', () => {
+    expect(sourceAt(sound, 10)).toBe(1);
+    expect(sourceAt(sound, 9)).toBe(0);
+    expect(sourceAt(sound, 8)).toBe(0);
+    expect(sourceAt(sound, 30)).toBe(5);
+  });
+
+  it('comes round on a loop', () => {
+    expect(sourceAt({ ...sound, looped: true }, 15.5)).toBeCloseTo(1.5);
+  });
+
+  it('reaches the whole source, or a loop’s length', () => {
+    expect(scrubLimits(sound)).toEqual({ from: 9, to: 14 });
+    expect(scrubLimits({ ...sound, looped: true })).toEqual({ from: 9, to: 12 });
   });
 });

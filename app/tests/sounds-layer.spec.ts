@@ -1408,10 +1408,11 @@ test('opened: the playhead runs through the view, and the view stays open', asyn
   await openSound(page, a);
   const head = page.getByTestId('opened-playhead');
   const before = await head.getAttribute('d');
-  await page.keyboard.press('Space');
+  // in the view Space is the sound alone: ⇧ Space is the timeline
+  await page.keyboard.press('Shift+Space');
   await expect.poll(() => head.getAttribute('d')).not.toBe(before);
   await expect(view(page)).toBeVisible();
-  await page.keyboard.press('Space');
+  await page.getByRole('button', { name: 'Play or stop (Space)' }).click();
 });
 
 test('opened: a double click on the length line opens it too', async ({ page }) => {
@@ -1686,6 +1687,8 @@ test('opened: every part answers to the keys, a burst is one step', async ({ pag
   await page.keyboard.press('Tab');
   await expect(view(page).getByRole('button', { name: /close/ })).toBeFocused();
   await page.keyboard.press('Tab');
+  await expect(page.getByTestId('opened-scrub')).toBeFocused();
+  await page.keyboard.press('Tab');
   await expect(part(page, 'in')).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(part(page, 'move')).toBeFocused();
@@ -1717,6 +1720,72 @@ test('opened: every part answers to the keys, a burst is one step', async ({ pag
     await page.keyboard.press('Shift+ArrowUp');
   });
   await expect(page.getByTestId('opened-reading')).toContainText('+1 dB');
+});
+
+test('opened: the scrubber plays the sound alone, I and O trim to it, Enter closes', async ({ page }) => {
+  const a = await place(1, 0.3);
+  await open(page);
+  await ballOf(page, a).dblclick();
+  await expect(view(page)).toBeVisible();
+  const rail = page.getByTestId('opened-scrub');
+  const head = async () => +(await rail.getAttribute('aria-valuenow'))!;
+  const box = (await rail.boundingBox())!;
+  const before = await sound(a);
+  expect(await head()).toBe(0);
+
+  // a click on the rail puts the scrubber there, and nothing else changes
+  const at = async (share: number) => page.mouse.click(box.x + box.width / 2, box.y + box.height * share);
+  await at(0.3);
+  const inPoint = await head();
+  expect(inPoint).toBeGreaterThan(0.2);
+  expect(await sound(a)).toMatchObject({ start_s: before.start_s, len_s: before.len_s });
+
+  // Space is the sound alone: the preview player runs, the timeline's playhead stays
+  const pos = await page.getByTestId('time-now').textContent();
+  await page.keyboard.press('Space');
+  await expect(page.getByTestId('preview-player')).toBeVisible();
+  await expect.poll(head).toBeGreaterThan(inPoint);
+  await page.keyboard.press('Space');
+  await expect(page.getByTestId('time-now')).toHaveText(pos ?? '');
+
+  // I and O: one undo step each
+  await at(0.3);
+  const steps = await undoSteps();
+  await page.keyboard.press('i');
+  await expect.poll(undoSteps).toBe(steps + 1);
+  await expect.poll(async () => (await sound(a)).start_s).toBeCloseTo(before.start_s + inPoint, 1);
+  await at(0.6);
+  const outPoint = await head();
+  await page.keyboard.press('o');
+  await expect.poll(undoSteps).toBe(steps + 2);
+  await expect.poll(async () => (await sound(a)).len_s).toBeCloseTo(outPoint - inPoint, 1);
+
+  await page.keyboard.press('Enter');
+  await expect(view(page)).toBeHidden();
+});
+
+test('opened: a drag on the rail scrubs and stops with the mouse', async ({ page }) => {
+  const a = await place(1, 0.3);
+  await open(page);
+  await ballOf(page, a).dblclick();
+  const rail = page.getByTestId('opened-scrub');
+  const box = (await rail.boundingBox())!;
+  const x = box.x + box.width / 2;
+  await page.mouse.move(x, box.y + box.height * 0.2);
+  await page.mouse.down();
+  for (let i = 3; i <= 6; i++) {
+    await page.mouse.move(x, box.y + (box.height * i) / 10);
+    await page.waitForTimeout(110);
+  }
+  await expect(page.getByTestId('preview-player')).toBeVisible();
+  await page.mouse.up();
+  await expect(page.getByRole('button', { name: /^Play preview of/ })).toBeVisible();
+  // a click on the sound itself moves the scrubber and doesn't move the sound
+  const start = (await sound(a)).start_s;
+  const was = await rail.getAttribute('aria-valuenow');
+  await page.getByTestId('opened-move').click({ position: { x: 20, y: 8 } });
+  await expect(rail).not.toHaveAttribute('aria-valuenow', was ?? '');
+  expect((await sound(a)).start_s).toBe(start);
 });
 
 test('opened: Tab stays in the view and comes round', async ({ page }) => {

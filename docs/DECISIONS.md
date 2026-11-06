@@ -942,3 +942,10 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Edit:** drops there glue too, and Follows dialogue / Pin to time are the same command. Moving a sound on Edit keeps what it had: an anchored one takes a new offset, a pinned one stays pinned.
 - **Sounds already in a file aren't changed.** One that was pinned stays pinned until it's moved on Arrange or its Glue is turned on, because rewriting placements in a production file without being asked isn't safe. Rob decides whether to convert the ones in Episode 2: a batch of `set_sound_glue` does it, undoably.
 
+### D124 The opened sound's scrubber (Rob, 2026-11-06)
+- **Rob:** the SFX editor should have a scrubber and I/O for trimming, close on Enter too, and play the sound alone when it's focused.
+- **The scrubber** is a rail left of the sound, with a line across it. A drag on the rail, or on the dimmed source, scrubs. A click on the sound puts it there and doesn't move the sound. ↑ and ↓ on the rail step 100 ms, ⌥ 10 ms, like the other parts. It reaches the whole source, so a trimmed sound can be heard past its ends.
+- **The sound alone:** with the view in focus, Space plays the sound from the scrubber on the preview player, without the scene, and the timeline's playhead stays. It stops when the view closes. ⇧ Space stays the timeline. It plays the file, so fades and gain aren't heard and neither is depth; the trim is what this is for. A drag restarts the sound at most every 90 ms and stops with the mouse. This is a stepped scrub, not a varispeed one: the preview player has no such mode.
+- **I and O** set the sound's in and out at the scrubber, one undo step each, through the same rules as the handles. Glue stays, with a new offset, as with any start trimmed off a target (D82). A locked scene refuses them with a message.
+- **Enter closes,** as Esc does. A button reached with Tab still does what it says.
+

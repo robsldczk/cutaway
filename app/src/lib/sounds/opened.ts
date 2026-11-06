@@ -46,6 +46,21 @@ export interface Ops {
   nudge(part: Part, delta: number): void;
 }
 
+// ---- the scrubber: a place in the sound's source, shown in scene time ----
+
+/** How far into the file a scene time is; a loop comes round. */
+export function sourceAt(s: Pick<OpenState, 'start_s' | 'in_s' | 'asset_len_s'> & { looped?: boolean }, t: number) {
+  const at = t - (s.start_s - s.in_s);
+  if (s.asset_len_s <= 0) return Math.max(0, at);
+  return s.looped ? ((at % s.asset_len_s) + s.asset_len_s) % s.asset_len_s : clamp(at, 0, s.asset_len_s);
+}
+
+/** Where the scrubber can go: the source, on the view. */
+export function scrubLimits(s: Pick<OpenState, 'start_s' | 'len_s' | 'in_s' | 'asset_len_s'> & { looped?: boolean }) {
+  const from = s.start_s - s.in_s;
+  return { from, to: s.asset_len_s > 0 && !s.looped ? from + s.asset_len_s : s.start_s + s.len_s };
+}
+
 // ---- the window: what stretch of time the view shows ----
 
 export interface Win {
