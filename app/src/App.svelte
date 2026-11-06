@@ -31,6 +31,7 @@
   import Review from './pages/Review.svelte';
   import ReviewHistory from './components/ReviewHistory.svelte';
   import ReviewerSheet from './components/ReviewerSheet.svelte';
+  import OpeningCover from './components/OpeningCover.svelte';
 
   let root: HTMLDivElement | undefined = $state();
   let innerWidth = $state(1440);
@@ -41,7 +42,7 @@
   let wLast = 0;
 
   function onWheel(e: WheelEvent) {
-    if (app.overlay || app.page === 'edit' || app.page === 'import' || app.page === 'export' || app.page === 'dev') return;
+    if (app.noProject || app.overlay || app.page === 'edit' || app.page === 'import' || app.page === 'export' || app.page === 'dev') return;
     const t = e.target as HTMLElement;
     if (t.closest('.rail') || t.closest('[role="listbox"], [role="menu"]')) return; // these scroll themselves
     // the opened sound's handles are sliders for the keyboard; the wheel still scrubs there
@@ -91,11 +92,9 @@
       if (r && r.length) await app.openShow(r[0], id === 'new_show');
     } else if (id === 'open_episode') {
       const r = await pickPath({ title: 'Open an episode', filters: [{ name: `${brand.displayName} episode`, extensions: [brand.episodeExt] }] });
-      if (r && r.length) {
-        if (!app.noProject) await app.closeProject();
-        await app.run(() => call('open_project', { path: r[0] }));
-        await app.boot();
-      }
+      if (r && r.length) await app.openFile(r[0]);
+    } else if (id === 'demo') {
+      await app.demo();
     } else if (id === 'open_review') {
       const r = await pickPath({ title: 'Open a project package for review', filters: [{ name: `${brand.displayName} episode or show`, extensions: [brand.episodeExt, brand.showExt] }] });
       if (r && r.length) await app.openForReview(r[0]);
@@ -109,6 +108,7 @@
 
   /** `x`, `y`: on macOS Tauri's "physical" drop position is really in points, so CSS pixels. */
   async function dropped(paths: string[], x: number, y: number) {
+    if (app.welcomeUi) return app.welcomeUi.drop(paths, x, y);
     const reviews = paths.filter((p) => p.endsWith(`.${brand.reviewExt}`));
     for (const r of reviews) await addReview(r);
     paths = paths.filter((p) => !reviews.includes(p));
@@ -244,6 +244,7 @@
   {/if}
   <DragGhost />
   <FileSheet />
+  <OpeningCover />
 </div>
 
 <style>

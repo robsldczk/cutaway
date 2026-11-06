@@ -6,6 +6,8 @@ DIR="$(mktemp -d)/cutaway-e2e"
 export CUTAWAY_AI_PROVIDER=mock CUTAWAY_NO_AUDIO=1
 # show library indexes go next to the demo, not into the real app data
 export CUTAWAY_DATA_DIR="$(dirname "$DIR")/data"
+# new episodes and shows made without a folder chosen, not ~/Documents
+export CUTAWAY_PROJECTS_DIR="$(dirname "$DIR")/projects"
 # keys in memory (never the real keychain), Epidemic Sound from the stand-in
 export CUTAWAY_SECRETS=memory CUTAWAY_EPIDEMIC_URL=http://127.0.0.1:7359
 unset EPIDEMIC_SOUND_API_KEY ELEVENLABS_API_KEY

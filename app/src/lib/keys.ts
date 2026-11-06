@@ -10,6 +10,15 @@ export function ownArrows(e: KeyboardEvent) {
 const PAGE_KEYS = ['1', '2', '3', '4'];
 
 export function onKey(e: KeyboardEvent) {
+  // nothing's open: the shelf has the keys, and only help is left for the map below
+  if (app.welcomeUi) {
+    if (app.welcomeUi.key(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (e.key !== '?' && !app.overlay) return;
+  }
   const t = e.target as HTMLElement | null;
   // a slider keeps the focus after a drag: its undo must still work, its arrows stay its own
   const sliderUndo = t instanceof HTMLInputElement && t.type === 'range' && (e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z');

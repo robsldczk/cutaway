@@ -55,6 +55,7 @@ fn app_menu(h: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::separator(h)?,
             &item("open_episode", "Open Standalone Episode…", None)?,
             &item("open_review", "Open Project Package in Review Mode…", None)?,
+            &item("demo", "Demo Session…", None)?,
             &PredefinedMenuItem::separator(h)?,
             &item("show_home", "Show Home", None)?,
             &item("close", "Close", None)?,

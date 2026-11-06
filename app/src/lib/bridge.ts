@@ -50,6 +50,12 @@ export async function savePath(opts: { title: string; name: string; filters?: { 
   return save({ title: opts.title, defaultPath: opts.name, filters: opts.filters });
 }
 
+/** One path from the native dialog, or in the browser a question. Null when there's no answer. */
+export async function choosePath(opts: { directory?: boolean; title: string; filters?: { name: string; extensions: string[] }[] }): Promise<string | null> {
+  if (!inTauri) return window.prompt(opts.title) || null;
+  return (await pickPath(opts))?.[0] ?? null;
+}
+
 /** Native file dialog in the app; null in the browser (the UI offers a path field instead). */
 export async function pickPath(opts: { directory?: boolean; multiple?: boolean; title?: string; filters?: { name: string; extensions: string[] }[] }): Promise<string[] | null> {
   if (!inTauri) return null;

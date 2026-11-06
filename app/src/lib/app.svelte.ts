@@ -1,6 +1,7 @@
 // UI state. Document state comes only from the core (view models); every change is a
 // command sent through the bridge. Local state here is selection, page, playhead, overlays.
-import { call, BridgeError } from './bridge';
+import { brand } from './brand';
+import { call, choosePath, BridgeError } from './bridge';
 import type { ExportScene, ExportSettings, ExportStatus } from './export';
 import { attrsOf, attrsText, depthCommands, depthDelta, pasteCommand, type LineAttrs } from './lines';
 import type { Note, NoteTag, ReviewerView, ReviewRole, ReviewView } from './review';
@@ -36,7 +37,10 @@ export interface RecentEpisode {
   show?: boolean;
 }
 
-/** Recently opened episodes (this viewer only), newest first. */
+/** How many items the shelf remembers. */
+const RECENT = 24;
+
+/** Recently opened episodes and shows (this viewer only), newest first. */
 export function recentEpisodes(): RecentEpisode[] {
   try {
     const v = JSON.parse(localStorage.getItem('cutaway.recent') ?? '[]');
@@ -46,13 +50,26 @@ export function recentEpisodes(): RecentEpisode[] {
   }
 }
 
-function remember(r: RecentEpisode) {
+function keepRecent(list: RecentEpisode[]) {
   try {
-    const list = [r, ...recentEpisodes().filter((x) => x.path !== r.path)].slice(0, 6);
-    localStorage.setItem('cutaway.recent', JSON.stringify(list));
+    localStorage.setItem('cutaway.recent', JSON.stringify(list.slice(0, RECENT)));
   } catch {
     /* private mode: no recent list */
   }
+}
+
+export function remember(r: RecentEpisode) {
+  keepRecent([r, ...recentEpisodes().filter((x) => x.path !== r.path)]);
+}
+
+/** Off the list. The files stay where they are. */
+export function forgetRecent(paths: string[]) {
+  keepRecent(recentEpisodes().filter((r) => !paths.includes(r.path)));
+}
+
+/** An item found again in a new place keeps its place in the list. */
+export function relinkRecent(from: string, to: string) {
+  keepRecent(recentEpisodes().filter((r) => r.path !== to).map((r) => (r.path === from ? { ...r, path: to } : r)));
 }
 
 /** The developer switch (dev panel, scoped re-analysis), remembered per viewer. */
@@ -226,6 +243,10 @@ class AppState {
   panelTab = $state<'sounds' | 'notes'>('sounds');
   /** Keys on the review screen. */
   reviewUi: { marker(): void; note(): void; search(): void; cancel(): boolean; wheel(e: WheelEvent): boolean } | null = null;
+  /** The welcome screen sees keys and drops first, while it's up. */
+  welcomeUi: { key(e: KeyboardEvent): boolean; drop(paths: string[], x: number, y: number): Promise<void> } | null = null;
+  /** What's opening, shown over everything for as long as it takes. `image` is a CSS background. */
+  opening = $state<{ title: string; kicker: string; mode: 'edit' | 'review'; image: string } | null>(null);
   /** The open show (studio mode): its home shows when no episode is open. */
   show = $state<ShowView | null>(null);
   /** The show's backdrop (a data URL), loaded once per show. */
@@ -406,12 +427,29 @@ class AppState {
     this.busy = true;
     const r = await this.run(() => call<{ file?: string; show?: ShowView }>('open_review', { path }));
     this.busy = false;
-    if (!r) return;
-    if (r.show) {
-      await this.loadShow();
-      return;
-    }
+    if (!r) return false;
+    if (r.show) await this.loadShow();
+    else await this.boot();
+    return true;
+  }
+
+  /** Opens an episode file to edit it. */
+  async openFile(path: string) {
+    if (!this.noProject) await this.closeProject();
+    const r = await this.run(() => call('open_project', { path }));
+    if (!r) return false;
     await this.boot();
+    return true;
+  }
+
+  /** The synthetic demo session, made where it's asked for and opened. */
+  async demo() {
+    const parent = await choosePath({ directory: true, title: 'Folder for the demo session' });
+    if (!parent) return;
+    this.busy = true;
+    const r = await this.run(() => call('create_demo', { parent, name: `${brand.displayName} demo` }));
+    this.busy = false;
+    if (r) await this.boot();
   }
 
   /** Into review mode, from the Export page or the episode menu. */
@@ -677,10 +715,11 @@ class AppState {
   async openShow(path: string, create = false) {
     if (!this.noProject) await this.closeProject();
     const v = await this.run(() => call<ShowView>(create ? 'create_show' : 'open_show', create ? { root: path } : { path }));
-    if (!v) return;
+    if (!v) return false;
     remember({ name: v.name, path: v.root, show: true });
     keepLast({ name: v.name, path: v.root, show: true });
     await this.loadShow();
+    return true;
   }
 
   /** Opens an episode of the open show (its project is made when it has none). */

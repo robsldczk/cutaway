@@ -30,6 +30,12 @@
     ['Fly through the lines (Options, Arrange)', ['⇧ scroll']],
     ['Zoom / move scene bar (over the bar)', ['⌘ scroll', '⇧ scroll']],
   ];
+  const welcome: [string, string[]][] = [
+    ['Move within a row / between the rows', ['←', '→', '↑', '↓']],
+    ['Open the selected item in Edit / Review', ['↩', '⌥↩']],
+    ['New episode / new show / open from disk', ['⌘N', '⇧⌘N', '⌘O']],
+    ['Back to the recent episodes', ['Esc']],
+  ];
   const sounds: [string, string[]][] = [
     ['Show / hide the sounds', ['S']],
     ['Scrub', ['scroll']],
@@ -106,6 +112,8 @@
     {#each sounds as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
     <div class="h2">On the Edit page</div>
     {#each edit as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
+    <div class="h2">On the welcome screen</div>
+    {#each welcome as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
     <div class="h2">In review</div>
     {#each review as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
     <div class="h2">In the box editor</div>

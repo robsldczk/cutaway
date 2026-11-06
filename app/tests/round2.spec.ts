@@ -90,8 +90,8 @@ test('back to the start screen and reopen the episode from Recent', async ({ pag
   await expect(page.getByTestId('current-box')).toBeVisible();
   await page.getByRole('button', { name: /^Demo/ }).first().click();
   await page.getByRole('menuitem', { name: 'Back to start screen' }).click();
-  await expect(page.getByRole('button', { name: 'New episode…' })).toBeVisible();
-  await page.getByText('Recent').waitFor();
-  await page.locator('.rc').first().click();
+  await expect(page.getByTestId('row-title')).toHaveText('Recent episodes');
+  // the episode just closed is selected, and a click wouldn't open it anyway
+  await page.keyboard.press('Enter');
   await expect(page.getByTestId('current-box')).toBeVisible();
 });
