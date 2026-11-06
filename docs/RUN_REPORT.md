@@ -500,3 +500,18 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 - Drag an image from the Finder onto a tile, and a script onto the window.
 - Press ⌘N with the app focused: nothing should beat the page to it, but only your keyboard can show that.
 - Judge the look on `tm-2610`, in both themes.
+
+## Tours (2026-11-06, D153)
+
+**Built:** a chapter per page for Options (8 stops), Arrange (4), Edit (5), Export (2) and Review (8), on at the first visit to each and again from *Take the tour* at the top of the ? sheet. Review has a ? of its own now. Stops marked *Try it* let the real controls work: walking lines, flipping and favoriting takes, dragging a line, a trim, a pause or a clip, Sounds, the bucket, Ripple, and a draft note. Everything else is stopped. At the end the tour undoes its own steps and puts the view back, and a quit in the middle is put right at the next open.
+
+**Not built:** a switch to turn all tours off (each chapter is one Skip), a chapter for Import, a way to reset what's been seen other than clearing `cutaway.tour`. The core didn't change.
+
+**Verified:** `check.sh` green, 21 new unit tests, 11 new Playwright specs, 235/235 on the whole suite. In the real webview on a demo episode, with in-page events: first use, keys gated and arrows flipping a take, a page key stopped, the spotlight on its target, a grip drag, and both undone to the same cut.
+
+**Not verified:** a real mouse and real keys. The real webview run came before the last change, which moves the spotlight onto a draft note: that was checked in Chromium only. It hasn't been run on Episode 2.
+
+**Manual checks for Rob:**
+- Clear `cutaway.tour` from the app's storage, or use a fresh user, and open Episode 2: do the stops land on sensible things on real scenes?
+- Try a locked scene: what's refused should say so, and the tour should carry on.
+- Read the card text. It's all in `app/src/lib/tour.ts`.

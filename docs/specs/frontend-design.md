@@ -329,6 +329,10 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 
 *Changed in implementation (D146–D152):* the start screen is a shelf: a hero for the selected item, a row of recent episodes, a row of shows. A click selects; Edit, Review, ↩ and ⌥↩ open. A show takes over the first row, Esc brings it back. New episode and New show are short sheets that make a project without opening it. Scripts and recordings dropped on the window start an episode, an image on a tile or the hero sets its cover, a review file goes to its episode. Covers are `Cover.jpg` in the project. It shows after closing on purpose and at a launch with nothing left open: D131 still reopens what was open. *Open project package in review mode* is now the Review button, and stays in the Show menu. Spec: `tasks/Welcome/audioplay-cutter-handover-welcome.md`.
 
+## Tours
+
+*Added in implementation (D153):* a chapter per page, on the first visit to Options, Arrange, Edit, Export and Review. The screen dims around one real control, with a card beside it: where you are, what this is, and sometimes **Try it**. What's tried is put back when the tour ends: picks, moves and trims by undoing the tour's own steps, the rest by value. A note can be drafted and isn't kept. The ? sheet starts the chapter of the page you're on. During a tour Return and → go on, ← goes back and Esc ends it, except where a stop offers those keys to try. The stops are in `app/src/lib/tour.ts`.
+
 ## Keyboard map
 
 | Key | Action |
@@ -359,7 +363,7 @@ Like the Cut and Edit pages in DaVinci Resolve, every page is a different displa
 | ⌘S | Save version |
 | Option+Left/Right | Nudge selected clip 10 ms (Edit page; Shift+Option 100 ms) |
 | ⌥ scroll (or ⌘ scroll) | Zoom the timeline around the mouse (Edit page) |
-| ? | Keyboard help |
+| ? | Keys and the tour of this page (D153) |
 | ⌘ scroll / ⇧ scroll | Zoom / move the scene map |
 | S | Show or hide the sounds (Arrange) |
 | Scroll | Scrub, with the sounds on (Arrange) |
