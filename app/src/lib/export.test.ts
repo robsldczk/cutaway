@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clock, day, fitFormat, footer, formatLabel, formatsFor, historyTip, lockLine, rangeCaption, savedCaption, showsFormat, showsTracks, size, unchangedCaption, unlockQuestion, version, type ExportPlan, type ExportRecord, type ExportScene, type ExportSettings, type ScenePlan } from './export';
+import { between, clock, day, fitFormat, footer, formatLabel, formatsFor, historyTip, inverted, isWhole, lockLine, rangeCaption, savedCaption, showsFormat, showsTracks, size, tick, tickable, unchangedCaption, unlockQuestion, version, withStatus, type ExportPlan, type ExportRecord, type ExportScene, type ExportSettings, type ScenePlan } from './export';
 
 const record = (v: number, date: string, destination: ExportRecord['destination'] = 'episode'): ExportRecord => ({ version: v, date, destination, folder: `/x/v${v}`, files: 9, bytes: 1000, locked: true });
 
@@ -9,6 +9,7 @@ const scene = (number: number, length_s: number, last: ExportRecord | null = nul
   place: 'Canteen',
   heading: '',
   title: '',
+  status: null,
   length_s,
   has_audio: true,
   lock: null,
@@ -33,9 +34,71 @@ const planned = (number: number, v: number, unchanged_since: number | null = nul
   locked: false,
 });
 
-const plan = (scenes: ScenePlan[], episode_version: number | null = null): ExportPlan => ({ scenes, empty: [], episode_version, files: 18, bytes: 780e6 });
+const plan = (scenes: ScenePlan[], episode_version: number | null = null): ExportPlan => ({ scenes, one_file: null, empty: [], episode_version, files: 18, bytes: 780e6 });
 
 const settings = (s: Partial<ExportSettings>): ExportSettings => ({ mode: 'stems', tracks: { dialogue: true, room_voices: true, effects: true, room_effects: true, ambience: true, music: true, mix: true, split_dialogue: false }, codec: 'wav', sample_rate: 48000, bit_depth: 24, loudness: -16, fcpxml: true, fcpxml_source: 'original', subtitles: true, cut_list: null, lock_after: true, save_to: 'episode', ...s });
+
+describe('the boxes of the Range', () => {
+  const five = [1, 2, 3, 4, 5].map((n) => scene(n, 60));
+  const marked = five.map((s, i) => ({ ...s, status: (['finished', 'review', 'finished', null, 'in_progress'] as const)[i] }));
+  const withEmpty = five.map((s) => (s.number === 3 ? { ...s, has_audio: false } : s));
+
+  it('turn on and off and stay in script order', () => {
+    expect(tick(five, ['s3'], ['s1'], true)).toEqual(['s1', 's3']);
+    expect(tick(five, ['s1', 's3'], ['s1'], false)).toEqual(['s3']);
+    expect(tick(five, ['s1'], ['s1'], true)).toEqual(['s1']);
+  });
+
+  it('take a run in either direction', () => {
+    expect(between(five, 's2', 's4')).toEqual(['s2', 's3', 's4']);
+    expect(between(five, 's4', 's2')).toEqual(['s2', 's3', 's4']);
+    expect(between(five, 's2', 's2')).toEqual(['s2']);
+  });
+
+  it('run past a scene with nothing in it, which has no box to tick', () => {
+    expect(between(tickable(withEmpty), 's2', 's4')).toEqual(['s2', 's4']);
+  });
+
+  it('a run from a scene that has gone is the one box', () => {
+    expect(between(five, 'gone', 's2')).toEqual(['s2']);
+  });
+
+  it('invert, leaving a scene with nothing in it alone', () => {
+    expect(inverted(five, ['s1', 's3'])).toEqual(['s2', 's4', 's5']);
+    expect(inverted(withEmpty, ['s1'])).toEqual(['s2', 's4', 's5']);
+    expect(inverted(five, inverted(five, ['s2']))).toEqual(['s2']);
+  });
+
+  it('come by mark', () => {
+    expect(withStatus(marked, 'finished')).toEqual(['s1', 's3']);
+    expect(withStatus(marked, 'review')).toEqual(['s2']);
+    expect(withStatus(five, 'finished')).toEqual([]);
+    expect(withStatus(marked.map((s) => (s.number === 1 ? { ...s, has_audio: false } : s)), 'finished')).toEqual(['s3']);
+  });
+
+  it('are the whole episode when every one that can be ticked is', () => {
+    expect(isWhole(five, ['s1', 's2', 's3', 's4'])).toBe(false);
+    expect(isWhole(five, ['s1', 's2', 's3', 's4', 's5'])).toBe(true);
+    expect(isWhole(withEmpty, ['s1', 's2', 's4', 's5'])).toBe(true);
+    expect(isWhole([{ ...five[0], has_audio: false }], [])).toBe(false);
+  });
+});
+
+describe('one file', () => {
+  const one = (unchanged_since: number | null) => ({ ...plan([]), one_file: { version: 4, label: 'E02 v004', folder: '', files: [], bytes: 1, length_s: 1, unchanged_since } });
+
+  it('offers MP3, because it is a mix', () => {
+    expect(formatsFor('one_file', true).some((f) => f.codec === 'mp3')).toBe(true);
+    expect(showsTracks('one_file')).toBe(false);
+    expect(showsFormat('one_file')).toBe(true);
+  });
+
+  it('says what it becomes and whether anything changed', () => {
+    expect(savedCaption(one(null))).toBe('Saved as E02 v004. Versions count up on their own, nothing is overwritten.');
+    expect(unchangedCaption(one(null))).toBe('');
+    expect(unchangedCaption(one(3))).toBe('These scenes are unchanged since v003.');
+  });
+});
 
 describe('the rows of the sheet', () => {
   it('follow what the export is', () => {
@@ -73,9 +136,10 @@ describe('captions', () => {
   const now = new Date('2026-11-05T15:00:00');
 
   it('say the range the way the mockup does', () => {
-    const r = rangeCaption([scene(2, 200, record(2, '2026-11-04T10:00:00')), scene(3, 57)], 6, now);
+    const r = rangeCaption([scene(2, 200, record(2, '2026-11-04T10:00:00')), scene(3, 57)], 6, undefined, now);
     expect(r).toBe('2 of 6 scenes · 4:17 · Sc. 2 was exported yesterday as v002');
-    expect(rangeCaption([scene(1, 90), scene(2, 30)], 2, now)).toBe('All 2 scenes · 2:00');
+    expect(rangeCaption([scene(1, 90), scene(2, 30)], 2, undefined, now)).toBe('All 2 scenes · 2:00');
+    expect(rangeCaption([scene(1, 90), scene(2, 30)], 2, 122, now)).toBe('All 2 scenes · 2:02');
   });
 
   it('count days by the calendar', () => {

@@ -18,6 +18,8 @@ async function unlockAll(page: Page) {
   for (const s of scenes) if (s.lock) await rpc(page, 'unlock_scene', { scene: String(s.number), confirm: true });
 }
 
+const box = (page: Page, number: number) => page.locator(`[data-testid="scene-box"][data-number="${number}"]`);
+
 async function open(page: Page) {
   await page.goto('/');
   await expect(page.getByTestId('current-box')).toBeVisible();
@@ -108,14 +110,120 @@ test('the footer follows the choices', async ({ page }) => {
   const before = await size.textContent();
   await page.getByTestId('track-music').uncheck();
   await expect(size).not.toHaveText(before as string);
-  await page.getByTestId('add-scene').selectOption({ index: 1 });
+  await page.getByTestId('select-all').click();
   await expect(page.getByTestId('range-caption')).toContainText('All 2 scenes');
-  await page.getByRole('button', { name: 'Remove scene 2' }).click();
-  await expect(page.getByTestId('range-caption')).toContainText('1 of 2 scenes');
-  await page.getByTestId('track-music').check();
-  await page.getByRole('button', { name: 'Whole episode' }).click();
   await expect(page.getByTestId('saved-caption')).toContainText('The episode becomes');
-  await page.getByRole('button', { name: 'Scenes', exact: true }).click();
+  await box(page, 2).click();
+  await expect(page.getByTestId('range-caption')).toContainText('1 of 2 scenes');
+  await expect(page.getByTestId('saved-caption')).not.toContainText('The episode becomes');
+  await page.getByTestId('track-music').check();
+});
+
+test('the boxes select all, none, the other way round, and in runs', async ({ page }) => {
+  await open(page);
+  const caption = page.getByTestId('range-caption');
+  const go = page.getByTestId('export-go');
+  await expect(box(page, 1)).toBeChecked();
+  await expect(box(page, 2)).not.toBeChecked();
+
+  await page.getByTestId('select-invert').click();
+  await expect(box(page, 1)).not.toBeChecked();
+  await expect(box(page, 2)).toBeChecked();
+
+  await page.getByTestId('select-none').click();
+  await expect(caption).toContainText('0 of 2 scenes');
+  await expect(go).toBeDisabled();
+
+  await page.getByTestId('select-all').click();
+  await expect(caption).toContainText('All 2 scenes');
+  await expect(page.getByTestId('select-all')).toBeDisabled();
+
+  // ⇧ takes the run from the last box touched, and turns it the way the box goes
+  await page.getByTestId('select-none').click();
+  await box(page, 1).click();
+  await box(page, 2).click({ modifiers: ['Shift'] });
+  await expect(caption).toContainText('All 2 scenes');
+  await box(page, 2).click();
+  await box(page, 1).click({ modifiers: ['Shift'] });
+  await expect(caption).toContainText('0 of 2 scenes');
+
+  // ⌘ is a click: it never lets go of the other boxes
+  await box(page, 1).click();
+  await box(page, 2).click({ modifiers: ['Meta'] });
+  await expect(caption).toContainText('All 2 scenes');
+
+  // a press sweeps across the boxes
+  await page.getByTestId('select-none').click();
+  const first = await box(page, 1).boundingBox();
+  const second = await box(page, 2).boundingBox();
+  if (!first || !second) throw new Error('the boxes are not on the page');
+  await page.mouse.move(first.x + 30, first.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(second.x + 30, second.y + 10, { steps: 4 });
+  await page.mouse.up();
+  await expect(caption).toContainText('All 2 scenes');
+  // and the press ends: moving on ticks nothing
+  await page.getByTestId('select-none').click();
+  await page.mouse.move(first.x + 30, first.y + 10);
+  await page.mouse.move(second.x + 30, second.y + 10);
+  await expect(caption).toContainText('0 of 2 scenes');
+
+  // the keyboard ticks too, with nothing played
+  await box(page, 1).focus();
+  await page.keyboard.press('Space');
+  await expect(box(page, 1)).toBeChecked();
+});
+
+test('scenes come by their mark, and the marks count them', async ({ page }) => {
+  await rpc(page, 'set_scene_status', { scene: '2', status: 'finished' });
+  await rpc(page, 'set_scene_status', { scene: '1', status: 'review' });
+  try {
+    await open(page);
+    const finished = page.getByTestId('select-finished');
+    await expect(finished).toContainText('1');
+    await expect(page.getByTestId('select-in_progress')).toBeDisabled();
+
+    // the current scene was ticked: a mark takes just its own
+    await finished.click();
+    await expect(box(page, 1)).not.toBeChecked();
+    await expect(box(page, 2)).toBeChecked();
+    await expect(finished).toHaveAttribute('aria-pressed', 'true');
+
+    // ⌘ adds, and takes off again
+    await page.getByTestId('select-review').click({ modifiers: ['Meta'] });
+    await expect(page.getByTestId('range-caption')).toContainText('All 2 scenes');
+    await page.getByTestId('select-review').click({ modifiers: ['Meta'] });
+    await expect(box(page, 1)).not.toBeChecked();
+    await expect(box(page, 2)).toBeChecked();
+  } finally {
+    await rpc(page, 'set_scene_status', { scene: '1' });
+    await rpc(page, 'set_scene_status', { scene: '2' });
+  }
+});
+
+test('the episode goes out as one file, and folders need no quoting', async ({ page }) => {
+  await open(page);
+  await page.getByTestId('select-all').click();
+  await page.getByTestId('export-as').selectOption('one_file');
+  await expect(page.getByTestId('track-dialogue')).toBeHidden();
+  await expect(page.getByTestId('saved-caption')).toContainText(/Saved as E\d+ v\d+/);
+  await page.getByTestId('lock-after').uncheck();
+
+  // a mix can be an MP3, stems can't
+  const mp3 = await page.getByTestId('format').locator('option', { hasText: 'MP3' }).count();
+  expect(mp3).toBeGreaterThan(0);
+
+  await page.getByTestId('export-go').click();
+  await expect(page.getByTestId('export-done')).toContainText('Saved one file', { timeout: 30_000 });
+  const status = await rpc<{ scenes: { lock: unknown }[]; episode_versions: { folder: string; files: number }[] }>(page, 'export_status');
+  expect(status.scenes.every((s) => !s.lock)).toBe(true);
+  const newest = status.episode_versions[status.episode_versions.length - 1];
+  expect(newest.folder.split('/Exports/')[1]).toMatch(/^Episode\/v\d{3}_\d{4}-\d{2}-\d{2}$/);
+
+  // it's in the history, and the same scenes say so
+  await expect(page.getByTestId('unchanged-caption')).toContainText('unchanged since');
+  await page.getByTestId('export-as').selectOption('stems');
+  await page.getByTestId('lock-after').check();
 });
 
 test('an export counts up, says so, and locks the scene everywhere', async ({ page }) => {

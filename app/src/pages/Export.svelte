@@ -12,12 +12,14 @@
     formatKey,
     formatLabel,
     formatsFor,
+    isWhole,
     LOUDNESS,
     MODES,
     rangeCaption,
     savedCaption,
     showsFormat,
     showsTracks,
+    tickable,
     TRACKS,
     unchangedCaption,
     version,
@@ -30,14 +32,14 @@
     type ShowExportStatus,
   } from '../lib/export';
   import Icon from '../components/Icon.svelte';
+  import ScenePicker from '../components/ScenePicker.svelte';
 
   let { show = false, onclose }: { show?: boolean; onclose?: () => void } = $props();
 
   let status = $state<ExportStatus | null>(null);
   let showStatus = $state<ShowExportStatus | null>(null);
   let local = $state<ExportSettings | null>(null);
-  /** Whole episode, or the scenes picked. */
-  let whole = $state(false);
+  /** The scenes ticked. All of them is the whole episode. */
   let picked = $state<string[]>([]);
   /** A show export: the scenes picked of each episode. */
   let shown = $state<Record<string, string[]>>({});
@@ -57,16 +59,19 @@
   const pipeline = $derived<Pipeline | null>(show ? (showStatus?.pipeline ?? null) : (status?.pipeline ?? null));
   const ffmpeg = $derived((show ? showStatus?.ffmpeg : status?.ffmpeg) ?? false);
   const scenes = $derived(status?.scenes ?? []);
-  const pickedScenes = $derived(whole ? scenes : scenes.filter((x) => picked.includes(x.id)));
-  const unpicked = $derived(scenes.filter((x) => !picked.includes(x.id)));
+  const whole = $derived(isWhole(scenes, picked));
+  const pickedScenes = $derived(scenes.filter((x) => picked.includes(x.id)));
   const needsFolder = $derived(s?.save_to === 'pipeline' && !pipeline?.path);
   const formats = $derived(s ? formatsFor(s.mode, ffmpeg) : []);
   const format = $derived(s ? fitFormat(s, ffmpeg) : null);
   const mode = $derived(MODES.find((m) => m.id === s?.mode) ?? MODES[0]);
-  const history = $derived(pickedScenes.flatMap((x) => x.history.map((r) => ({ scene: x, r }))).reverse());
+  const history = $derived([
+    ...(status?.episode_versions ?? []).map((r) => ({ name: 'Ep.', r })).reverse(),
+    ...pickedScenes.flatMap((x) => x.history.map((r) => ({ name: `Sc. ${x.number}`, r }))).reverse(),
+  ]);
   const showScenes = $derived(Object.values(shown).reduce((a, v) => a + v.length, 0));
   const showEpisodes = $derived(Object.values(shown).filter((v) => v.length).length);
-  const canExport = $derived(!!s && !running && !needsFolder && (show ? showScenes > 0 : !!plan?.scenes.length));
+  const canExport = $derived(!!s && !running && !needsFolder && (show ? showScenes > 0 : !!plan?.scenes.length || !!plan?.one_file));
   const stack = Array.from({ length: 7 }, (_, i) => `M6 ${(3 + i * 5.6).toFixed(1)} H58`).join(' ');
 
   async function load() {
@@ -84,7 +89,7 @@
     app.exportSettings ??= { ...r.defaults, tracks: { ...r.defaults.tracks } };
     app.exported = Object.fromEntries(r.scenes.map((x) => [x.id, x]));
     pipelinePath = r.pipeline?.proposal ?? '';
-    if (!picked.length) picked = [app.sceneId].filter(Boolean);
+    if (!picked.length) picked = tickable(r.scenes).filter((x) => x.id === app.sceneId).map((x) => x.id);
   }
 
   // the footer and captions follow the choices; only the newest answer counts
@@ -92,7 +97,7 @@
   $effect(() => {
     if (show || !s || !status) return;
     const body = { scenes: whole ? undefined : [...picked], settings: $state.snapshot(s) };
-    if (!whole && !picked.length) {
+    if (!picked.length) {
       plan = null;
       return;
     }
@@ -133,24 +138,18 @@
     if (s) s.loudness = v === 'off' ? null : Number(v);
   }
 
-  const addScene = (id: string) => {
-    if (id) picked = scenes.filter((x) => picked.includes(x.id) || x.id === id).map((x) => x.id);
-  };
-
   function toggleEpisode(folder: string, all: ExportScene[], on: boolean) {
     const next = { ...shown };
-    if (on) next[folder] = all.filter((x) => x.has_audio).map((x) => x.id);
+    if (on) next[folder] = tickable(all).map((x) => x.id);
     else delete next[folder];
     shown = next;
   }
 
-  function dropShown(folder: string, id: string) {
-    shown = { ...shown, [folder]: shown[folder].filter((x) => x !== id) };
-  }
-
-  function addShown(folder: string, all: ExportScene[], id: string) {
-    if (id) shown = { ...shown, [folder]: all.filter((x) => shown[folder].includes(x.id) || x.id === id).map((x) => x.id) };
-  }
+  /** What a show export asks of each episode: every box ticked is the whole episode. */
+  const showRange = () =>
+    (showStatus?.episodes ?? [])
+      .filter((e) => shown[e.folder]?.length)
+      .map((e) => ({ episode: e.folder, scenes: isWhole(e.scenes, shown[e.folder]) ? undefined : shown[e.folder] }));
 
   async function confirmFolder(path: string) {
     if (!path) return;
@@ -183,7 +182,7 @@
   }
 
   function sayDone(r: ExportResult) {
-    const saved = r.scenes.map((x) => `Sc. ${x.number} ${version(x.version)}`).join(', ');
+    const saved = r.scenes.length || !r.episode ? r.scenes.map((x) => `Sc. ${x.number} ${version(x.version)}`).join(', ') : `one file, ${version(r.episode.version)}`;
     const notes = [
       ...r.unchanged.map((u) => `Sc. ${u.number} is unchanged since ${version(u.since)}.`),
       ...(r.empty.length ? [`Left out, nothing in them: Sc. ${r.empty.join(', ')}.`] : []),
@@ -201,7 +200,7 @@
     stage = 'Starting';
     const settings = $state.snapshot(s);
     const start = show
-      ? call<{ job_id: string }>('start_show_export', { episodes: Object.entries(shown).filter(([, v]) => v.length).map(([episode, scenes]) => ({ episode, scenes })), settings })
+      ? call<{ job_id: string }>('start_show_export', { episodes: showRange(), settings })
       : call<{ job_id: string }>('start_export', { scenes: whole ? undefined : picked, settings });
     try {
       const { job_id } = await start;
@@ -213,9 +212,10 @@
         const result = j.result as unknown;
         if (show) {
           const eps = (result as { episodes: { episode: string; result: ExportResult }[] }).episodes;
-          const first = eps[0]?.result.scenes[0]?.folder ?? '';
+          const first = eps[0]?.result.scenes[0]?.folder ?? eps[0]?.result.episode?.folder ?? '';
           const n = eps.reduce((a, e) => a + e.result.scenes.length, 0);
-          done = { text: `Saved ${n} ${n === 1 ? 'scene' : 'scenes'} to the pipeline folder`, folder: first, notes: eps.flatMap((e) => e.result.warnings) };
+          const what = n ? `${n} ${n === 1 ? 'scene' : 'scenes'}` : `${eps.length} ${eps.length === 1 ? 'file' : 'files'}`;
+          done = { text: `Saved ${what} to the pipeline folder`, folder: first, notes: eps.flatMap((e) => e.result.warnings) };
         } else {
           sayDone(result as ExportResult);
         }
@@ -285,46 +285,16 @@
                       {#if !e.scenes.length}<span class="dim">no project</span>{/if}
                     </label>
                     {#if on}
-                      <div class="chips">
-                        {#each e.scenes.filter((x) => shown[e.folder].includes(x.id)) as x (x.id)}
-                          <span class="pick"><span class="dim tn">Sc. {x.number}</span>{x.place}{#if x.lock}<Icon name="lock" size={10} />{/if}<button aria-label="Remove scene {x.number}" onclick={() => dropShown(e.folder, x.id)}><Icon name="x" size={12} stroke={2.4} /></button></span>
-                        {/each}
-                        {#if e.scenes.some((x) => !shown[e.folder].includes(x.id))}
-                          <label class="pick add">
-                            Add scene
-                            <select aria-label="Add a scene of {e.label}" value="" onchange={(ev) => addShown(e.folder, e.scenes, ev.currentTarget.value)}>
-                              <option value="" disabled>Add scene</option>
-                              {#each e.scenes.filter((x) => !shown[e.folder].includes(x.id)) as x (x.id)}<option value={x.id}>Sc. {x.number} · {x.place}</option>{/each}
-                            </select>
-                          </label>
-                        {/if}
+                      <div class="under picker">
+                        <ScenePicker scenes={e.scenes} picked={shown[e.folder]} label="Scenes of {e.label}" onpick={(next) => (shown = { ...shown, [e.folder]: next })} />
                       </div>
                     {/if}
                   </div>
                 {/each}
                 <div class="cap tn">{showScenes} {showScenes === 1 ? 'scene' : 'scenes'} of {showEpisodes} {showEpisodes === 1 ? 'episode' : 'episodes'}</div>
               {:else}
-                <div class="segx" role="group" aria-label="Range">
-                  <button class:on={whole} aria-pressed={whole} onclick={() => (whole = true)}>Whole episode</button>
-                  <button class:on={!whole} aria-pressed={!whole} onclick={() => (whole = false)}>Scenes</button>
-                </div>
-                {#if !whole}
-                  <div class="chips">
-                    {#each pickedScenes as x (x.id)}
-                      <span class="pick" title={x.heading}><span class="dim tn">Sc. {x.number}</span>{x.place}{#if x.lock}<Icon name="lock" size={10} />{/if}<button aria-label="Remove scene {x.number}" onclick={() => (picked = picked.filter((id) => id !== x.id))}><Icon name="x" size={12} stroke={2.4} /></button></span>
-                    {/each}
-                    {#if unpicked.length}
-                      <label class="pick add">
-                        Add scene
-                        <select aria-label="Add a scene" value="" onchange={(e) => addScene(e.currentTarget.value)} data-testid="add-scene">
-                          <option value="" disabled>Add scene</option>
-                          {#each unpicked as x (x.id)}<option value={x.id}>Sc. {x.number} · {x.place}</option>{/each}
-                        </select>
-                      </label>
-                    {/if}
-                  </div>
-                {/if}
-                <div class="cap tn" data-testid="range-caption">{rangeCaption(pickedScenes, scenes.length)}</div>
+                <ScenePicker {scenes} {picked} onpick={(next) => (picked = next)} />
+                <div class="cap tn" data-testid="range-caption">{rangeCaption(pickedScenes, tickable(scenes).length, plan?.one_file?.length_s)}</div>
               {/if}
               <div class="lockrow">
                 {@render tick(s.lock_after, (v) => s && (s.lock_after = v), 'Lock these scenes after export', '', '', 'lock-after')}
@@ -340,7 +310,7 @@
                 <ul>
                   {#each history as h (h.r.folder)}
                     <li class="tn">
-                      <span class="ellip" title={h.r.destination === 'pipeline' ? 'Pipeline folder' : 'Episode exports'}>Sc. {h.scene.number} {version(h.r.version)} · {h.r.date.slice(0, 10)} · {h.r.destination === 'pipeline' ? 'Pipeline' : 'Episode'}</span>
+                      <span class="ellip" title={h.r.destination === 'pipeline' ? 'Pipeline folder' : 'Episode exports'}>{h.name} {version(h.r.version)} · {h.r.date.slice(0, 10)} · {h.r.destination === 'pipeline' ? 'Pipeline' : 'Episode'}</span>
                       <button class="link" onclick={() => app.reveal(h.r.folder)}>Reveal</button>
                     </li>
                   {/each}
@@ -566,7 +536,7 @@
     min-height: 0;
     overflow-y: auto;
     display: grid;
-    grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.18fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.24fr) minmax(0, 0.86fr);
     column-gap: 28px;
     margin: -3px;
     padding: 3px;
@@ -585,58 +555,6 @@
     font-size: 13px;
     color: var(--text-3);
     margin-bottom: 8px;
-  }
-  .segx {
-    display: inline-flex;
-    padding: 2px;
-    border-radius: 9px;
-    background: var(--glass-fill-4);
-  }
-  .segx button {
-    height: 28px;
-    padding: 0 14px;
-    border-radius: 7px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-3);
-  }
-  .segx button.on {
-    background: var(--glass-active);
-    color: var(--text-strong);
-    font-weight: 600;
-    box-shadow: 0 1px 2px rgb(var(--night-rgb) / 0.3);
-  }
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 10px;
-  }
-  .pick {
-    position: relative;
-    height: 28px;
-    padding: 0 8px 0 11px;
-    border-radius: var(--radius-pill);
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--text-strong);
-    background: var(--glass-hover);
-  }
-  .pick button {
-    display: flex;
-    color: var(--text-4);
-  }
-  .pick button:hover {
-    color: var(--text-1);
-  }
-  .pick.add {
-    padding: 0 11px;
-    background: none;
-    box-shadow: inset 0 0 0 1px rgb(var(--veil-rgb) / 0.14);
-    color: var(--text-3);
   }
   .pop {
     position: relative;
@@ -662,16 +580,14 @@
     opacity: 0.6;
   }
   /* the popups are the system's: invisible over the label, opened by it */
-  .pop select,
-  .pick select {
+  .pop select {
     position: absolute;
     inset: 0;
     width: 100%;
     opacity: 0;
     cursor: pointer;
   }
-  .pop:focus-within,
-  .pick:focus-within {
+  .pop:focus-within {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
@@ -772,8 +688,8 @@
   .ep + .ep {
     margin-top: 8px;
   }
-  .ep .chips {
-    margin: 4px 0 2px 25px;
+  .picker {
+    margin-top: 6px;
   }
   .pathline {
     font-size: 13px;

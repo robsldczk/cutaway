@@ -33,7 +33,7 @@ test('a show export asks for its folder once, and lands in it', async ({ page })
 
   // ticking an episode takes all its scenes; a scene can go
   await page.getByTestId('show-episode').check();
-  await page.getByRole('button', { name: 'Remove scene 2' }).click();
+  await page.locator('[data-testid="scene-box"][data-number="2"]').click();
   await expect(page.getByText('1 scene of 1 episode')).toBeVisible();
 
   // nothing leaves for a guessed folder
