@@ -534,7 +534,7 @@ fn into_folder<T>(folder: &Path, work: impl FnOnce(&Path) -> Result<T>) -> Resul
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let hidden = parent.join(format!(".{name} writing {}", std::process::id()));
+    let hidden = parent.join(format!(".{name}_writing_{}", std::process::id()));
     if hidden.exists() {
         std::fs::remove_dir_all(&hidden)?;
     }
@@ -748,7 +748,7 @@ pub struct ScenePlan {
     pub version: u32,
     /// `Sc02 v003`
     pub label: String,
-    /// `Sc02 Canteen/v003 2026-11-05`
+    /// `Sc02_Canteen/v003_2026-11-05`
     pub folder: String,
     pub files: Vec<String>,
     pub bytes: u64,

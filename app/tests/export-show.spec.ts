@@ -50,9 +50,9 @@ test('a show export asks for its folder once, and lands in it', async ({ page })
   await go.click();
   await expect(page.getByTestId('export-done')).toContainText('Saved 1 scene to the pipeline folder', { timeout: 30_000 });
 
-  const scene = join(root, 'Sound/Exports/Ep02/Sc01 Lab');
+  const scene = join(root, 'Sound/Exports/Ep02/Sc01_Lab');
   const [version] = readdirSync(scene);
-  expect(version).toMatch(/^v001 \d{4}-\d{2}-\d{2}$/);
+  expect(version).toMatch(/^v001_\d{4}-\d{2}-\d{2}$/);
   expect(readdirSync(join(scene, version))).toContain('E02_S01_v001_Mix.wav');
 
   await rpc('close_show');

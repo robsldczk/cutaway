@@ -3,19 +3,22 @@
 //! because it isn't in the document, and it can't disagree with what's on disk (D112).
 //!
 //! ```text
-//! Exports/Sc02 Canteen/v003 2026-11-05/  E02_S02_v003_Dialogue.wav … manifest.json
-//! Exports/Episode/v002 2026-11-05/       E02_v002.fcpxml … manifest.json
+//! Exports/Sc02_Canteen/v003_2026-11-05/  E02_S02_v003_Dialogue.wav … manifest.json
+//! Exports/Episode/v002_2026-11-05/       E02_v002.fcpxml … manifest.json
 //! ```
 //!
 //! That's the episode's own `Exports` folder. A pipeline folder holds every episode, so there
-//! the same tree sits under `Exports/Ep02/` (D117).
+//! the same tree sits under `Exports/Ep02/` (D117). The names stay machine readable, with no
+//! spaces or punctuation (D132); versions saved under older names still count, because the
+//! manifests are what's read.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use deunicode::deunicode;
+
 use apc_core::config::{ExportSettings, SaveTo};
-use apc_core::project::safe_name;
 use apc_core::Scene;
 
 use crate::error::Result;
@@ -51,19 +54,31 @@ impl EpisodeTag {
     }
 }
 
-/// `Sc02 Canteen`
+/// A name a script can take without quoting: ASCII letters, digits and hyphens, with `_` between
+/// words. An apostrophe belongs to its word, so `Colonel’s Office` is `Colonels_Office`.
+pub fn machine_name(name: &str) -> String {
+    deunicode(name)
+        .replace('\'', "")
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '-')
+        .map(|word| word.trim_matches('-'))
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+/// `Sc02_Canteen`
 pub fn scene_folder(scene: &Scene) -> String {
-    let name = safe_name(&scene.place);
+    let name = machine_name(&scene.place);
     if name.is_empty() {
         format!("Sc{:02}", scene.number)
     } else {
-        format!("Sc{:02} {name}", scene.number)
+        format!("Sc{:02}_{name}", scene.number)
     }
 }
 
-/// `v003 2026-11-05`
+/// `v003_2026-11-05`
 pub fn version_folder(version: u32, date: &str) -> String {
-    format!("v{version:03} {date}")
+    format!("v{version:03}_{date}")
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -273,7 +288,38 @@ mod tests {
         assert_eq!(ep.folder(), "Ep02");
         assert_eq!(ep.stem(2, 3), "E02_S02_v003");
         assert_eq!(ep.episode_stem(12), "E02_v012");
-        assert_eq!(version_folder(3, "2026-11-05"), "v003 2026-11-05");
+        assert_eq!(version_folder(3, "2026-11-05"), "v003_2026-11-05");
+    }
+
+    #[test]
+    fn a_folder_name_needs_no_quoting() {
+        for (place, name) in [
+            ("Canteen", "Canteen"),
+            ("Time Spring Command", "Time_Spring_Command"),
+            ("Colonel’s Office", "Colonels_Office"),
+            ("Nina's Bedroom", "Ninas_Bedroom"),
+            ("Canteen – Later", "Canteen_Later"),
+            ("Canteen · Later (Night)", "Canteen_Later_Night"),
+            ("Küche/Flur", "Kuche_Flur"),
+            ("ÉMILE'S  CAFÉ", "EMILES_CAFE"),
+            ("Top-Floor Lab", "Top-Floor_Lab"),
+            ("  ?  ", ""),
+        ] {
+            assert_eq!(machine_name(place), name, "{place}");
+        }
+    }
+
+    #[test]
+    fn versions_under_the_old_names_still_count() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = dir.path().join("Sc03 Colonel’s Office/v001 2026-11-06");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(
+            old.join(MANIFEST),
+            serde_json::to_vec(&manifest(Some("a"), 1, "x")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(History::new(scan(dir.path())).next_for("a"), 2);
     }
 
     #[test]

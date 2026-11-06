@@ -161,7 +161,7 @@ fn in_stem_mode_every_file_is_the_scene_to_the_sample_silent_ones_too() {
     assert!(names(&f)
         .iter()
         .all(|n| n.starts_with(meant) || n == "manifest.json"));
-    assert!(f.ends_with(format!("v001 {}", chrono::Local::now().format("%Y-%m-%d"))));
+    assert!(f.ends_with(format!("v001_{}", chrono::Local::now().format("%Y-%m-%d"))));
 }
 
 #[test]
@@ -793,7 +793,7 @@ fn a_show_export_goes_only_to_the_confirmed_pipeline_folder() {
             .unwrap(),
     );
     assert!(
-        f.starts_with(root.join("Sound/Exports/Ep02/Sc01 Lab")),
+        f.starts_with(root.join("Sound/Exports/Ep02/Sc01_Lab")),
         "{f:?}"
     );
     assert!(
@@ -822,7 +822,7 @@ fn a_show_export_goes_only_to_the_confirmed_pipeline_folder() {
     assert_eq!(r["scenes"][0]["version"], 2);
     assert!(folder(&r, 0)
         .to_string_lossy()
-        .contains("Episodes/Episode 2/Sound/Exports/Sc01 Lab"));
+        .contains("Episodes/Episode 2/Sound/Exports/Sc01_Lab"));
 }
 
 #[test]
@@ -844,7 +844,7 @@ fn the_default_goes_straight_into_the_episodes_exports_with_no_folder_chosen() {
     let f = folder(&r, 0);
     assert_eq!(
         f.parent().unwrap(),
-        exports.join("Sc01 Lab"),
+        exports.join("Sc01_Lab"),
         "no Ep02 inside Episode 2"
     );
     // the files still say which episode they're from, once they leave the folder
@@ -855,7 +855,7 @@ fn the_default_goes_straight_into_the_episodes_exports_with_no_folder_chosen() {
     assert!(plan["scenes"][0]["folder"]
         .as_str()
         .unwrap()
-        .starts_with("Sc01 Lab/v002 "));
+        .starts_with("Sc01_Lab/v002_"));
 }
 
 #[test]
@@ -880,7 +880,7 @@ fn a_custom_folder_gets_its_exports_folder_and_keeps_the_episodes_apart() {
             .as_str()
             .unwrap(),
     );
-    assert!(f.starts_with(custom.join("Exports/Ep02/Sc01 Lab")), "{f:?}");
+    assert!(f.starts_with(custom.join("Exports/Ep02/Sc01_Lab")), "{f:?}");
 }
 
 #[test]
