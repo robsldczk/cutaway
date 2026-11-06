@@ -225,7 +225,7 @@ class AppState {
   /** The scene sounds panel: its sounds, or the scene's notes. */
   panelTab = $state<'sounds' | 'notes'>('sounds');
   /** Keys on the review screen. */
-  reviewUi: { marker(): void; note(): void; search(): void; cancel(): boolean } | null = null;
+  reviewUi: { marker(): void; note(): void; search(): void; cancel(): boolean; wheel(e: WheelEvent): boolean } | null = null;
   /** The open show (studio mode): its home shows when no episode is open. */
   show = $state<ShowView | null>(null);
   /** The show's backdrop (a data URL), loaded once per show. */

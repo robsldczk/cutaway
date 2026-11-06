@@ -2,7 +2,7 @@
   // The review screen: the scene as cards with the dialogue spine, the notes in the margin beside
   // it, and only what a reviewer needs around them. Nothing here changes the cut, and the bus
   // wouldn't let it. It reads the same live scene as every other page.
-  import { onDestroy, onMount, tick } from 'svelte';
+  import { onDestroy, onMount, tick, untrack } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { call, savePath } from '../lib/bridge';
   import { brand } from '../lib/brand';
@@ -10,6 +10,7 @@
   import { clamp, fmt } from '../lib/format';
   import { filtered, placeCards, reviewRows, roleLabel, roundLine, tagLabel, TAGS, threadsOf, type Note, type NoteFilter, type NoteTag, type NoteTarget } from '../lib/review';
   import { spinePaths } from '../lib/sounds/paths';
+  import type { ItemView } from '../lib/types';
   import { rowSpans, TimeMap } from '../lib/sounds/timemap';
   import { lineWords } from '../lib/words';
   import Icon from '../components/Icon.svelte';
@@ -37,8 +38,20 @@
   const map = $derived(new TimeMap(rowSpans(laid.rows.filter((x) => x.kind !== 'gap').map((x) => ({ start_s: x.start_s, end_s: x.end_s, top: x.top, height: x.height }))), 14 * sc));
   const spine = $derived([...spinePaths(app.lines, map, spineX, 11)].map(([who, d]) => ({ who, d, fill: rgba(charColor(v, who).rgb, 0.95) })));
   const end = $derived(v?.duration_s ?? 0);
-  const off = $derived(map.y(Math.min(app.pos, end)));
+  /** Where the wheel left the column. Between cards no time passes, so a height can't be got
+   *  back from the playhead: the height itself is kept for as long as the playhead stays put. */
+  let scroll = $state<{ y: number; t: number } | null>(null);
+  let gliding = $state(false);
+  const off = $derived(scroll && (gliding || scroll.t === app.pos) ? scroll.y : map.y(Math.min(app.pos, end)));
   const sounds = $derived((app.edit?.placements ?? []).filter((p) => p.lane !== 'dialogue'));
+
+  // a new layout has other heights
+  $effect(() => {
+    void laid;
+    untrack(() => {
+      if (!gliding) scroll = null;
+    });
+  });
 
   // ---- the notes ----
   let by = $state<NoteFilter>('all');
@@ -46,8 +59,16 @@
 
   const earlier = $derived(!!r?.round && r.round !== r.current_round);
   const round = $derived(r?.rounds.find((x) => x.id === r.round) ?? null);
-  /** Today's view is the state of everything; an earlier round shows the notes it brought. */
-  const notes = $derived(r ? filtered(r.notes, by, kind, earlier ? r.round : null) : []);
+  /** The note being dragged, and where it would land. */
+  let moving = $state<{ id: string; start: number; end: number | null; line?: string } | null>(null);
+  const MOVING = '__moving';
+  /** Today's view is the state of everything; an earlier round shows the notes it brought. A
+   *  note on the move goes by itself, at the pointer. */
+  const notes = $derived(
+    (r ? filtered(r.notes, by, kind, earlier ? r.round : null) : []).map((n) =>
+      n.id === moving?.id ? { ...n, start_s: moving.start, end_s: moving.end, time: fmt(moving.start), detached: false, on: n.on === 'scene' ? ('word' as const) : n.on, thread: MOVING } : n,
+    ),
+  );
   const open = $derived(r?.notes.filter((n) => n.status !== 'resolved').length ?? 0);
 
   let heights = $state<Record<string, number>>({});
@@ -150,6 +171,154 @@
     window.addEventListener('mouseup', up);
   }
 
+  // ---- moving a note ----
+
+  interface Grab {
+    note: Note;
+    /** From the note's spot to the pointer, in column pixels. */
+    offset: number;
+    /** A range keeps its length. */
+    len: number | null;
+    y0: number;
+    clientY: number;
+    moved: boolean;
+  }
+  let grab: Grab | null = null;
+  let areaEl = $state<HTMLDivElement>();
+  let edgeFrame = 0;
+
+  const colTop = () => colEl?.getBoundingClientRect().top ?? 0;
+
+  function aim() {
+    const g = grab;
+    if (!g?.moved) return;
+    const room = end - (g.len ?? 0);
+    const start = clamp(map.t(g.clientY - colTop() - g.offset), 0, Math.max(0, room));
+    // a whole line goes from line to line, so it shows where it'll land
+    const line = g.note.on === 'line' ? nearestLine(start) : undefined;
+    moving = line ? { id: g.note.id, start: line.start_s, end: line.end_s, line: line.line_id } : { id: g.note.id, start, end: g.len === null ? null : start + g.len };
+  }
+
+  function nearestLine(t: number) {
+    const away = (l: ItemView) => (t < l.start_s ? l.start_s - t : t > l.end_s ? t - l.end_s : 0);
+    return app.lines.filter((l) => l.end_s > l.start_s).reduce<ItemView | undefined>((a, l) => (!a || away(l) < away(a) ? l : a), undefined);
+  }
+
+  /** Near the top or bottom of the column it scrolls on, so a note can go anywhere in the scene. */
+  function edgeScroll() {
+    edgeFrame = 0;
+    const g = grab;
+    if (!g) return;
+    const a = areaEl?.getBoundingClientRect();
+    if (g.moved && a) {
+      const d = g.clientY < a.top + 70 ? -9 : g.clientY > a.bottom - 50 ? 9 : 0;
+      if (d) scrollBy(d);
+      aim();
+    }
+    edgeFrame = requestAnimationFrame(edgeScroll);
+  }
+
+  function letGo() {
+    window.removeEventListener('mousemove', dragMove);
+    window.removeEventListener('mouseup', dragUp);
+    cancelAnimationFrame(edgeFrame);
+    grab = null;
+  }
+
+  function dragMove(e: MouseEvent) {
+    const g = grab;
+    if (!g) return;
+    g.clientY = e.clientY;
+    if (Math.abs(e.clientY - g.y0) > 3) g.moved = true;
+    aim();
+  }
+
+  async function dragUp() {
+    const g = grab;
+    const m = moving;
+    letGo();
+    if (!g) return;
+    if (!g.moved || !m) {
+      // a press that went nowhere is a click: to the note
+      void goTo(g.note);
+      return;
+    }
+    // it stays where it was dropped until the new view lands
+    const spot = m.line ? { line_id: m.line } : onScene(m.end === null ? { at_s: m.start } : { at_s: m.start, to_s: m.end });
+    await app.note('move_note', { note: g.note.id, ...spot });
+    moving = null;
+  }
+
+  function grabNote(e: MouseEvent, n: Note) {
+    if (e.button !== 0 || !n.can_change) return;
+    e.preventDefault();
+    e.stopPropagation();
+    // a note with no spot, on the scene or detached, starts from its card
+    let at = n.start_s !== null && n.on !== 'scene' ? map.y(n.start_s) : topOf(n.thread) + 20;
+    // a whole line is held by its middle, which is what picks the line it lands on
+    if (n.on === 'line' && n.start_s !== null && n.end_s !== null) at = (map.y(n.start_s) + map.y(n.end_s)) / 2;
+    const ranged = n.on === 'words' && n.start_s !== null && n.end_s !== null;
+    grab = { note: n, offset: e.clientY - colTop() - at, len: ranged ? (n.end_s ?? 0) - (n.start_s ?? 0) : null, y0: e.clientY, clientY: e.clientY, moved: false };
+    window.addEventListener('mousemove', dragMove);
+    window.addEventListener('mouseup', dragUp);
+    edgeFrame = requestAnimationFrame(edgeScroll);
+  }
+
+  // ---- the wheel ----
+
+  /** A notch or a trackpad, the column glides to where it's asked to be. */
+  const GLIDE = 0.3;
+  const FAST = 4;
+  /** Playing, it starts again from where the scroll stops. */
+  const SEEK_MS = 180;
+  let target: number | null = null;
+  let frame = 0;
+  let seekTimer: ReturnType<typeof setTimeout> | undefined;
+  const still = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function place(y: number) {
+    const t = clamp(map.t(y), 0, end);
+    app.scrubTo(t);
+    scroll = { y, t };
+  }
+
+  function settle() {
+    target = null;
+    gliding = false;
+    if (app.playing) {
+      clearTimeout(seekTimer);
+      seekTimer = setTimeout(() => app.seek(app.pos), SEEK_MS);
+    }
+  }
+
+  function step() {
+    frame = 0;
+    if (target === null) return;
+    const left = target - off;
+    const y = Math.abs(left) < 0.5 ? target : off + left * GLIDE;
+    place(y);
+    if (y === target) settle();
+    else frame = requestAnimationFrame(step);
+  }
+
+  function scrollBy(d: number) {
+    const to = clamp((target ?? off) + d, map.y(0), map.y(end));
+    if (still()) {
+      place(to);
+      return settle();
+    }
+    target = to;
+    gliding = true;
+    frame ||= requestAnimationFrame(step);
+  }
+
+  function wheel(e: WheelEvent) {
+    let d = e.deltaY || e.deltaX;
+    if (e.deltaMode === 1) d *= 40;
+    scrollBy(e.shiftKey ? d * FAST : d);
+    return true;
+  }
+
   // ---- going to a note ----
   async function goTo(n: Note) {
     if (n.scene_id !== app.sceneId) await app.loadScene(n.scene_id);
@@ -183,14 +352,25 @@
       marker: () => void write(onScene({ at_s: app.pos })),
       note: () => void (app.cur ? write({ line_id: app.cur.line_id }) : write(onScene())),
       search: () => search?.focus(),
+      wheel,
       cancel: () => {
+        if (grab) {
+          letGo();
+          moving = null;
+          return true;
+        }
         if (!draft) return false;
         draft = null;
         return true;
       },
     };
   });
-  onDestroy(() => (app.reviewUi = null));
+  onDestroy(() => {
+    app.reviewUi = null;
+    letGo();
+    cancelAnimationFrame(frame);
+    clearTimeout(seekTimer);
+  });
 </script>
 
 <svelte:window bind:innerWidth={stageW} bind:innerHeight={stageH} />
@@ -229,8 +409,8 @@
     <button class="btnx pri" onclick={() => app.leaveReview()} data-testid="review-done">Done</button>
   </header>
 
-  <div class="area" style="right: {RAIL - 16}px">
-    <div class="col" bind:this={colEl} style="transform: translateY({(stageH / 2 - 64 - off).toFixed(1)}px); transition: {app.playing ? 'transform .1s linear' : 'transform .3s var(--ease-out)'}">
+  <div class="area" bind:this={areaEl} style="right: {RAIL - 16}px">
+    <div class="col" bind:this={colEl} style="transform: translateY({(stageH / 2 - 64 - off).toFixed(1)}px); transition: {gliding ? 'none' : app.playing ? 'transform .1s linear' : 'transform .3s var(--ease-out)'}">
       {#each laid.rows as row (row.key)}
         {#if row.kind === 'line' && row.it}
           {@const it = row.it}
@@ -254,7 +434,6 @@
         {#each spine as s (s.who)}<path d={s.d} fill={s.fill} />{/each}
         <path d={links} stroke="rgb(var(--accent-rgb) / 0.55)" stroke-width="1.3" fill="none" />
         {#if draft && draft.target.start_s !== null}<path d={link(map.y(draft.target.start_s), topOf(DRAFT))} stroke="var(--link)" stroke-width="1.6" fill="none" />{/if}
-        {#each dots as n (n.id)}<circle cx={spineX} cy={dotAt(n)} r="6" fill="var(--accent)" stroke="var(--stage-bg)" stroke-width="2" opacity={n.status === 'resolved' ? 0.4 : 1} data-testid="note-dot" />{/each}
       </svg>
 
       <!-- svelte-ignore a11y_no_static_element_interactions (the keyboard has M and N) -->
@@ -264,8 +443,12 @@
         <button class="snd" style="left: {spineX + 22}px; top: {map.y(p.start_s) - 6}px" title="Note on {p.name}" aria-label="Note on {p.name}" onclick={() => write({ placement_id: p.id })} data-testid="review-sound"></button>
       {/each}
 
+      {#each dots as n (n.id)}
+        <button class="dot" class:can={n.can_change} class:done={n.status === 'resolved'} style="left: {spineX}px; top: {dotAt(n).toFixed(1)}px" title={n.can_change ? 'Drag to move this note' : n.text} aria-label="Note {n.n}" onmousedown={(e) => grabNote(e, n)} onclick={() => !n.can_change && goTo(n)} data-testid="note-dot" data-spot={n.id}></button>
+      {/each}
       {#each brackets as n (n.id)}
-        <div class="br" class:done={n.status === 'resolved'} style="left: {spineX + 12}px; top: {map.y(n.start_s ?? 0).toFixed(1)}px; height: {Math.max(6, map.y(n.end_s ?? 0) - map.y(n.start_s ?? 0)).toFixed(1)}px" data-testid="note-bracket"></div>
+        <!-- svelte-ignore a11y_no_static_element_interactions (the CLI and MCP have move_note) -->
+        <div class="br" class:can={n.can_change} class:done={n.status === 'resolved'} style="left: {spineX + 12}px; top: {map.y(n.start_s ?? 0).toFixed(1)}px; height: {Math.max(6, map.y(n.end_s ?? 0) - map.y(n.start_s ?? 0)).toFixed(1)}px" title={n.can_change ? 'Drag to move this note' : undefined} onmousedown={(e) => grabNote(e, n)} data-testid="note-bracket" data-spot={n.id}></div>
       {/each}
       {#if span}
         <div class="br live" style="left: {spineX + 12}px; top: {map.y(Math.min(span.a, span.b)).toFixed(1)}px; height: {Math.max(6, Math.abs(map.y(span.b) - map.y(span.a))).toFixed(1)}px"></div>
@@ -292,10 +475,10 @@
           </div>
         {:else}
           {@const thread = threadOf(p.item)}
-          <div class="mn" class:hot={thread.some((n) => n.id === app.noteFocus)} class:quiet={thread.every((n) => n.status === 'resolved')} style="left: {notesX}px; width: {notesW}px; top: {p.top.toFixed(0)}px" bind:clientHeight={heights[p.item]} data-testid="note-thread">
+          <div class="mn" class:held={p.item === MOVING} class:hot={thread.some((n) => n.id === app.noteFocus)} class:quiet={thread.every((n) => n.status === 'resolved')} style="left: {notesX}px; width: {notesW}px; top: {p.top.toFixed(0)}px" bind:clientHeight={heights[p.item]} data-testid="note-thread">
             {#each thread as n, i (n.id)}
               {#if i}<div class="sep"></div>{/if}
-              <NoteCard note={n} onjump={goTo} />
+              <NoteCard note={n} onjump={goTo} ongrab={grabNote} />
             {/each}
           </div>
         {/if}
@@ -616,6 +799,31 @@
   .br.done {
     opacity: 0.4;
   }
+  .br.can {
+    pointer-events: auto;
+    cursor: grab;
+  }
+  /* wider to grab than to see */
+  .br.can::before {
+    content: '';
+    position: absolute;
+    inset: 0 -5px;
+  }
+  .dot {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    margin: -6px 0 0 -6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--stage-bg);
+  }
+  .dot.done {
+    opacity: 0.4;
+  }
+  .dot.can {
+    cursor: grab;
+  }
   .br.live {
     background: var(--link);
     box-shadow: 0 0 12px rgb(var(--accent-rgb) / 0.7);
@@ -634,6 +842,11 @@
   }
   .mn.quiet {
     background: var(--panel);
+  }
+  .mn.held {
+    z-index: 4;
+    transition: none;
+    box-shadow: inset 0 0 0 1.5px rgb(var(--accent-rgb) / 0.8), 0 20px 50px rgb(var(--shadow-rgb) / 0.5);
   }
   .mn.hot {
     box-shadow: inset 0 0 0 1.5px rgb(var(--accent-rgb) / 0.8);

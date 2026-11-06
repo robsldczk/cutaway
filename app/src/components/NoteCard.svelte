@@ -6,7 +6,7 @@
   import { day, quoted, roleLabel, tagLabel, TAGS, type Note, type NoteTag } from '../lib/review';
   import Icon from './Icon.svelte';
 
-  let { note, compact = false, onjump, onbucket }: { note: Note; compact?: boolean; onjump?: (n: Note) => void; onbucket?: (n: Note) => void } = $props();
+  let { note, compact = false, onjump, onbucket, ongrab }: { note: Note; compact?: boolean; onjump?: (n: Note) => void; onbucket?: (n: Note) => void; ongrab?: (e: MouseEvent, n: Note) => void } = $props();
 
   let replying = $state(false);
   let reply = $state('');
@@ -35,6 +35,18 @@
     if (t && t !== note.text) void app.note('edit_note', { note: note.id, text: t });
   }
 
+  /** One click: it's undoable, and it says how. */
+  async function remove() {
+    const r = await app.note('remove_note', { note: note.id, confirm: true });
+    if (r) app.say('Note removed. ⌘Z brings it back');
+  }
+
+  /** The top row carries the card; its buttons stay buttons. */
+  const movable = $derived(!!ongrab && note.can_change);
+  function press(e: MouseEvent) {
+    if (movable && !(e.target as Element).closest('button')) ongrab?.(e, note);
+  }
+
   function retag(tag: NoteTag | null) {
     if (tag !== note.tag) void app.note('tag_note', { note: note.id, tag });
   }
@@ -51,7 +63,8 @@
 </script>
 
 <article class="nc" class:done={resolved} class:compact data-testid="note" data-note={note.id} data-status={note.status}>
-  <div class="top">
+  <!-- svelte-ignore a11y_no_static_element_interactions (the CLI and MCP have move_note) -->
+  <div class="top" class:movable title={movable ? 'Drag to move this note' : undefined} onmousedown={press} data-testid="note-top">
     <span class="av" class:me={note.mine} title="{note.author.name} · {roleLabel(note.author.role)}">{note.author.initials}</span>
     <span class="who ellip" title={roleLabel(note.author.role)}>{note.author.name}</span>
     <button class="tc tn" title={note.detached ? 'Where it last was' : 'Go to this spot'} disabled={note.detached} onclick={() => onjump?.(note)} data-testid="note-time">{note.time}</button>
@@ -87,6 +100,7 @@
     <div class="acts">
       <button onclick={() => (replying = true)} data-testid="note-reply-open">Reply</button>
       {#if note.mine && !editing}<button onclick={() => { text = note.text; editing = true; }} data-testid="note-edit">Edit</button>{/if}
+      {#if note.can_change}<button onclick={remove} data-testid="note-remove">Remove</button>{/if}
       {#if onbucket && (note.tag === 'sound' || note.tag === 'music')}<button onclick={() => onbucket?.(note)} data-testid="note-bucket">Find in bucket</button>{/if}
       {#if compact && note.round_number}<span class="muted rd">Round {note.round_number}</span>{/if}
     </div>
@@ -111,6 +125,11 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+  }
+  .top.movable {
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
   }
   .grow {
     flex: 1;

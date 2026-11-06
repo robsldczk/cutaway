@@ -61,6 +61,8 @@ export interface Note {
   scene_number: number | null;
   author: Reviewer;
   mine: boolean;
+  /** Whoever's here may move and remove it: it's theirs, or they're the editor. */
+  can_change: boolean;
   tag: NoteTag | null;
   text: string;
   status: NoteStatus;

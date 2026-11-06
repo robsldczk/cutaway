@@ -80,6 +80,8 @@
     ['Previous / next line', ['↑', '↓']],
     ['Search scenes, lines and notes', ['⌘K']],
     ['Add the note', ['↩']],
+    ['Move a note', ['drag its dot, bracket or top row']],
+    ['Scroll through the scene, faster', ['scroll', '⇧ scroll']],
     ['Undo your last note', ['⌘Z']],
   ];
   const ed: [string, string[]][] = [

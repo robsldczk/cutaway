@@ -192,6 +192,7 @@
                   {#if cur.edited_in_edit}<button class="edited" onclick={() => app.setPage('edit')} title="Edited on the Edit page">edited in Edit</button>{/if}
                   {#if cur.adlib}<span class="added" title="Not in the script">added</span>{/if}
                   <ClipState it={cur} />
+                  <NoteBadge line={cur.line_id} />
                 </div>
                 <div class="tools" data-own-keys>
                   <button class="map" ondblclick={(e) => e.stopPropagation()} onclick={() => app.openMapping({ kind: 'take', line_id: cur.line_id })} title="Change this take or find the right one" data-testid="open-mapping">Edit take <span class="kb">M</span></button>
