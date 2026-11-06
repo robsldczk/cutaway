@@ -196,6 +196,10 @@ fn what_keeps_the_timing_stays_allowed() {
             line_id: "a".into(),
             gain_db: -3.0,
         },
+        Command::SetClipDepth {
+            line_id: "a".into(),
+            depth: 0.5,
+        },
         Command::SetClipMuted {
             line_id: "b".into(),
             part: None,

@@ -714,6 +714,17 @@ Seven requests from one list, in this order. Decisions in `DECISIONS.md`.
 - [x] Side by side: drag a line next to another on Arrange, two at most, the second can be offset (D125)
 - [x] A panned voice sits a little further back in the room, with a sensitivity in Settings (D126)
 
+### Arrange round 2: timing sounds against the words, lines further back (Rob, 2026-11-06; D127 onwards)
+Three requests from one conversation, in this order. Decisions in `DECISIONS.md`.
+- [ ] Line depth in the document: `BoxState.depth`, `set_clip_depth`, `set_line_depth` for the CLI and MCP, stays with the line when the take changes, passes a lock (D128)
+- [ ] The voice's own curve: direct against room, less low end, softer highs on the direct sound only, reflections arriving sooner; a far line is two clips on the schedule, so the mixer stays stateless (D128)
+- [ ] A marker of its own on the blocks while a sound moves: drag, trim, keys, opened sound, a drop from the bucket; in a pause too; names the word under it. The block's time-to-source mapping goes through the pieces, so the locator stops drifting on cut lines (D127)
+- [ ] Several lines selected on Arrange: ⌘ click, ⇧ click, Esc (D129)
+- [ ] The line's right-click menu: depth slider with named stops, copy and paste attributes; a chip on the block; ⌥←/→ for depth, ⌥⌘C and ⌥⌘V (D128, D129)
+- [ ] Specs, keyboard map, help overlay, RUN_REPORT
+
+Risks: a filter on a far voice has to sound like distance and not like a closed door, and nobody has listened yet, so the numbers live in one place (`depth.rs`) and get measured on a copy of Episode 2. Right click and ⌥⌘ keys are input a Chromium test can't vouch for, so they go through the real webview too.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)

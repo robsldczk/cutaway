@@ -502,6 +502,8 @@ mod tests {
                 dry_gain: 1.0,
                 send_gain: 1.0,
                 lowpass_hz: 20_000.0,
+                low_shelf_db: 0.0,
+                high_shelf_db: 0.0,
             }),
         };
         engine.load(

@@ -141,6 +141,74 @@ fn dry_stems_and_room_returns_null_against_the_mix() {
     assert!(db < -100.0, "the stems null against the mix: {db:.1} dB");
 }
 
+/// The scene with a spoken line moved back in the room.
+fn with_a_far_line(dir: &Path) -> (Document, SourceSet) {
+    let (mut d, mut set) = scene(dir);
+    set.add("mic", noise(dir, "mic.wav", 5, 3.0));
+    let line: ScriptLine = serde_json::from_value(json!({
+        "id": "away", "scene_id": "s1", "kind": "dialogue", "character": "PAUL", "text": "x",
+        "tokens": ["x"], "words": ["x"], "number": 1, "version_added": 1,
+    }))
+    .unwrap();
+    d.lines.insert("away".into(), line);
+    let take: Take = serde_json::from_value(json!({
+        "id": "t", "line_id": "away", "source_id": "mic", "take_no": 1, "take_type": "full",
+        "t0": 0.5, "t1": 1.5, "score": 100.0,
+    }))
+    .unwrap();
+    d.takes.insert("t".into(), take);
+    d.boxes.insert(
+        "away".into(),
+        BoxState {
+            id: "away".into(),
+            take_id: Some("t".into()),
+            depth: 0.7,
+            ..Default::default()
+        },
+    );
+    if let Some(s) = d.scenes.get_mut("s1") {
+        s.order.push("away".into());
+    }
+    (d, set)
+}
+
+#[test]
+fn a_line_moved_back_still_nulls_against_the_mix() {
+    let dir = tempfile::tempdir().unwrap();
+    let (doc, set) = with_a_far_line(dir.path());
+    let s = schedule(&doc);
+    assert_eq!(
+        s.clips.iter().filter(|c| c.owner == "away").count(),
+        2,
+        "the line is a direct sound and a send"
+    );
+    let frames = frames_of(&s, RATE);
+    let mix = render_part(&s, &set, frames, Part::Whole).unwrap();
+    let dry = render_part(&s, &set, frames, Part::Dry).unwrap();
+    let wet = render_part(&s, &set, frames, Part::Wet).unwrap();
+    let residual = mix
+        .iter()
+        .zip(dry.iter().zip(&wet))
+        .fold(0.0f32, |m, (a, (b, c))| m.max((a - b - c).abs()));
+    let db = 20.0 * (residual / peak(&mix)).log10();
+    assert!(db < -100.0, "dry and wet add up to the mix: {db:.1} dB");
+}
+
+#[test]
+fn a_far_line_renders_the_same_from_anywhere() {
+    let dir = tempfile::tempdir().unwrap();
+    let (doc, set) = with_a_far_line(dir.path());
+    let s = schedule(&doc);
+    let frames = frames_of(&s, RATE);
+    let whole = render_part(&s, &set, frames, Part::Dry).unwrap();
+    // the mixer holds no state: a stretch from the middle is the same stretch of the whole
+    let from = frames / 3;
+    let mut r = apc_audio::Renderer::part(&s, RATE, Part::Dry);
+    let mut piece = vec![0.0f32; 2 * 4096];
+    r.render(&s, &set, from as u64, &mut piece);
+    assert_eq!(&piece[..], &whole[2 * from..2 * (from + 4096)]);
+}
+
 #[test]
 fn dry_has_no_room_and_wet_has_nothing_else() {
     let dir = tempfile::tempdir().unwrap();

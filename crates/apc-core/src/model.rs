@@ -841,6 +841,10 @@ pub struct Beside {
     pub offset_s: f64,
 }
 
+fn is_close(depth: &f64) -> bool {
+    *depth == 0.0
+}
+
 /// Edit state of one dialogue line on the timeline (id = line id).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, schemars::JsonSchema)]
 pub struct BoxState {
@@ -867,6 +871,10 @@ pub struct BoxState {
     pub beside: Option<Beside>,
     #[serde(default)]
     pub gain_db: f64,
+    /// How far back in the room this line is spoken, 0 (where the character stands) … 1 (far).
+    /// It stays when the take changes: staging belongs to the line (D128).
+    #[serde(default, skip_serializing_if = "is_close")]
+    pub depth: f64,
     /// Split points (Edit page), in source order once laid out.
     #[serde(default)]
     pub split_points: Vec<SplitPoint>,

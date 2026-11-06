@@ -138,6 +138,8 @@ pub struct ItemView {
     pub comp: Vec<CompSegment>,
     pub edits: WordEdits,
     pub gain_db: f64,
+    /// How far back in the room the line is spoken, 0 … 1.
+    pub depth: f64,
     pub low_confidence: bool,
     pub adlib: bool,
     /// The line's takes and one take either side, with the room talk between them.
@@ -587,6 +589,7 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
             comp: b.comp.clone(),
             edits: b.edits.clone(),
             gain_db: b.gain_db,
+            depth: b.depth,
             adlib: line.adlib,
             room: order.strip(&doc, &takes),
             spacer_enabled: sp.map(|s| s.enabled).unwrap_or(false),

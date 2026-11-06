@@ -181,6 +181,14 @@ pub struct PassageP {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct LineDepthP {
+    /// The lines to move, all in one undo step.
+    pub line_ids: Vec<String>,
+    /// 0 is where the character stands, 1 is far back in the room.
+    pub depth: f64,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct BesideP {
     pub line_id: String,
     /// The line to run next to; left out, it goes back in the chain.
@@ -1017,6 +1025,7 @@ registry! {
     "apply_take_to_passage", PassageP, Write, true, "Use the same take number for several lines (passage mode).";
     "toggle_favorite", LineP, Write, true, "Toggle the favorite star of the line's selected take.";
     "set_beside", BesideP, Write, true, "Run a line side by side with another: it moves right after that line and starts offset_s after it (negative starts it first), and the next line waits for whichever ends last. Two lines at most. Leave beside out to put it back in the chain. Moving either line out of order ends the pair.";
+    "set_line_depth", LineDepthP, Write, true, "Move lines back in the scene's room, 0 (where the character stands) to 1 (far): the voice gets quieter, loses its close low end and some highs, and takes more of the room. Per line, on top of the character's pan. One undo step for all of them. Heard in playback, bounces and stems; FCPXML stays dry.";
     "set_gap", GapP, Write, true, "Set the pause before a line (seconds; negative overlaps; null resets).";
     "trim_line", TrimP, Write, true, "Trim the head and tail of a line (seconds; negative extends into the handle).";
     "command", NoParams, Write, false, "Execute any document command (see the Command schema). Used by the UI.";
@@ -1487,6 +1496,21 @@ impl Service {
                         offset_s: p.offset_s,
                     })?
                     .result)
+            }
+            "set_line_depth" => {
+                let p: LineDepthP = parse(params)?;
+                if p.line_ids.is_empty() {
+                    return Err(AppError::Params("name at least one line".into()));
+                }
+                let commands = p
+                    .line_ids
+                    .into_iter()
+                    .map(|line_id| Command::SetClipDepth {
+                        line_id,
+                        depth: p.depth,
+                    })
+                    .collect();
+                Ok(self.exec(&Command::Batch { commands })?.result)
             }
             "set_gap" => {
                 let p: GapP = parse(params)?;

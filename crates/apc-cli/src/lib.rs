@@ -114,6 +114,12 @@ pub enum Cmd {
         #[arg(long, allow_negative_numbers = true)]
         offset: Option<f64>,
     },
+    /// Move lines back in the room: 0 is where the character stands, 1 is far.
+    Depth {
+        depth: f64,
+        #[arg(required = true)]
+        lines: Vec<String>,
+    },
     /// Mark how far along a scene is: in_progress, review or finished. Without one, clears it.
     Mark {
         scene: String,
@@ -918,6 +924,11 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                     &mut sess,
                     "set_beside",
                     json!({ "line_id": line, "beside": with, "offset_s": offset }),
+                ),
+                Cmd::Depth { depth, lines } => call(
+                    &mut sess,
+                    "set_line_depth",
+                    json!({ "line_ids": lines, "depth": depth }),
                 ),
                 Cmd::Mark { scene, status } => call(
                     &mut sess,

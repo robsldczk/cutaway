@@ -50,6 +50,59 @@ pub fn voice_mix(wet: f64, pan: f64, amount: f64) -> DepthMix {
     }
 }
 
+/// Level of a line's direct sound at full depth. Less than a sound's −14 dB: quieter is the
+/// weakest cue for distance, and this is the one that costs the words.
+const LINE_DRY_FAR_DB: f64 = -12.0;
+/// What a line sends to the room at full depth. Far away the room is the same for everybody, so
+/// this doesn't depend on the character's wet setting.
+const LINE_SEND_FAR_DB: f64 = -8.0;
+/// Corner of the low shelf, and what it takes at full depth: a voice recorded close has a chest
+/// that no voice across a room has.
+pub const LINE_LOW_SHELF_HZ: f64 = 220.0;
+const LINE_LOW_FAR_DB: f64 = -7.0;
+/// Corner of the high shelf, and what it takes at full depth: the speaker's head and the walls
+/// take the highs, not the air. A shelf keeps the consonants; a roll-off puts a door in between.
+pub const LINE_HIGH_SHELF_HZ: f64 = 3_500.0;
+const LINE_HIGH_FAR_DB: f64 = -8.0;
+/// How much of the room's pre-delay the direct sound arrives late by at full depth. Close to a
+/// listener the reflections come well after the voice; far away they are right behind it.
+const LINE_LAG_FAR: f64 = 0.6;
+
+/// A line moved back in the room, on top of where the character stands (D128).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LineMix {
+    /// Multiplies the direct sound.
+    pub dry_gain: f64,
+    /// Level sent to the room (linear), in place of the voice's own send.
+    pub send_gain: f64,
+    /// On the direct sound and the send: it's the mic that was close, not the voice.
+    pub low_shelf_db: f64,
+    /// On the direct sound only: the room's own damping colours the rest.
+    pub high_shelf_db: f64,
+    /// Share of the room's pre-delay the direct sound arrives late by.
+    pub lag: f64,
+}
+
+/// What `depth` (0 … 1) does to a line whose voice sends `send` (linear) to the room. `None` at
+/// 0, so a line nobody moved is exactly what it was. A voice with no send still gets a room here:
+/// asking for distance is asking for one.
+pub fn line_mix(depth: f64, send: f64) -> Option<LineMix> {
+    if !depth.is_finite() || depth <= 0.0 {
+        return None;
+    }
+    let d = depth.min(1.0);
+    let close_db = (20.0 * send.max(1e-9).log10()).max(VOICE_SEND_MIN_DB);
+    let far_db = LINE_SEND_FAR_DB.max(close_db);
+    Some(LineMix {
+        dry_gain: gain(LINE_DRY_FAR_DB * d),
+        send_gain: gain(close_db + (far_db - close_db) * d),
+        // the mic's close bass goes in the first steps back, so this one leads
+        low_shelf_db: LINE_LOW_FAR_DB * d.sqrt(),
+        high_shelf_db: LINE_HIGH_FAR_DB * d,
+        lag: LINE_LAG_FAR * d,
+    })
+}
+
 /// What a depth does to a sound.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DepthMix {
@@ -130,6 +183,46 @@ mod tests {
         assert!(voice_mix(0.25, 1.0, 1.0).send_gain > voice_mix(0.25, 1.0, 0.5).send_gain);
         assert_eq!(voice_mix(0.25, f64::NAN, 0.5), voice_mix(0.25, 0.0, 0.5));
         assert_eq!(voice_mix(0.25, 1.0, 9.0), voice_mix(0.25, 1.0, 1.0));
+    }
+
+    #[test]
+    fn a_line_nobody_moved_has_no_line_mix() {
+        assert_eq!(line_mix(0.0, voice_send(0.25)), None);
+        assert_eq!(line_mix(f64::NAN, voice_send(0.25)), None);
+        assert_eq!(line_mix(-1.0, voice_send(0.25)), None);
+    }
+
+    #[test]
+    fn a_line_goes_back_on_every_cue_at_once() {
+        let send = voice_send(0.25);
+        let mut last = line_mix(0.001, send).unwrap();
+        for i in 1..=100 {
+            let m = line_mix(i as f64 / 100.0, send).unwrap();
+            assert!(m.dry_gain < last.dry_gain, "quieter at {i}");
+            assert!(m.send_gain > last.send_gain, "more room at {i}");
+            assert!(m.low_shelf_db < last.low_shelf_db, "less chest at {i}");
+            assert!(m.high_shelf_db < last.high_shelf_db, "softer highs at {i}");
+            assert!(m.lag > last.lag, "reflections sooner at {i}");
+            last = m;
+        }
+    }
+
+    #[test]
+    fn a_far_line_has_as_much_room_as_it_has_voice() {
+        let m = line_mix(1.0, voice_send(0.25)).unwrap();
+        assert!(m.send_gain > m.dry_gain);
+        assert_eq!(m, line_mix(7.0, voice_send(0.25)).unwrap());
+    }
+
+    #[test]
+    fn a_dry_character_still_gets_a_room_when_moved_back() {
+        assert!(line_mix(0.5, 0.0).unwrap().send_gain > 0.0);
+    }
+
+    #[test]
+    fn a_wet_character_loses_no_room_going_back() {
+        let wet = voice_send(1.0);
+        assert!(line_mix(1.0, wet).unwrap().send_gain >= wet * 0.999);
     }
 
     #[test]

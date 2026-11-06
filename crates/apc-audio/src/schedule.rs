@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use apc_core::timeline::{layout_scene, placement_start, Pacing, SceneLayout};
 use apc_core::{Document, Lane, Scene};
 
-use crate::depth::depth_mix;
+use crate::depth::{depth_mix, line_mix, LOWPASS_OPEN_HZ};
 use crate::room::RoomShape;
 
 /// Where a clip sits in the scene's room (from its depth).
@@ -18,6 +18,11 @@ pub struct ClipSpace {
     pub send_gain: f64,
     /// Roll-off of the clip (dry and send alike).
     pub lowpass_hz: f64,
+    /// Shelves of a line moved back (D128); 0 is no filter.
+    #[serde(default)]
+    pub low_shelf_db: f64,
+    #[serde(default)]
+    pub high_shelf_db: f64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -169,7 +174,49 @@ fn voice_space(
         dry_gain: m.dry_gain,
         send_gain: m.send_gain,
         lowpass_hz: m.lowpass_hz,
+        low_shelf_db: 0.0,
+        high_shelf_db: 0.0,
     })
+}
+
+/// Adds a line's clip where it stands in the room. A line moved back is two clips, the direct
+/// sound and what reaches the room, because they differ: the direct sound arrives a little late
+/// and has its own filter. Each stays one plain clip to the mixer, so a stretch still renders
+/// from anywhere with no state to carry.
+fn push_voice(clips: &mut Vec<ScheduledClip>, clip: ScheduledClip, depth: f64, predelay_s: f64) {
+    let base = clip.space.unwrap_or(ClipSpace {
+        dry_gain: 1.0,
+        send_gain: 0.0,
+        lowpass_hz: LOWPASS_OPEN_HZ,
+        low_shelf_db: 0.0,
+        high_shelf_db: 0.0,
+    });
+    let Some(m) = line_mix(depth, base.send_gain) else {
+        clips.push(clip);
+        return;
+    };
+    let room = ClipSpace {
+        dry_gain: 0.0,
+        send_gain: m.send_gain,
+        low_shelf_db: m.low_shelf_db,
+        ..base
+    };
+    let direct = ClipSpace {
+        dry_gain: base.dry_gain * m.dry_gain,
+        send_gain: 0.0,
+        low_shelf_db: m.low_shelf_db,
+        high_shelf_db: m.high_shelf_db,
+        ..base
+    };
+    clips.push(ScheduledClip {
+        space: Some(room),
+        ..clip.clone()
+    });
+    clips.push(ScheduledClip {
+        start_s: clip.start_s + m.lag * predelay_s,
+        space: Some(direct),
+        ..clip
+    });
 }
 
 impl PlaySchedule {
@@ -202,12 +249,14 @@ impl PlaySchedule {
                 .map(|l| apc_media::loudness::match_gain_db(Some(*l), settings.target_lufs))
                 .unwrap_or(0.0)
         };
+        let shape = RoomShape::new(scene.room.size, scene.room.damping, scene.room.wet);
         let mut clips = Vec::new();
         for item in &layout.items {
             let voice = item.character.as_deref().map_or(0.0, |c| scene.pan_of(c));
+            let depth = doc.boxes.get(&item.item_id).map_or(0.0, |b| b.depth);
             // muted parts keep their time but are not heard; handles are
             for p in item.audio.iter().filter(|p| !p.muted) {
-                clips.push(ScheduledClip {
+                let clip = ScheduledClip {
                     source_id: p.source_id.clone(),
                     src_in: p.src_in,
                     src_out: p.src_out,
@@ -221,7 +270,8 @@ impl PlaySchedule {
                     linear_fade: false,
                     owner: item.item_id.clone(),
                     space: voice_space(doc, item.character.as_deref(), voice, pacing),
-                });
+                };
+                push_voice(&mut clips, clip, depth, shape.predelay_s);
             }
         }
         // a tail can ring past the last line
@@ -249,6 +299,8 @@ impl PlaySchedule {
                         dry_gain: m.dry_gain,
                         send_gain: m.send_gain,
                         lowpass_hz: m.lowpass_hz,
+                        low_shelf_db: 0.0,
+                        high_shelf_db: 0.0,
                     })
                 } else if p.lane == Lane::Dialogue {
                     // an actor's breath sits in the room with their lines
@@ -321,7 +373,6 @@ impl PlaySchedule {
         apply_lane_mix(doc, &mut clips);
         clips.sort_by(|a, b| a.start_s.total_cmp(&b.start_s));
         // after the lane mix: a muted lane sends nothing and leaves no tail
-        let shape = RoomShape::new(scene.room.size, scene.room.damping, scene.room.wet);
         let last_send = clips
             .iter()
             .filter(|c| c.has_send())
@@ -591,6 +642,91 @@ mod tests {
             (plain.dry_gain, plain.send_gain),
             (centre.dry_gain, centre.send_gain)
         );
+    }
+
+    /// `sample_doc` with Paul in the room and the first line moved back.
+    fn moved_back(depth: f64, wet: f64) -> (Document, Scene) {
+        let (mut doc, scene) = sample_doc();
+        doc.characters.insert(
+            "PAUL".into(),
+            serde_json::from_value(serde_json::json!({
+                "id": "PAUL", "label": "Paul", "color_index": 0, "wet": wet,
+            }))
+            .unwrap(),
+        );
+        let first = doc.boxes.keys().min().cloned().unwrap();
+        if let Some(b) = doc.boxes.get_mut(&first) {
+            b.depth = depth;
+        }
+        (doc, scene)
+    }
+
+    fn schedule(doc: &Document, scene: &Scene) -> PlaySchedule {
+        PlaySchedule::from_scene(doc, scene, &flat(), &MixSettings::default())
+    }
+
+    #[test]
+    fn a_line_nobody_moved_is_the_clip_it_always_was() {
+        let (doc, scene) = moved_back(0.0, 0.25);
+        let s = schedule(&doc, &scene);
+        assert_eq!(s.clips.len(), 2);
+        let space = s.clips[0].space.unwrap();
+        assert_eq!((space.low_shelf_db, space.high_shelf_db), (0.0, 0.0));
+    }
+
+    #[test]
+    fn a_line_moved_back_is_a_direct_sound_and_a_room_send() {
+        let (doc, scene) = moved_back(0.5, 0.25);
+        let plain = schedule(&moved_back(0.0, 0.25).0, &scene);
+        let s = schedule(&doc, &scene);
+        assert_eq!(s.clips.len(), 3, "the other line stays one clip");
+        let (room, direct) = (&s.clips[0], &s.clips[1]);
+        assert_eq!(room.owner, direct.owner);
+        let (r, d) = (room.space.unwrap(), direct.space.unwrap());
+        assert!(!direct.has_send() && room.has_send());
+        assert_eq!(r.dry_gain, 0.0);
+        assert!(d.dry_gain < 1.0);
+        assert!(r.send_gain > plain.clips[0].space.unwrap().send_gain);
+        assert!(d.low_shelf_db < 0.0 && d.low_shelf_db == r.low_shelf_db);
+        assert!(
+            d.high_shelf_db < 0.0 && r.high_shelf_db == 0.0,
+            "direct only"
+        );
+    }
+
+    #[test]
+    fn the_direct_sound_arrives_late_but_never_after_the_reflections() {
+        let (doc, mut scene) = moved_back(1.0, 0.25);
+        for size in [0.0, 0.5, 1.0] {
+            scene.room.size = size;
+            let s = schedule(&doc, &scene);
+            let lag = s.clips[1].start_s - s.clips[0].start_s;
+            let pre = RoomShape::new(size, 0.5, 0.5).predelay_s;
+            assert!(lag > 0.0 && lag < pre, "at size {size}: {lag} of {pre}");
+        }
+    }
+
+    #[test]
+    fn a_dry_character_moved_back_still_goes_back() {
+        let (doc, scene) = moved_back(0.5, 0.0);
+        let s = schedule(&doc, &scene);
+        assert!(s.clips[0].has_send());
+        assert!(s.clips[1].space.unwrap().dry_gain < 1.0);
+        // and one left alone keeps D90's guarantee
+        let (doc, scene) = moved_back(0.0, 0.0);
+        assert!(schedule(&doc, &scene).clips[0].space.is_none());
+    }
+
+    #[test]
+    fn depth_goes_on_top_of_the_pan() {
+        let (doc, mut scene) = moved_back(0.5, 0.25);
+        let centre = schedule(&doc, &scene).clips[1].space.unwrap();
+        scene.voice_pan.insert("PAUL".into(), -1.0);
+        let s = schedule(&doc, &scene);
+        let side = s.clips[1].space.unwrap();
+        assert!(side.dry_gain < centre.dry_gain);
+        assert!(side.lowpass_hz < LOWPASS_OPEN_HZ);
+        assert_eq!(s.clips[0].pan, s.clips[1].pan);
     }
 
     #[test]

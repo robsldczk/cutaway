@@ -180,6 +180,11 @@ pub enum Command {
         line_id: String,
         gain_db: f64,
     },
+    /// How far back in the room a line is spoken, 0 … 1 (D128).
+    SetClipDepth {
+        line_id: String,
+        depth: f64,
+    },
     /// Splits a dialogue clip at scene time `at_s` (Edit page).
     SplitClip {
         line_id: String,
@@ -514,6 +519,7 @@ impl Command {
             Command::PinClip { .. } => "pin_clip",
             Command::MoveClip { .. } => "move_clip",
             Command::SetClipGain { .. } => "set_clip_gain",
+            Command::SetClipDepth { .. } => "set_clip_depth",
             Command::SplitClip { .. } => "split_clip",
             Command::ClearSplits { .. } => "clear_splits",
             Command::MoveSegment { .. } => "move_segment",
@@ -918,6 +924,15 @@ impl Command {
             Command::SetClipGain { line_id, gain_db } => {
                 let mut b = boxed(tx, line_id)?;
                 b.gain_db = gain_db.clamp(-60.0, 24.0);
+                tx.put(&b)?;
+                Ok(Value::Null)
+            }
+            Command::SetClipDepth { line_id, depth } => {
+                if !depth.is_finite() {
+                    return Err(CoreError::invalid("depth must be a number"));
+                }
+                let mut b = boxed(tx, line_id)?;
+                b.depth = depth.clamp(0.0, 1.0);
                 tx.put(&b)?;
                 Ok(Value::Null)
             }
@@ -4047,6 +4062,57 @@ mod tests {
         })
         .unwrap();
         assert_eq!(bus.doc().boxes["b"].beside.as_ref().unwrap().offset_s, 0.75);
+    }
+
+    #[test]
+    fn a_line_goes_back_and_comes_forward_in_one_undo_step() {
+        let (_d, mut bus) = three_lines();
+        let depth = |bus: &CommandBus, id: &str| bus.doc().boxes.get(id).map_or(0.0, |b| b.depth);
+        let set = |line_id: &str, depth: f64| Command::SetClipDepth {
+            line_id: line_id.into(),
+            depth,
+        };
+        bus.execute(&Command::Batch {
+            commands: vec![set("a", 0.4), set("b", 7.0)],
+        })
+        .unwrap();
+        assert_eq!(depth(&bus, "a"), 0.4);
+        assert_eq!(depth(&bus, "b"), 1.0, "past far is far");
+        bus.undo().unwrap();
+        assert_eq!((depth(&bus, "a"), depth(&bus, "b")), (0.0, 0.0));
+        assert!(bus.execute(&set("a", f64::NAN)).is_err());
+    }
+
+    #[test]
+    fn a_line_at_depth_zero_is_written_as_it_always_was() {
+        let close = BoxState {
+            id: "a".into(),
+            ..Default::default()
+        };
+        assert!(!serde_json::to_string(&close).unwrap().contains("depth"));
+        let back = BoxState {
+            depth: 0.5,
+            ..close
+        };
+        let read: BoxState = serde_json::from_str(&serde_json::to_string(&back).unwrap()).unwrap();
+        assert_eq!(read.depth, 0.5);
+    }
+
+    #[test]
+    fn a_new_take_keeps_the_line_where_it_stands() {
+        let (_d, mut bus) = three_lines();
+        bus.execute(&Command::SetClipDepth {
+            line_id: "a".into(),
+            depth: 0.5,
+        })
+        .unwrap();
+        let take = bus.doc().boxes["a"].take_id.clone().unwrap();
+        bus.execute(&Command::SelectTake {
+            line_id: "a".into(),
+            take_id: take,
+        })
+        .unwrap();
+        assert_eq!(bus.doc().boxes["a"].depth, 0.5);
     }
 
     #[test]

@@ -12,13 +12,13 @@ use std::sync::{Arc, Mutex};
 use apc_media::decode::to_mono;
 use apc_media::AudioReader;
 
-use crate::depth::LOWPASS_OPEN_HZ;
+use crate::depth::{LINE_HIGH_SHELF_HZ, LINE_LOW_SHELF_HZ, LOWPASS_OPEN_HZ};
 use crate::error::{AudioError, Result};
 use crate::room::Room;
 use crate::schedule::{PlaySchedule, ScheduledClip};
 
-/// Source, in and out point, and the roll-off (0 = none).
-type ClipKey = (String, u64, u64, u32, bool);
+/// Source, in and out point, the roll-off (0 = none), the shelves in hundredths of a dB, looped.
+type ClipKey = (String, u64, u64, u32, i32, i32, bool);
 
 /// Decoded clip audio (mono, at the mix rate), cached per source range.
 pub struct SourceSet {
@@ -140,6 +140,35 @@ fn lowpass(x: &[f32], hz: f64, rate: u32) -> Vec<f32> {
         .collect()
 }
 
+/// A shelf of `db` at `hz`, a biquad with the cookbook's coefficients at a slope of 1. Run over
+/// the whole clip from its first sample, like the roll-off.
+fn shelf(x: &[f32], hz: f64, db: f64, high: bool, rate: u32) -> Vec<f32> {
+    let a = 10f64.powf(db / 40.0);
+    let w = std::f64::consts::TAU * hz / f64::from(rate.max(1));
+    let (sin, cos) = w.sin_cos();
+    let alpha = sin / 2.0 * std::f64::consts::SQRT_2;
+    let root = 2.0 * a.sqrt() * alpha;
+    // a high shelf is a low one with the sign of the cosine turned
+    let c = if high { -cos } else { cos };
+    let b0 = a * ((a + 1.0) - (a - 1.0) * c + root);
+    let b1 = 2.0 * a * ((a - 1.0) - (a + 1.0) * c);
+    let b2 = a * ((a + 1.0) - (a - 1.0) * c - root);
+    let a0 = (a + 1.0) + (a - 1.0) * c + root;
+    let a1 = -2.0 * ((a - 1.0) + (a + 1.0) * c);
+    let a2 = (a + 1.0) + (a - 1.0) * c - root;
+    let turn = if high { -1.0 } else { 1.0 };
+    let (b0, b1, b2, a1, a2) = (b0 / a0, turn * b1 / a0, b2 / a0, turn * a1 / a0, a2 / a0);
+    let (mut x1, mut x2, mut y1, mut y2) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+    x.iter()
+        .map(|v| {
+            let v = f64::from(*v);
+            let y = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+            (x2, x1, y2, y1) = (x1, v, y1, y);
+            y as f32
+        })
+        .collect()
+}
+
 impl SourceSet {
     pub fn new(rate: u32) -> Self {
         SourceSet {
@@ -164,11 +193,16 @@ impl SourceSet {
             .space
             .map(|s| s.lowpass_hz)
             .filter(|hz| *hz < LOWPASS_OPEN_HZ);
+        let (low_db, high_db) = c
+            .space
+            .map_or((0.0, 0.0), |s| (s.low_shelf_db, s.high_shelf_db));
         let key = (
             c.source_id.clone(),
             (c.src_in * 1e4) as u64,
             (c.src_out * 1e4) as u64,
             hz.map(|h| h.round() as u32).unwrap_or(0),
+            (low_db * 100.0).round() as i32,
+            (high_db * 100.0).round() as i32,
             c.loop_len_s.is_some(),
         );
         if let Some(v) = self
@@ -183,6 +217,14 @@ impl SourceSet {
         let raw = match hz {
             Some(hz) => lowpass(&raw, hz, self.rate),
             None => raw,
+        };
+        let raw = match low_db {
+            0.0 => raw,
+            db => shelf(&raw, LINE_LOW_SHELF_HZ, db, false, self.rate),
+        };
+        let raw = match high_db {
+            0.0 => raw,
+            db => shelf(&raw, LINE_HIGH_SHELF_HZ, db, true, self.rate),
         };
         let v = Arc::new(if c.loop_len_s.is_some() {
             ClipAudio::looped(&raw, self.rate)
@@ -469,6 +511,36 @@ mod tests {
         assert!(around(&c, 100_000).abs() > 0.0);
         let empty = ClipAudio::looped(&[], 48000);
         assert_eq!(empty.wrapped(10), None);
+    }
+
+    /// A sine's level through a shelf, in dB against what went in, past the filter's start.
+    fn through(hz: f64, shelf_hz: f64, db: f64, high: bool) -> f64 {
+        let rate = 48_000u32;
+        let x: Vec<f32> = (0..rate)
+            .map(|n| (std::f64::consts::TAU * hz * f64::from(n) / f64::from(rate)).sin() as f32)
+            .collect();
+        let y = shelf(&x, shelf_hz, db, high, rate);
+        let rms = |v: &[f32]| (v.iter().map(|s| s * s).sum::<f32>() / v.len() as f32).sqrt();
+        let n = x.len() / 2;
+        20.0 * f64::from(rms(&y[n..]) / rms(&x[n..])).log10()
+    }
+
+    #[test]
+    fn a_low_shelf_takes_the_chest_and_leaves_the_words() {
+        assert!((through(40.0, LINE_LOW_SHELF_HZ, -6.0, false) + 6.0).abs() < 0.3);
+        assert!(through(2_000.0, LINE_LOW_SHELF_HZ, -6.0, false).abs() < 0.2);
+    }
+
+    #[test]
+    fn a_high_shelf_softens_the_top_and_leaves_the_body() {
+        assert!((through(16_000.0, LINE_HIGH_SHELF_HZ, -6.0, true) + 6.0).abs() < 0.4);
+        assert!(through(400.0, LINE_HIGH_SHELF_HZ, -6.0, true).abs() < 0.2);
+        // a shelf, not a roll-off: it stops going down
+        let (at8k, at16k) = (
+            through(8_000.0, LINE_HIGH_SHELF_HZ, -6.0, true),
+            through(16_000.0, LINE_HIGH_SHELF_HZ, -6.0, true),
+        );
+        assert!((at8k - at16k).abs() < 1.5);
     }
 
     #[test]
