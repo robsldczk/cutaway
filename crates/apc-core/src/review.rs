@@ -20,7 +20,7 @@ use crate::model::{Anchor, Document, Edge, Entity, Kind};
 use crate::timeline::{placement_start, resolve_anchor, ItemKind, LayoutItem, SceneLayout};
 
 /// The `.cutawayreview` format this build writes and reads.
-pub const REVIEW_FORMAT: u32 = 1;
+pub const REVIEW_FORMAT: u32 = 2;
 
 /// What a person does on the production, as they say it themselves.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default, JsonSchema)]
@@ -256,6 +256,20 @@ pub enum ReviewBody {
     },
     Resolve,
     Reopen,
+    /// The note goes to another spot: the event's own anchor. What's here is what a note keeps
+    /// of its element, as `Note` has it, for the new one.
+    Move {
+        #[serde(default)]
+        quote: String,
+        #[serde(default)]
+        speaker: String,
+        #[serde(default)]
+        print: String,
+        #[serde(default)]
+        written_s: f64,
+    },
+    /// The note is taken away, with its replies. Undo says so with a `Retract`, like any event.
+    Remove,
     /// An undo (`on`) or a redo of an event that may already be on other machines: events are
     /// never taken back, so what's undone is said (D137).
     Retract {
@@ -497,6 +511,7 @@ pub fn fold_notes(doc: &Document) -> Vec<FoldedNote> {
     let live = |e: &&&ReviewEvent| !retracted.get(e.id.as_str()).copied().unwrap_or(false);
 
     let mut notes: BTreeMap<&str, FoldedNote> = BTreeMap::new();
+    let mut removed: HashSet<&str> = HashSet::new();
     for e in by_clock.iter().filter(live) {
         if let ReviewBody::Note {
             text,
@@ -550,9 +565,25 @@ pub fn fold_notes(doc: &Document) -> Vec<FoldedNote> {
                 n.status = NoteStatus::Reopened;
                 n.reopened = Some(stamp(e));
             }
+            ReviewBody::Move {
+                quote,
+                speaker,
+                print,
+                written_s,
+            } => {
+                n.anchor = e.anchor.clone();
+                n.quote = quote.clone();
+                n.speaker = speaker.clone();
+                n.print = print.clone();
+                n.written_s = *written_s;
+            }
+            ReviewBody::Remove => {
+                removed.insert(&e.note);
+            }
             ReviewBody::Note { .. } | ReviewBody::Retract { .. } => {}
         }
     }
+    notes.retain(|id, _| !removed.contains(id));
     let mut out: Vec<FoldedNote> = notes.into_values().collect();
     out.sort_by(|a, b| (&a.created_at, &a.id).cmp(&(&b.created_at, &b.id)));
     out
@@ -1180,6 +1211,83 @@ mod tests {
             },
         );
         assert_eq!(fold_notes(&doc_of(&[n, off, on])).len(), 1);
+    }
+
+    #[test]
+    fn the_latest_move_says_where_a_note_is_and_keeps_what_it_quotes() {
+        let moved = |id: &str, ms, line: &str, quote: &str| {
+            let mut e = at(
+                id,
+                "n",
+                ms,
+                ReviewBody::Move {
+                    quote: quote.into(),
+                    speaker: "Sara".into(),
+                    print: "p".into(),
+                    written_s: 9.0,
+                },
+            );
+            e.anchor = NoteAnchor::Line {
+                scene_id: "s".into(),
+                line_id: line.into(),
+            };
+            e
+        };
+        let a = moved("a", 2, "first", "one");
+        let b = moved("b", 3, "second", "two");
+        // a reply carries the anchor of its day, and that doesn't move the note
+        let reply = at("r", "n", 4, ReviewBody::Reply { text: "ok".into() });
+        for order in [
+            vec![note("n", 1), a.clone(), b.clone(), reply.clone()],
+            vec![reply.clone(), b.clone(), a.clone(), note("n", 1)],
+        ] {
+            let f = fold_notes(&doc_of(&order));
+            assert_eq!(f[0].anchor.line_id(), Some("second"));
+            assert_eq!(f[0].quote, "two");
+            assert_eq!(f[0].written_s, 9.0);
+        }
+        // undone elsewhere, the one before it stands
+        let off = at(
+            "x",
+            "n",
+            5,
+            ReviewBody::Retract {
+                target: "b".into(),
+                on: true,
+            },
+        );
+        let f = fold_notes(&doc_of(&[note("n", 1), a, b, off]));
+        assert_eq!(f[0].anchor.line_id(), Some("first"));
+    }
+
+    #[test]
+    fn a_removed_note_is_gone_with_its_replies_until_the_remove_is_undone() {
+        let gone = at("g", "n", 3, ReviewBody::Remove);
+        let reply = at(
+            "r",
+            "n",
+            4,
+            ReviewBody::Reply {
+                text: "late".into(),
+            },
+        );
+        let events = [note("n", 1), gone, reply];
+        assert!(
+            fold_notes(&doc_of(&events)).is_empty(),
+            "a late reply doesn't bring it back"
+        );
+        let mut undone = events.to_vec();
+        undone.push(at(
+            "x",
+            "n",
+            5,
+            ReviewBody::Retract {
+                target: "g".into(),
+                on: true,
+            },
+        ));
+        let f = fold_notes(&doc_of(&undone));
+        assert_eq!(f[0].replies.len(), 1);
     }
 
     #[test]

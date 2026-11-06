@@ -348,6 +348,159 @@ fn starting_a_round_keeps_the_cut_and_flags_the_scenes() {
 }
 
 #[test]
+fn a_note_moves_to_what_is_said_there_and_undo_puts_it_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    let (line, _) = first_line(&mut svc);
+    let n = note_on_word(&mut svc, &line, 0, "wrong place");
+    let v = svc.call("scene_view", &json!({ "scene": "1" })).unwrap();
+    let other = v["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|i| i["kind"] == "line" && i["line_id"] != line.as_str())
+        .find(|i| !i["words"].as_array().unwrap().is_empty())
+        .unwrap()
+        .clone();
+    let w = &other["words"][0];
+    let mid = (w["start_s"].as_f64().unwrap() + w["end_s"].as_f64().unwrap()) / 2.0;
+
+    let m = svc
+        .call(
+            "move_note",
+            &json!({ "note": n["id"], "scene": "1", "at_s": mid, "author": anna() }),
+        )
+        .unwrap();
+    assert_eq!(m["line_id"], other["line_id"]);
+    assert_eq!(m["quote"], w["text"], "it quotes where it is now");
+    assert_ne!(m["speaker"], n["speaker"]);
+    assert_eq!(m["text"], "wrong place");
+    assert_eq!(m["changed"], false, "the new element is as it was");
+    // what comes after a move carries the new spot
+    let r = svc
+        .call(
+            "reply_note",
+            &json!({ "note": n["id"], "text": "ok", "author": rob() }),
+        )
+        .unwrap();
+    assert_eq!(r["line_id"], other["line_id"]);
+
+    assert_eq!(svc.call("undo", &json!({})).unwrap()["done"], "reply_note");
+    assert_eq!(svc.call("undo", &json!({})).unwrap()["done"], "move_note");
+    let back = find(&mut svc, &n["id"]);
+    assert_eq!(back["line_id"], line.as_str());
+    assert_eq!(back["quote"], n["quote"]);
+    assert_eq!(svc.call("redo", &json!({})).unwrap()["done"], "move_note");
+    assert_eq!(find(&mut svc, &n["id"])["line_id"], other["line_id"]);
+}
+
+#[test]
+fn a_detached_note_comes_back_by_moving_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    let (line, _) = first_line(&mut svc);
+    let n = note_on_word(&mut svc, &line, 0, "lost");
+    svc.call("delete_line", &json!({ "line_id": line, "confirm": true }))
+        .unwrap();
+    assert_eq!(find(&mut svc, &n["id"])["detached"], true);
+    let v = svc.call("scene_view", &json!({ "scene": "1" })).unwrap();
+    let left = v["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["kind"] == "line")
+        .unwrap()
+        .clone();
+    svc.call(
+        "move_note",
+        &json!({ "note": n["id"], "line_id": left["line_id"], "author": rob() }),
+    )
+    .unwrap();
+    let m = find(&mut svc, &n["id"]);
+    assert_eq!(m["detached"], false);
+    assert_eq!(m["on"], "line");
+}
+
+#[test]
+fn only_the_author_or_the_editor_moves_or_removes_a_note() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    let (line, _) = first_line(&mut svc);
+    let n = note_on_word(&mut svc, &line, 0, "mine");
+    let jonas = json!({ "name": "Jonas Brandt", "role": "producer" });
+    let e = svc
+        .call(
+            "remove_note",
+            &json!({ "note": n["id"], "author": jonas, "confirm": true }),
+        )
+        .unwrap_err();
+    assert!(e.to_string().contains("Anna Weber's note"), "{e}");
+    let e = svc
+        .call(
+            "move_note",
+            &json!({ "note": n["id"], "scene": "1", "at_s": 3.0, "author": jonas }),
+        )
+        .unwrap_err();
+    assert!(e.to_string().contains("only they or the editor"), "{e}");
+    // anyone can still answer it
+    svc.call("resolve_note", &json!({ "note": n["id"], "author": jonas }))
+        .unwrap();
+
+    let e = svc
+        .call("remove_note", &json!({ "note": n["id"], "author": anna() }))
+        .unwrap_err();
+    assert_eq!(e.code(), "needs_confirm");
+    svc.call(
+        "remove_note",
+        &json!({ "note": n["id"], "author": rob(), "confirm": true }),
+    )
+    .unwrap();
+    assert_eq!(svc.call("list_notes", &json!({})).unwrap()["count"], 0);
+}
+
+#[test]
+fn a_remove_reaches_the_other_machine_and_so_does_its_undo() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    let (line, _) = first_line(&mut svc);
+    let n = note_on_word(&mut svc, &line, 0, "changed my mind");
+    let file = reviews(&svc).join("anna-weber.cutawayreview");
+
+    let other_dir = tempfile::tempdir().unwrap();
+    let copy = other_dir.path().join("Copy.cutaway");
+    apc_core::store::EpisodeStore::copy_file(&svc.paths.file, &copy).unwrap();
+    let mut other = Service::open(&copy, "test").unwrap();
+    assert_eq!(other.call("list_notes", &json!({})).unwrap()["count"], 1);
+    let dest = other.paths.root.join("Reviews/anna-weber.cutawayreview");
+    std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+
+    svc.call("enter_review", &json!({})).unwrap();
+    svc.call(
+        "remove_note",
+        &json!({ "note": n["id"], "author": anna(), "confirm": true }),
+    )
+    .unwrap();
+    assert_eq!(svc.call("list_notes", &json!({})).unwrap()["count"], 0);
+    std::fs::copy(&file, &dest).unwrap();
+    other.call("review_sync", &json!({})).unwrap();
+    assert_eq!(
+        other.call("list_notes", &json!({})).unwrap()["count"],
+        0,
+        "gone there too"
+    );
+
+    assert_eq!(svc.call("undo", &json!({})).unwrap()["done"], "remove_note");
+    assert_eq!(find(&mut svc, &n["id"])["text"], "changed my mind");
+    std::fs::copy(&file, &dest).unwrap();
+    other.call("review_sync", &json!({})).unwrap();
+    assert_eq!(
+        other.call("list_notes", &json!({})).unwrap()["count"],
+        1,
+        "and back"
+    );
+}
+
+#[test]
 fn an_undone_round_does_not_come_back_from_the_editors_file() {
     let dir = tempfile::tempdir().unwrap();
     let mut svc = demo_episode(dir.path());

@@ -105,6 +105,32 @@ pub enum NoteCmd {
         #[command(flatten)]
         author: AuthorArgs,
     },
+    /// Hang a note on another spot: --at and --to, --line, --sound, or just --scene.
+    Move {
+        note: String,
+        #[arg(long)]
+        scene: Option<String>,
+        #[arg(long)]
+        at: Option<f64>,
+        #[arg(long)]
+        to: Option<f64>,
+        #[arg(long)]
+        line: Option<String>,
+        #[arg(long)]
+        word: Option<usize>,
+        #[arg(long)]
+        to_word: Option<usize>,
+        #[arg(long)]
+        sound: Option<String>,
+        #[command(flatten)]
+        author: AuthorArgs,
+    },
+    /// Remove a note and its replies (needs --yes). Undo brings it back.
+    Remove {
+        note: String,
+        #[command(flatten)]
+        author: AuthorArgs,
+    },
     Resolve {
         note: String,
         #[command(flatten)]
@@ -1128,6 +1154,30 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                         &mut sess,
                         "tag_note",
                         json!({ "note": note, "tag": tag, "author": author.json() }),
+                    ),
+                    NoteCmd::Move {
+                        note,
+                        scene,
+                        at,
+                        to,
+                        line,
+                        word,
+                        to_word,
+                        sound,
+                        author,
+                    } => call(
+                        &mut sess,
+                        "move_note",
+                        json!({
+                            "note": note, "scene": scene, "at_s": at, "to_s": to, "line_id": line,
+                            "word": word, "to_word": to_word, "placement_id": sound,
+                            "author": author.json(),
+                        }),
+                    ),
+                    NoteCmd::Remove { note, author } => call(
+                        &mut sess,
+                        "remove_note",
+                        json!({ "note": note, "author": author.json(), "confirm": confirm }),
                     ),
                     NoteCmd::Resolve { note, author } => call(
                         &mut sess,

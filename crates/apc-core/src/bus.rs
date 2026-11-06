@@ -21,6 +21,8 @@ pub const REVIEW_COMMANDS: &[&str] = &[
     "tag_note",
     "resolve_note",
     "reopen_note",
+    "move_note",
+    "remove_note",
 ];
 
 /// A merge of others' events. It's logged, but it isn't anyone's step to undo.

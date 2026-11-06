@@ -592,6 +592,8 @@ impl Command {
                 ReviewBody::Tag { .. } => "tag_note",
                 ReviewBody::Resolve => "resolve_note",
                 ReviewBody::Reopen => "reopen_note",
+                ReviewBody::Move { .. } => "move_note",
+                ReviewBody::Remove => "remove_note",
                 // retractions come with an undo, not as a command
                 ReviewBody::Retract { .. } => "retract_note",
             },

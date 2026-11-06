@@ -40,6 +40,8 @@ pub const REVIEW_METHODS: &[&str] = &[
     "tag_note",
     "resolve_note",
     "reopen_note",
+    "move_note",
+    "remove_note",
     "set_reviewer",
     "send_review",
     "review_sync",
@@ -746,6 +748,70 @@ pub fn reopen_note(svc: &mut Service, p: NoteP) -> Result<Value> {
     follow_up(svc, &p.note, p.author, ReviewBody::Reopen)
 }
 
+/// Moving and removing change what someone said, so they're the author's, or the editor's, who
+/// has to clear the list. Replies, resolves and reopens stay anyone's (D141).
+fn may_change(note: &FoldedNote, who: &Reviewer) -> Result<()> {
+    if who.slug() == note.author.slug() || who.role == ReviewRole::Editor {
+        return Ok(());
+    }
+    Err(AppError::Other(format!(
+        "This is {}'s note: only they or the editor can move or remove it.",
+        note.author.name
+    )))
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct MoveNoteP {
+    pub note: String,
+    /// Where it goes, as for add_note.
+    #[serde(flatten)]
+    pub target: TargetP,
+    #[serde(default)]
+    pub author: Option<AuthorP>,
+}
+
+/// Hangs a note on another spot. A detached note comes back into the cut this way.
+pub fn move_note(svc: &mut Service, p: MoveNoteP) -> Result<Value> {
+    let n = folded(svc, &p.note)?;
+    let author = author_of(svc, p.author)?;
+    may_change(&n, &author)?;
+    let anchor = anchor_of(svc, &p.target)?;
+    if anchor == n.anchor {
+        return note_view(svc, &p.note);
+    }
+    let layout = layout_of(svc, anchor.scene_id())?;
+    let doc = svc.doc();
+    let body = ReviewBody::Move {
+        quote: quote_of(doc, &layout, &anchor),
+        speaker: speaker_of(doc, &anchor),
+        print: print_of(doc, &layout, &anchor),
+        written_s: locate(doc, &layout, &anchor)
+            .map(|s| s.start_s)
+            .unwrap_or(0.0),
+    };
+    let e = event(svc, &n.id, n.round, author, anchor, body)?;
+    write_event(svc, e)?;
+    note_view(svc, &p.note)
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct RemoveNoteP {
+    pub note: String,
+    #[serde(default)]
+    pub author: Option<AuthorP>,
+    #[serde(default)]
+    pub confirm: bool,
+}
+
+pub fn remove_note(svc: &mut Service, p: RemoveNoteP) -> Result<Value> {
+    let n = folded(svc, &p.note)?;
+    let author = author_of(svc, p.author)?;
+    may_change(&n, &author)?;
+    let e = event(svc, &n.id, n.round, author, n.anchor, ReviewBody::Remove)?;
+    write_event(svc, e)?;
+    Ok(json!({ "removed": p.note }))
+}
+
 /// After an undo or a redo of a note command: others may already have what it took back, and
 /// events are never unsaid, so the change goes out as an event of its own (D137).
 pub fn after_step(svc: &mut Service, seq: i64, undone: bool) -> Result<()> {
@@ -804,6 +870,8 @@ pub struct NoteView {
     pub scene_number: Option<u32>,
     pub author: Reviewer,
     pub mine: bool,
+    /// Whoever's here may move and remove it: it's theirs, or they're the editor.
+    pub can_change: bool,
     pub tag: Option<NoteTag>,
     pub text: String,
     pub status: NoteStatus,
@@ -859,6 +927,7 @@ fn view_all(
                 scene_id,
                 author: n.author.clone(),
                 mine: me.is_some_and(|m| m.slug() == n.author.slug()),
+                can_change: me.is_some_and(|m| may_change(n, m).is_ok()),
                 tag: n.tag,
                 text: n.text.clone(),
                 status: n.status,

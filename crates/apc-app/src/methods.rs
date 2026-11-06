@@ -1153,6 +1153,8 @@ registry! {
     "tag_note", review::NoteTagP, Write, true, "Change a note's tag: performance, timing, sound or music. Undoable.";
     "resolve_note", review::NoteP, Write, true, "Resolve a note. It records who and when, and shows as done in review at once. Undoable.";
     "reopen_note", review::NoteP, Write, true, "Reopen a resolved note. It records who and when, and shows as open on the editing pages. Undoable.";
+    "move_note", review::MoveNoteP, Write, true, "Hang a note on another spot, given as for add_note. A detached note comes back into the cut this way. Its author's or the editor's to do. Undoable.";
+    "remove_note", review::RemoveNoteP, Destructive, true, "Remove a note and its replies, on every machine. Its author's or the editor's to do. Undo brings it back.";
     "list_notes", review::ListNotesP, Read, true, "The one feedback set: every note of every reviewer and round as it stands now, in threads, with where each is on the cut, and detached and changed-since-note flags. Filter by scene, round, status, tag or author.";
     "review_view", review::ReviewViewP, Read, false, "Everything the review screen shows around a scene.";
     "review_search", review::SearchP, Read, true, "Search scenes, lines and notes across every round.";
@@ -1288,6 +1290,12 @@ impl Service {
             "tag_note" => review::tag_note(self, parse(params)?),
             "resolve_note" => review::resolve_note(self, parse(params)?),
             "reopen_note" => review::reopen_note(self, parse(params)?),
+            "move_note" => review::move_note(self, parse(params)?),
+            "remove_note" => {
+                let p: review::RemoveNoteP = parse(params)?;
+                need_confirm("remove_note", p.confirm)?;
+                review::remove_note(self, p)
+            }
             "list_notes" => review::list_notes(self, parse(params)?),
             "review_view" => review::review_view(self, parse(params)?),
             "review_search" => {
