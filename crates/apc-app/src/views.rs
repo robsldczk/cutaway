@@ -228,6 +228,8 @@ pub struct SceneView {
     pub location_id: String,
     pub tightness: f64,
     pub room_tone: RoomTone,
+    /// The scene's room wet: at 0 a line moved back has no room to go into.
+    pub room_wet: f64,
     pub duration_s: f64,
     pub items: Vec<ItemView>,
     pub unmatched: Vec<UnmatchedView>,
@@ -648,6 +650,7 @@ pub fn scene_view(svc: &mut Service, scene_key: &str) -> Result<SceneView> {
         scene: this,
         location_id: loc_id.clone(),
         tightness: scene.tightness,
+        room_wet: scene.room.wet,
         room_tone: doc
             .locations
             .get(&loc_id)

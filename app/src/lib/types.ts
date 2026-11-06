@@ -224,6 +224,8 @@ export interface SceneView {
   location_id: string;
   tightness: number;
   room_tone: RoomTone;
+  /** The scene's room wet: at 0 a line moved back has no room to go into. */
+  room_wet: number;
   duration_s: number;
   items: ItemView[];
   unmatched: UnmatchedView[];

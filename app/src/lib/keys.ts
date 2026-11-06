@@ -1,5 +1,6 @@
 // Keyboard map (docs/specs/frontend-design.md). The box editor handles its own keys.
 import { app } from './app.svelte';
+import { sourceAt } from './lines';
 
 /** A left or right arrow on a control that steps with them: a clip's trim edge. */
 export function ownArrows(e: KeyboardEvent) {
@@ -28,6 +29,8 @@ export function onKey(e: KeyboardEvent) {
   const mod = e.metaKey || e.ctrlKey;
   let handled = true;
   if (mod && (k === 'z' || k === 'Z')) {
+    // what's still in a burst goes first, or the undo would take the step before it
+    app.flushLineDepth();
     if (e.shiftKey) void app.redo();
     else void app.undo();
   } else if (mod && (k === 's' || k === 'S')) app.overlay = 'history';
@@ -39,10 +42,14 @@ export function onKey(e: KeyboardEvent) {
   else if (k === 'Escape') {
     if (app.overlay) app.overlay = null;
     else if (app.drawer) app.drawer = null;
+    else if (app.lineSel.length) app.lineSel = [];
     else app.passageTo = null;
   } else if (app.overlay) handled = false;
   else if (app.page === 'import' && !(e.shiftKey && (k === 'b' || k === 'B')) && !PAGE_KEYS.includes(k)) handled = false;
   else if ((app.page === 'dev' || app.page === 'export') && !PAGE_KEYS.includes(k)) handled = false;
+  // by the key's place: with ⌥ held, a Mac types ç and √ here
+  else if (mod && e.altKey && e.code === 'KeyC' && app.page === 'arrange') app.copyAttrs(app.lines.find((l) => l.line_id === app.lineSel[app.lineSel.length - 1]) ?? app.cur);
+  else if (mod && e.altKey && e.code === 'KeyV' && app.page === 'arrange') void app.pasteAttrs(app.pickedLines.map((l) => l.line_id));
   else if (k === ' ' && e.shiftKey) void app.playFromLocator();
   else if (k === ' ') void (app.preview?.playing ? app.stopSound() : app.togglePlay());
   else if (k === 'Enter') void app.playLineInContext();
@@ -52,6 +59,7 @@ export function onKey(e: KeyboardEvent) {
   else if (k === 'ArrowDown' && e.shiftKey) app.extendPassage(1);
   else if (k === 'ArrowUp') app.go(-1);
   else if (k === 'ArrowDown') app.go(1);
+  else if ((k === 'ArrowLeft' || k === 'ArrowRight') && e.altKey && app.page === 'arrange') app.nudgeLineDepth(k === 'ArrowRight' ? 0.05 : -0.05);
   else if (k === 'ArrowLeft' && app.page !== 'edit') void app.stepTake(-1);
   else if (k === 'ArrowRight' && app.page !== 'edit') void app.stepTake(1);
   else if (e.ctrlKey && (k === 'm' || k === 'M')) void app.toggleMuteCurrent();
@@ -107,10 +115,11 @@ async function setInOut(which: 'in' | 'out') {
   if (!c || c.take_index == null) return;
   const take = c.takes[c.take_index];
   const into = Math.max(0, Math.min(app.locator - c.start_s, c.end_s - c.start_s));
+  // the take's own time at the locator: past a cut word it's further on than the scene's
+  const at = (sourceAt(c, app.locator, take.source_id) ?? take.src_in + c.head_s + into) - take.src_in;
   if (which === 'in') {
-    await app.cmd({ cmd: 'set_trim', line_id: c.line_id, head_s: c.head_s + into, tail_s: c.tail_s });
+    await app.cmd({ cmd: 'set_trim', line_id: c.line_id, head_s: at, tail_s: c.tail_s });
   } else {
-    const tail = take.duration - c.head_s - into;
-    await app.cmd({ cmd: 'set_trim', line_id: c.line_id, head_s: c.head_s, tail_s: Math.max(0, tail) });
+    await app.cmd({ cmd: 'set_trim', line_id: c.line_id, head_s: c.head_s, tail_s: Math.max(0, take.duration - at) });
   }
 }

@@ -2,6 +2,8 @@
 // command sent through the bridge. Local state here is selection, page, playhead, overlays.
 import { call, BridgeError } from './bridge';
 import type { ExportScene, ExportSettings, ExportStatus } from './export';
+import { attrsOf, attrsText, depthCommands, depthDelta, pasteCommand, type LineAttrs } from './lines';
+import { oneStep } from './sounds/select';
 import type { DragSound, EditView, ItemView, Job, SceneSummary, SceneView, ShowView, SoundFace, SoundKey, SoundPreview, Status } from './types';
 
 const soundId = (key: SoundKey) => key.asset_id ?? key.remote_id ?? key.clip?.id ?? '';
@@ -168,6 +170,14 @@ class AppState {
   soundSel = $state<string[]>([]);
   /** Arrange: the sound open in its vertical editor. */
   soundOpen = $state<string | null>(null);
+  /** Arrange: where the sound being moved sits, for the marker on the blocks (D127). */
+  soundCue = $state<{ t: number; tone: string } | null>(null);
+  /** Arrange: lines selected together (⌘ or ⇧ click). Empty is the current line on its own. */
+  lineSel = $state<string[]>([]);
+  /** What was copied from a line, for as long as the episode is open. */
+  lineAttrs = $state<LineAttrs | null>(null);
+  /** Depths on their way to the document, by line. */
+  depthPreview = $state<Record<string, number>>({});
   /** Arrange: buckets faded out with their eye. View only: this page, this session, never
    *  the document or the mix. */
   hiddenBuckets = $state<string[]>([]);
@@ -374,6 +384,10 @@ class AppState {
     this.editMany = [];
     this.soundSel = [];
     this.soundOpen = null;
+    this.soundCue = null;
+    this.lineSel = [];
+    this.lineAttrs = null;
+    this.depthPreview = {};
     this.hiddenBuckets = [];
     this.openBucket = null;
     this.overlay = null;
@@ -476,6 +490,7 @@ class AppState {
       this.passageTo = null;
       this.soundSel = [];
       this.soundOpen = null;
+      this.lineSel = [];
     }
     if (this.wantsSounds) await this.loadEdit();
   }
@@ -574,11 +589,85 @@ class AppState {
     const it = this.lines.find((l) => l.line_id === lineId);
     if (!it) return;
     this.curId = lineId;
+    this.lineSel = [];
     if (!keepPassage) this.passageTo = null;
     if (!this.playing) {
       this.pos = it.start_s;
       this.locator = it.start_s;
     }
+  }
+
+  /** What a line command acts on: the lines selected, or the current one. */
+  get pickedLines(): ItemView[] {
+    const sel = this.lines.filter((l) => this.lineSel.includes(l.line_id));
+    const cur = this.cur;
+    return sel.length ? sel : cur ? [cur] : [];
+  }
+
+  depthOf(l: ItemView) {
+    return this.depthPreview[l.line_id] ?? l.depth;
+  }
+
+  previewDepth(ids: string[], depth: (id: string) => number) {
+    const next = { ...this.depthPreview };
+    for (const id of ids) next[id] = depth(id);
+    this.depthPreview = next;
+  }
+
+  /** Sends depths as one undo step, and holds the preview until the view has them. */
+  async setLineDepth(ids: string[], depth: (id: string) => number) {
+    this.previewDepth(ids, depth);
+    const c = oneStep(depthCommands(ids, depth));
+    try {
+      if (c) await this.cmd(c);
+    } finally {
+      const next = { ...this.depthPreview };
+      for (const id of ids) delete next[id];
+      this.depthPreview = next;
+    }
+  }
+
+  private depthBurst: { base: Map<string, number>; delta: number; timer: ReturnType<typeof setTimeout> } | null = null;
+
+  /** ⌥← / ⌥→: the keys come in bursts, and a burst is one undo step. A group moves as one. */
+  nudgeLineDepth(delta: number) {
+    const lines = this.pickedLines.filter((l) => l.takes.length > 0);
+    if (!lines.length) return;
+    const same = this.depthBurst && lines.every((l) => this.depthBurst?.base.has(l.line_id));
+    if (!same) this.flushLineDepth();
+    const b = this.depthBurst ?? { base: new Map(lines.map((l) => [l.line_id, this.depthOf(l)])), delta: 0, timer: setTimeout(() => {}) };
+    clearTimeout(b.timer);
+    b.delta = depthDelta([...b.base.values()], b.delta + delta);
+    b.timer = setTimeout(() => this.flushLineDepth(), 400);
+    this.depthBurst = b;
+    this.previewDepth([...b.base.keys()], (id) => (b.base.get(id) ?? 0) + b.delta);
+  }
+
+  flushLineDepth() {
+    const b = this.depthBurst;
+    if (!b) return;
+    this.depthBurst = null;
+    clearTimeout(b.timer);
+    void this.setLineDepth([...b.base.keys()], (id) => (b.base.get(id) ?? 0) + b.delta);
+  }
+
+  /** ⌥⌘C: how a line sounds, for other lines. */
+  copyAttrs(line: ItemView | undefined) {
+    if (!line) return;
+    this.lineAttrs = attrsOf({ ...line, depth: this.depthOf(line) });
+    this.say(`Copied: ${attrsText(this.lineAttrs)}`);
+  }
+
+  /** ⌥⌘V: on every line given, as one undo step. */
+  async pasteAttrs(ids: string[]) {
+    if (!this.lineAttrs) {
+      this.say('Copy a line’s attributes first: ⌥⌘C');
+      return;
+    }
+    const c = pasteCommand(ids, this.lineAttrs);
+    if (!c) return;
+    await this.cmd(c);
+    this.say(ids.length > 1 ? `Pasted on ${ids.length} lines` : 'Pasted');
   }
 
   go(d: number) {

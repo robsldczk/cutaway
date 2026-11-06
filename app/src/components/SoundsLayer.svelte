@@ -17,6 +17,7 @@
   import { arc, circle, focusBody, focusFade, linePath, panLine, restOfSource, ringPoint, spinePaths } from '../lib/sounds/paths';
   import { announce, autoFadeOut, ballsInBand, bandSelect, clickSelect, dbOfRing, dbText, depthCommands, GAIN_MAX_DB, GAIN_MIN_DB, gainCommands, groupDelta, moveCommands, normRect, oneStep, panCommands, panText, pressSelect, removeCommands, ringAt, ringOf, timeDrag, toggleHidden, zone, type Cmd, type Rect, type SoundState } from '../lib/sounds/select';
   import { settledOf, Settler, snapshot, withFresh } from '../lib/sounds/settle';
+  import { spokenAt } from '../lib/lines';
   import { actionTargets, nearestTarget, snapTargets, startLabel, type ActionRow, type SnapTarget } from '../lib/sounds/snap';
   import type { TimeMap } from '../lib/sounds/timemap';
   import type { Bucket, BucketsView, DragSound, ItemView, Job, PlacementView } from '../lib/types';
@@ -298,8 +299,20 @@
     size: number;
   }
 
+  /** The marker on the blocks: where this sound is, in its bucket's colour (D127). */
+  function cue(t: number, id: string) {
+    app.soundCue = { t, tone: byId.get(id)?.tone ?? '--bucket-none-rgb' };
+  }
+  /** The word a moment lands on, when it isn't snapped to one already. */
+  const onWord = (t: number, target: SnapTarget | null) => {
+    const w = target ? null : spokenAt(lines, t);
+    return w ? ` · on “${w}”` : '';
+  };
+
   let gesture: Gesture | null = null;
   let tip = $state<{ x: number; y: number; text: string } | null>(null);
+  /** It stays clear of the bucket, however long it gets. */
+  let tipW = $state(0);
   let snapY = $state<number | null>(null);
   let band = $state<(Rect & { hit: string[] }) | null>(null);
   let popping = $state<string[]>([]);
@@ -415,14 +428,16 @@
       if (g.freeY || Math.abs(dy) > DEADZONE_PX) {
         g.freeY = true;
         dragTime(g, map.t(p.y - g.grab), e);
-        words.push(startLabel(g.target, grabbed.start_s + g.time));
+        words.push(startLabel(g.target, grabbed.start_s + g.time) + onWord(grabbed.start_s + g.time, g.target));
       }
+      cue(grabbed.start_s + g.time, g.id);
       patchAll(g.base, (b) => ({ depth: b.depth + g.depth, start_s: b.start_s + g.time }));
       tip = { x: p.x + 30, y: p.y - 40, text: words.join(' · ') };
     } else if (g.kind === 'head') {
       dragTime(g, map.t(p.y - g.grab), e);
       patchAll(g.base, (b) => ({ start_s: b.start_s + g.time }));
-      tip = { x: spineX + 80, y: p.y - 14, text: startLabel(g.target, grabbed.start_s + g.time) };
+      cue(grabbed.start_s + g.time, g.id);
+      tip = { x: spineX + 80, y: p.y - 14, text: startLabel(g.target, grabbed.start_s + g.time) + onWord(grabbed.start_s + g.time, g.target) };
     } else if (g.kind === 'trim') {
       const s = byId.get(g.id);
       if (!s) return;
@@ -434,9 +449,10 @@
       snapY = onTarget ? map.y(target.t) : null;
       const fade = s.auto_fade ? autoFadeOut(g.len) : s.fade_out_s;
       patchAll(g.base, () => ({ len_s: g.len, fade_out_s: fade }));
+      cue(grabbed.start_s + g.len, g.id);
       const full = g.len >= max - 0.01;
       const lab = full ? 'Full length · ' : onTarget ? `${target.end} · ` : '';
-      tip = { x: spineX + 80, y: p.y + 10, text: `${lab}${g.len.toFixed(1)}${max < Infinity ? ` of ${max.toFixed(1)}` : ''} s · fades out ${fade.toFixed(1)} s` };
+      tip = { x: spineX + 80, y: p.y + 10, text: `${lab}${g.len.toFixed(1)}${max < Infinity ? ` of ${max.toFixed(1)}` : ''} s · fades out ${fade.toFixed(1)} s${onWord(grabbed.start_s + g.len, onTarget ? target : null)}` };
     } else if (g.kind === 'pan') {
       const want = grabbed.pan + dx / (shown(g.id).r * 3 + 30);
       // a soft catch at the centre
@@ -469,6 +485,7 @@
     dragging = [];
     tip = null;
     snapY = null;
+    app.soundCue = null;
     settler.release();
   }
 
@@ -602,9 +619,11 @@
     b.timer = setTimeout(flushBurst, BURST_MS);
     const d = b.delta;
     patchAll(b.base, (x) => (isPart(kind) ? shaped(kind, x, d).patch : kind === 'gain' ? { gain_db: x.gain_db + d } : kind === 'depth' ? { depth: x.depth + d } : kind === 'pan' ? { pan: x.pan + d } : { start_s: x.start_s + d }));
+    const lead = b.base[b.base.length - 1];
+    if (kind === 'time') cue(lead.start_s + d, lead.id);
+    else if (kind === 'in' || kind === 'out' || kind === 'move') cue(shaped(kind, lead, d).at, lead.id);
     // the opened view shows its own values as they change
     if (isPart(kind)) return;
-    const lead = b.base[b.base.length - 1];
     const at = shown(lead.id);
     tip = { x: at.x + at.r + 12, y: at.y - 12, text: burstText(b, d) };
   }
@@ -620,6 +639,7 @@
     burst = null;
     clearTimeout(b.timer);
     tip = null;
+    app.soundCue = null;
     settler.release();
     const cmds = !b.delta ? [] : isPart(b.kind) ? reshapeCommands(b.kind, b.base[0], shaped(b.kind, b.base[0], b.delta), true) : b.kind === 'gain' ? gainCommands(b.base, b.delta) : b.kind === 'depth' ? depthCommands(b.base, b.delta) : b.kind === 'pan' ? panCommands(b.base, b.delta) : moveCommands(b.base, b.delta, null, null);
     if (cmds.length) speak(burstText(b, b.delta));
@@ -792,6 +812,10 @@
     preview(patch) {
       if (shaping) patchAll([{ id: shaping }], () => patch);
     },
+    cue(t) {
+      if (t == null) app.soundCue = null;
+      else if (shaping) cue(t, shaping);
+    },
     finish(cmds, said) {
       const id = shaping;
       shaping = null;
@@ -905,6 +929,7 @@
     ghost = null;
     tip = null;
     snapY = null;
+    app.soundCue = null;
   }
 
   function dragOver(e: MouseEvent, s: DragSound) {
@@ -915,12 +940,14 @@
     }
     ghost = { x: at.p.x, y: at.p.y, tone: (s.bucket_id && toneOf.get(s.bucket_id)) || '--bucket-none-rgb' };
     snapY = at.target ? map.y(at.target.t) : null;
-    tip = { x: at.p.x + 26, y: at.p.y - 12, text: `${s.name} · ${at.target?.start ?? `at ${fmt(at.t)}`}` };
+    tip = { x: at.p.x + 26, y: at.p.y - 12, text: `${s.name} · ${at.target?.start ?? `at ${fmt(at.t)}`}${onWord(at.t, at.target)}` };
+    app.soundCue = { t: at.t, tone: ghost.tone };
     return true;
   }
 
   function drop(e: MouseEvent, s: DragSound) {
     const at = on ? dropSpot(e) : null;
+    app.soundCue = null;
     if (at) void place(at, s);
   }
 
@@ -1076,7 +1103,7 @@
       <div class="ghostline" style="left: {spineX + 20}px; width: {Math.max(0, ghost.x - spineX - 40)}px; top: {ghost.y}px"></div>
     {/if}
 
-    {#if tip}<div class="tip tn" style="left: {tip.x}px; top: {tip.y}px" data-testid="sound-tip">{tip.text}</div>{/if}
+    {#if tip}<div class="tip tn" bind:clientWidth={tipW} style="left: {Math.min(tip.x, rightEdge - tipW)}px; top: {tip.y}px" data-testid="sound-tip">{tip.text}</div>{/if}
   </div>
   <p class="sr" id="sound-keys">Command D duplicates. Left and right arrows set depth, Option with them pan, Shift up and down loudness, comma and period move it, Enter opens it, Shift Enter adds it to the selection, Tab goes to the next sound.</p>
   <p class="sr" role="status" aria-live="polite" data-testid="sounds-said">{spoken}</p>

@@ -163,6 +163,7 @@
     g.r = r;
     // back to the base first: a drag can turn from a slip into a move halfway
     ops.preview({ start_s: g.base.start_s, in_s: g.base.in_s, ...r.patch });
+    ops.cue(now === 'in' || now === 'out' || now === 'move' ? r.at : null);
     snapT = r.target?.t ?? null;
     tip = { y: clamp(y(r.at), 12, H - 12), text: partText(now, g.base, r) };
   }
@@ -174,6 +175,7 @@
     tip = null;
     snapT = null;
     busy = false;
+    ops.cue(null);
   }
 
   function release() {

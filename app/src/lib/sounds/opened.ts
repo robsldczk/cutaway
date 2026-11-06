@@ -38,6 +38,8 @@ export interface Ops {
   /** A gesture takes the sound; it ends in `finish` or `cancel`. */
   begin(): void;
   preview(patch: Partial<Shape>): void;
+  /** Where the part being dragged sits in the scene, for the marker on the blocks. */
+  cue(t: number | null): void;
   finish(cmds: Cmd[], said: string): void;
   cancel(): void;
   /** A click: one change, at once. */

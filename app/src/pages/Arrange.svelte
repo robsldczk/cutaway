@@ -3,6 +3,7 @@
   import type { ActionRow } from '../lib/sounds/snap';
   import ClipState from '../components/ClipState.svelte';
   import Icon from '../components/Icon.svelte';
+  import LineMenu from '../components/LineMenu.svelte';
   import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { call } from '../lib/bridge';
@@ -13,6 +14,7 @@
   import Waveform from '../components/Waveform.svelte';
   import { rowSpans, TimeMap, type RowBox } from '../lib/sounds/timemap';
   import type { ItemView } from '../lib/types';
+  import { depthText, rangeLines, sourceAt, timeAt, toggleLine } from '../lib/lines';
   import { lineWords } from '../lib/words';
 
   const sc = $derived(app.scale);
@@ -217,6 +219,40 @@
     return { id: it.line_id, a: t.src_in + it.head_s, z: t.src_out - it.tail_s };
   }
 
+  /** Where a moment of the scene sits on a line's strip. A comp shows one take of several, so
+   *  what comes from another recording goes by its share of the line. */
+  function atTime(it: ItemView, t: number) {
+    const tr = trims(it);
+    return fx(it, sourceAt(it, t, takeOf(it)?.source_id) ?? tr.a + t - it.start_s);
+  }
+
+  // ---- the moved sound's marker, on the blocks and across the pauses (D127) ----
+
+  const speaks = (it: ItemView, t: number) => t >= it.start_s && t <= it.end_s && it.end_s > it.start_s;
+  /** No line speaks at that moment: the marker crosses the column at its height. */
+  const cueGapY = $derived(app.soundCue && !rows.some((r) => speaks(r.it, app.soundCue!.t)) ? map.y(app.soundCue.t) : null);
+
+  // ---- several lines, and the right click (D128, D129) ----
+
+  let menu = $state<{ lineId: string; ids: string[]; x: number; y: number } | null>(null);
+
+  function pick(e: MouseEvent, it: ItemView) {
+    const cur = app.cur?.line_id ?? null;
+    // the column stays where it is: the line clicked doesn't become the current one
+    if (e.metaKey || e.ctrlKey) app.lineSel = toggleLine(app.lineSel, cur, it.line_id);
+    else if (e.shiftKey) app.lineSel = rangeLines(rows.map((r) => r.it.line_id), cur, it.line_id);
+    else app.select(it.line_id);
+  }
+
+  function openMenu(e: MouseEvent, it: ItemView) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!it.takes.length) return;
+    const inSel = app.lineSel.includes(it.line_id);
+    if (!inSel) app.lineSel = [];
+    menu = { lineId: it.line_id, ids: inSel ? [...app.lineSel] : [it.line_id], x: e.clientX, y: e.clientY };
+  }
+
   function inWord(it: ItemView, s: number) {
     const t = takeOf(it);
     if (!t) return false;
@@ -374,7 +410,7 @@
       const tr = trims(it);
       const s = clamp(w.a + ((x - rect.left) / rect.width) * (w.z - w.a), tr.a, tr.z);
       app.curId = it.line_id;
-      const at = it.start_s + (s - tr.a);
+      const at = timeAt(it, s, takeOf(it)?.source_id) ?? it.start_s + (s - tr.a);
       app.locator = at;
       if (!app.playing) app.pos = at;
     };
@@ -510,7 +546,7 @@
     {@const h = fx(r.it, tr.a)}
     {@const tl = fx(r.it, tr.z)}
     {@const shd = itemShade(app.view, r.it)}
-    <div class="snip" class:clip-muted={r.it.muted} class:clip-dropped={r.it.dropped} class:paired class:slotted={besideOn === r.it.line_id} bind:this={rowEls[r.it.line_id]} style={rowStyle(r, prevGap, shift, paired)} onclick={() => app.select(r.it.line_id)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} role="button" tabindex="-1" onkeydown={() => {}} data-testid="arrange-row">
+    <div class="snip" class:clip-muted={r.it.muted} class:clip-dropped={r.it.dropped} class:paired class:slotted={besideOn === r.it.line_id} class:picked={app.lineSel.includes(r.it.line_id) || menu?.ids.includes(r.it.line_id)} bind:this={rowEls[r.it.line_id]} style={rowStyle(r, prevGap, shift, paired)} onclick={(e) => pick(e, r.it)} oncontextmenu={(e) => openMenu(e, r.it)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} role="button" tabindex="-1" onkeydown={() => {}} data-testid="arrange-row">
       <div class="top">
         <span class="grip" onmousedown={(e) => grabRow(e, r.it)} title="Drag to reorder" aria-label="Drag to reorder" role="button" tabindex="-1">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></svg>
@@ -519,6 +555,7 @@
         <span class="script ellip txt" style="font-size: {Math.round(15 * sc)}px">{#if r.it.words.length && !r.it.dropped}{#each lineWords(r.it).filter((w) => !w.deleted) as w, wi (w.j)}{wi ? ' ' : ''}<span class:wmuted={w.muted}>{w.text}</span>{/each}{:else}{r.it.text}{/if}</span>
         <ClipState it={r.it} />
         {#if r.it.moved}<span class="badge moved">Moved</span>{/if}
+        {#if app.depthOf(r.it) > 0}<span class="badge back tn" title="Further back in the room. Right click to change it." data-testid="depth-chip">{depthText(app.depthOf(r.it))}</span>{/if}
         {#if !r.it.beside}<span class="dur" data-testid="row-dur">{(r.it.end_s - r.it.start_s).toFixed(1)} s</span>{/if}
         {#if r.it.beside}
           <span class="offp tn" role="slider" tabindex="-1" aria-label="Offset from the line beside it" aria-valuenow={offsetOf(r)} title="Drag up or down to start it earlier or later" onmousedown={(e) => grabOffset(e, r)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} data-testid="pair-offset">{offsetLabel(offsetOf(r))}</span>
@@ -527,15 +564,18 @@
       </div>
       <div class="strip" onmousedown={(e) => scrub(e, r.it)} onclick={(e) => e.stopPropagation()} onkeydown={() => {}} title="Click to set the locator, I / O to set in and out" style="height: {Math.round(30 * sc)}px" role="slider" tabindex="-1" aria-valuenow={0}>
         {#if t}
-          <Waveform peaks={peaksOf(r.it)} fill={rgba(shd, 0.85)} />
+          <Waveform peaks={peaksOf(r.it)} fill={rgba(shd, 0.85 - 0.45 * app.depthOf(r.it))} />
           <div class="shade" style="left: 0; width: {h * 100}%"></div>
           <div class="shade" style="right: 0; width: {(1 - tl) * 100}%"></div>
           {#each [fx(r.it, t.src_in), fx(r.it, t.src_out)] as e, k (k)}{#if e > 0.001 && e < 0.999}<span class="tedge" style="left: {e * 100}%" title="Where the take was cut"></span>{/if}{/each}
           {#if r.it.line_id === app.curId}
-            {@const lf = fx(r.it, tr.a + app.locator - r.it.start_s)}
-            {@const pf = fx(r.it, tr.a + app.pos - r.it.start_s)}
+            {@const lf = atTime(r.it, app.locator)}
+            {@const pf = atTime(r.it, app.pos)}
             <span class="vline" style="background: var(--locator); left: {lf * 100}%"></span><span class="flag" style="left: {lf * 100}%"></span>
             {#if app.pos > r.it.start_s && app.pos <= r.it.end_s}<span class="vline phead" style="left: {pf * 100}%"></span>{/if}
+          {/if}
+          {#if app.soundCue && speaks(r.it, app.soundCue.t)}
+            <span class="cue" style="left: {atTime(r.it, app.soundCue.t) * 100}%; --tone: var({app.soundCue.tone})" data-testid="sound-cue"></span>
           {/if}
           <span class="hdl" role="slider" tabindex="-1" aria-label="Clip start" aria-valuenow={h} onmousedown={(e) => grabTrim(e, r.it, 'h')} title="Drag to trim the head, or out to lengthen it" style="left: calc({h * 100}% - 5px); background: {hc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>
           <span class="hdl" role="slider" tabindex="-1" aria-label="Clip end" aria-valuenow={tl} onmousedown={(e) => grabTrim(e, r.it, 't')} title="Drag to trim the tail, or out to lengthen it" style="left: calc({tl * 100}% - 5px); background: {tc ? 'var(--warn)' : 'rgb(var(--ink-rgb) / 0.9)'}"></span>
@@ -584,10 +624,12 @@
   {/each}
   {#each tail as a (a.line_id)}{@render action(a)}{/each}
   {#if dropY != null}<div class="drop" style="top: {dropY}px"></div>{/if}
+  {#if cueGapY != null && app.soundCue}<div class="cuegap" style="top: {cueGapY}px; --tone: var({app.soundCue.tone})" data-testid="sound-cue-gap"></div>{/if}
 </div>
 </div>
 {#if !on}<div class="side tchip" style="left: calc(50% - {Math.round(300 * sc)}px - 24px)">{fmt(app.pos)}</div>{/if}
 <SoundsLayer {map} {spineX} {off} {slide} {on} lines={app.lines} actions={actionRows} />
+{#if menu}<LineMenu {...menu} onclose={() => (menu = null)} />{/if}
 
 <style>
   .col {
@@ -723,6 +765,46 @@
   .moved {
     color: var(--text-strong);
     box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.4);
+  }
+  .back {
+    color: rgb(var(--ink-rgb) / 0.72);
+    box-shadow: inset 0 0 0 1px rgb(var(--ink-rgb) / 0.22);
+  }
+  .picked {
+    outline: 1.5px solid var(--playhead);
+    outline-offset: 2px;
+  }
+  /* where the moved sound sits: its own colour, so it can't be taken for the locator */
+  .cue {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    margin-left: -1.5px;
+    background: rgb(var(--tone));
+    box-shadow: 0 0 0 1px rgb(var(--shadow-rgb) / 0.5), 0 0 8px rgb(var(--tone) / 0.8);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .cue::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -4px;
+    border: 5px solid transparent;
+    border-top-color: rgb(var(--tone));
+  }
+  .cuegap {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    margin-top: -1px;
+    border-radius: 1px;
+    background: rgb(var(--tone));
+    box-shadow: 0 0 8px rgb(var(--tone) / 0.8);
+    pointer-events: none;
+    z-index: 7;
   }
   .dur {
     flex: none;
