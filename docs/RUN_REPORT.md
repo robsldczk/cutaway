@@ -340,7 +340,7 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 
 **Not built**
 
-- Sounds already pinned in a file aren't converted to glue (D123). They stay pinned until they're moved on Arrange or their Glue is turned on.
+- Sounds already pinned in a file aren't converted to glue automatically (D123). Episode 2's 37 were converted at Rob's request.
 - Audible scrubbing is stepped, restarting the sound at most every 90 ms. The preview player has no varispeed.
 - FCPXML carries no pan, so the pans reach stems and bounces but not Resolve through it.
 
@@ -356,5 +356,5 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 2. **A real right click and a real drag** in the app: the test events can't show whether the native menu stays away, or how the drag feels.
 3. **Scrub a sound by ear,** to judge the 90 ms steps on the real device.
 4. **Side by side on a real scene:** half a column is narrow beside the sounds, so check the cards read well with long lines.
-5. **Decide about Episode 2's pinned sounds** (D123): they can be glued in one undoable batch if you want that.
+5. **Episode 2's glued sounds:** change a pause in one of scenes 1, 2, 3, 12, 14, 15 or 16 and check its effects follow.
 

@@ -941,6 +941,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **A word the take doesn't have:** a take swap could leave an anchor with no word to find, and the sound fell back to a time from an older cut. It now takes the nearest word of the line, then the line's edge. It only falls back to the time if the line has left the timeline.
 - **Edit:** drops there glue too, and Follows dialogue / Pin to time are the same command. Moving a sound on Edit keeps what it had: an anchored one takes a new offset, a pinned one stays pinned.
 - **Sounds already in a file aren't changed.** One that was pinned stays pinned until it's moved on Arrange or its Glue is turned on, because rewriting placements in a production file without being asked isn't safe. Rob decides whether to convert the ones in Episode 2: a batch of `set_sound_glue` does it, undoably.
+- **Episode 2 converted (Rob, 2026-11-06):** the 37 pinned effects in scenes 1, 2, 3, 12, 14, 15 and 16, as one `batch` of `set_sound_glue` from the CLI, seq 1407, so one ⌘Z takes it back. Rehearsed on a copy first, with undo. No sound moved (largest change in start 0.0), only `anchor` and `offset_s` changed, and the 6 ambience beds stayed as they were. 13 hang on a word, 13 on a line's start and 11 on a line's end. None had been pinned with Pin to time.
 
 ### D124 The opened sound's scrubber (Rob, 2026-11-06)
 - **Rob:** the SFX editor should have a scrubber and I/O for trimming, close on Enter too, and play the sound alone when it's focused.
