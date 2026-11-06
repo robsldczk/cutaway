@@ -24,7 +24,7 @@ use crate::error::{ExportError, Result};
 use crate::fcpxml::{self, media_info, MediaInfo, Options, ROOM_EFFECTS_LANE, ROOM_VOICES_LANE};
 use crate::timeline::{EpisodeTimeline, ExportScope, TimelineClip};
 use crate::versions::{
-    checksum, scene_folder, version_folder, EpisodeTag, ExportRecord, History, Manifest,
+    checksum, scene_folder, token, version_folder, EpisodeTag, ExportRecord, History, Manifest,
     ManifestFile, ManifestScene, EPISODE_FOLDER, MANIFEST, MANIFEST_SCHEMA,
 };
 use crate::{cutlist, srt};
@@ -71,18 +71,6 @@ struct TrackFile {
 
 fn is_voice(lane: &str) -> bool {
     StemGroup::of_lane(lane) == StemGroup::Dialogue
-}
-
-fn token(s: &str) -> String {
-    s.chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '-' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect()
 }
 
 /// One file per character, or one for the dialogue when nobody speaks: the
@@ -265,10 +253,7 @@ fn clip_name(stem: &str, c: &TimelineClip, sound_no: usize) -> String {
             let who = token(c.character.as_deref().unwrap_or(&c.lane));
             format!("{stem}_L{line:03}_{who}_T{take}{part}")
         }
-        None => format!(
-            "{stem}_{}_{sound_no:03}{part}",
-            token(&c.lane).replace('_', "")
-        ),
+        None => format!("{stem}_{}_{sound_no:03}{part}", token(&c.lane)),
     }
 }
 
@@ -1052,7 +1037,9 @@ mod tests {
 
     #[test]
     fn a_character_named_like_a_lane_keeps_a_safe_file_name() {
-        assert_eq!(token("Dr. Who/2"), "Dr__Who_2");
+        assert_eq!(token("Dr. Who/2"), "Dr-Who-2");
+        assert_eq!(token("OLD MAN"), "OLD-MAN");
+        assert_eq!(token("O’BRIEN"), "OBRIEN");
         assert_eq!(token("ÉMILE"), "ÉMILE");
     }
 

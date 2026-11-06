@@ -9,8 +9,8 @@
 //!
 //! That's the episode's own `Exports` folder. A pipeline folder holds every episode, so there
 //! the same tree sits under `Exports/Ep02/` (D117). The names stay machine readable, with no
-//! spaces or punctuation (D132); versions saved under older names still count, because the
-//! manifests are what's read.
+//! spaces or punctuation (D132): `_` separates the parts of a name and `-` holds a part together
+//! (D135). Versions saved under older names still count, because the manifests are what's read.
 
 use std::path::{Path, PathBuf};
 
@@ -59,19 +59,23 @@ impl EpisodeTag {
     }
 }
 
-/// A name a script can take without quoting: ASCII letters, digits and hyphens, with `_` between
-/// words. An apostrophe belongs to its word, so `Colonel’s Office` is `Colonels_Office`.
-pub fn machine_name(name: &str) -> String {
-    deunicode(name)
-        .replace('\'', "")
-        .split(|c: char| !c.is_ascii_alphanumeric() && c != '-')
-        .map(|word| word.trim_matches('-'))
+/// One part of a name: its words held together by hyphens, so `Old Man` is `Old-Man`. `_` is what
+/// separates the parts, so it never appears inside one. An apostrophe belongs to its word.
+pub fn token(name: &str) -> String {
+    name.replace(['\'', '’'], "")
+        .split(|c: char| !c.is_alphanumeric())
         .filter(|word| !word.is_empty())
         .collect::<Vec<_>>()
-        .join("_")
+        .join("-")
 }
 
-/// `Sc02_Canteen`
+/// A part of a folder's name, which a script can take without quoting: ASCII letters, digits and
+/// hyphens, so `Colonel’s Office` is `Colonels-Office`.
+pub fn machine_name(name: &str) -> String {
+    token(&deunicode(name))
+}
+
+/// `Sc03_Colonels-Office`
 pub fn scene_folder(scene: &Scene) -> String {
     let name = machine_name(&scene.place);
     if name.is_empty() {
@@ -309,17 +313,34 @@ mod tests {
     }
 
     #[test]
+    fn a_scene_folder_separates_with_underscores_and_holds_together_with_hyphens() {
+        let scene = |number, place: &str| -> Scene {
+            serde_json::from_value(serde_json::json!({
+                "id": "sc", "number": number, "heading": "", "place": place
+            }))
+            .unwrap()
+        };
+        assert_eq!(
+            scene_folder(&scene(3, "Colonel’s Office")),
+            "Sc03_Colonels-Office"
+        );
+        assert_eq!(scene_folder(&scene(2, "Canteen")), "Sc02_Canteen");
+        assert_eq!(scene_folder(&scene(7, "  ?  ")), "Sc07");
+    }
+
+    #[test]
     fn a_folder_name_needs_no_quoting() {
         for (place, name) in [
             ("Canteen", "Canteen"),
-            ("Time Spring Command", "Time_Spring_Command"),
-            ("Colonel’s Office", "Colonels_Office"),
-            ("Nina's Bedroom", "Ninas_Bedroom"),
-            ("Canteen – Later", "Canteen_Later"),
-            ("Canteen · Later (Night)", "Canteen_Later_Night"),
-            ("Küche/Flur", "Kuche_Flur"),
-            ("ÉMILE'S  CAFÉ", "EMILES_CAFE"),
-            ("Top-Floor Lab", "Top-Floor_Lab"),
+            ("Time Spring Command", "Time-Spring-Command"),
+            ("Colonel’s Office", "Colonels-Office"),
+            ("Nina's Bedroom", "Ninas-Bedroom"),
+            ("Canteen – Later", "Canteen-Later"),
+            ("Canteen · Later (Night)", "Canteen-Later-Night"),
+            ("Küche/Flur", "Kuche-Flur"),
+            ("ÉMILE'S  CAFÉ", "EMILES-CAFE"),
+            ("Top-Floor Lab", "Top-Floor-Lab"),
+            ("Snake_Case  Room", "Snake-Case-Room"),
             ("  ?  ", ""),
         ] {
             assert_eq!(machine_name(place), name, "{place}");
@@ -329,14 +350,19 @@ mod tests {
     #[test]
     fn versions_under_the_old_names_still_count() {
         let dir = tempfile::tempdir().unwrap();
-        let old = dir.path().join("Sc03 Colonel’s Office/v001 2026-11-06");
-        std::fs::create_dir_all(&old).unwrap();
-        std::fs::write(
-            old.join(MANIFEST),
-            serde_json::to_vec(&manifest(Some("a"), 1, "x")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(History::new(scan(dir.path())).next_for("a"), 2);
+        for (version, folder) in [
+            (1, "Sc03 Colonel’s Office/v001 2026-11-06"),
+            (2, "Sc03_Colonels_Office/v002_2026-11-06"),
+        ] {
+            let old = dir.path().join(folder);
+            std::fs::create_dir_all(&old).unwrap();
+            std::fs::write(
+                old.join(MANIFEST),
+                serde_json::to_vec(&manifest(Some("a"), version, "x")).unwrap(),
+            )
+            .unwrap();
+        }
+        assert_eq!(History::new(scan(dir.path())).next_for("a"), 3);
     }
 
     #[test]
