@@ -36,6 +36,18 @@
     await app.boot();
   }
 
+  /** The same package, read-only: for listening and leaving notes. */
+  async function review() {
+    let target = path;
+    if (inTauri) {
+      const r = await pickPath({ title: 'Open a project package for review', filters: [{ name: `${brand.displayName} episode or show`, extensions: [brand.episodeExt, brand.showExt] }] });
+      if (!r || !r.length) return;
+      target = r[0];
+    }
+    if (!target) return app.say('Give the path of an episode or a show');
+    await app.openForReview(target);
+  }
+
   async function create() {
     let parent = folder;
     if (!parent && inTauri) {
@@ -91,6 +103,7 @@
       <div class="row">
         {#if !inTauri}<input class="field" placeholder="Path to an episode (.{brand.episodeExt}) or its folder" bind:value={path} />{/if}
         <button class="btn" onclick={() => open()}>Open episode…</button>
+        <button class="btn" onclick={review} data-testid="open-review">Open project package in review mode</button>
       </div>
     </div>
     <div class="grp">

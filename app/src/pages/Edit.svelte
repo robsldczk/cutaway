@@ -954,6 +954,7 @@
             <div class="cstrip"></div>
             {#if app.cycle.to > app.cycle.from}<span class="cyc" class:off={!app.cycle.on} style="left: {x(app.cycle.from)}px; width: {x(app.cycle.to - app.cycle.from)}px"></span>{/if}
             {#each ticks as tk (tk.t)}<span class="tick muted tn" style="left: {x(tk.t)}px">{tk.label}</span>{/each}
+            {#each v?.notes ?? [] as n (n.id)}<button class="npin" style="left: {x(n.start_s)}px" title="{n.who}: {n.text}" aria-label="Note {n.n}" onmousedown={(e) => e.stopPropagation()} onclick={() => app.openNote(n.id)} data-testid="edit-note-pin"></button>{/each}
           </div>
           {#each lines as l (l.line_id)}
             {#if !l.dropped}
@@ -1152,6 +1153,18 @@
   .area {
     position: absolute;
     top: 0;
+  }
+  .npin {
+    position: absolute;
+    top: 11px;
+    width: 11px;
+    height: 11px;
+    margin-left: -5px;
+    border-radius: 50% 50% 50% 2px;
+    transform: rotate(-45deg);
+    background: var(--accent);
+    box-shadow: 0 0 0 1.5px var(--stage-bg);
+    z-index: 2;
   }
   .ruler {
     position: absolute;

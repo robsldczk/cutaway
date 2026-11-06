@@ -3,6 +3,7 @@
 import { call, BridgeError } from './bridge';
 import type { ExportScene, ExportSettings, ExportStatus } from './export';
 import { attrsOf, attrsText, depthCommands, depthDelta, pasteCommand, type LineAttrs } from './lines';
+import type { Note, NoteTag, ReviewerView, ReviewRole, ReviewView } from './review';
 import { oneStep } from './sounds/select';
 import type { DragSound, EditView, ItemView, Job, SceneSummary, SceneView, ShowView, SoundFace, SoundKey, SoundPreview, Status } from './types';
 
@@ -10,10 +11,10 @@ const soundId = (key: SoundKey) => key.asset_id ?? key.remote_id ?? key.clip?.id
 
 import { flushSpot, keepLast, keepSpot, landing, lastOpen, queueSpot, spotOf, type Spot } from './resume';
 
-export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'export' | 'dev';
+export type Page = 'import' | 'options' | 'arrange' | 'edit' | 'export' | 'dev' | 'review';
 export type ImportTab = 'files' | 'sounds' | 'rooms';
 export type Tool = 'pointer' | 'split' | 'fade' | 'gain' | 'marquee';
-export type Overlay = null | 'help' | 'editor' | 'mapping' | 'delete-line' | 'settings' | 'history';
+export type Overlay = null | 'help' | 'editor' | 'mapping' | 'delete-line' | 'settings' | 'history' | 'review-history';
 
 /** What the mapping editor is for: a new take of a line, or a new line after an item. */
 export type MappingTarget = { kind: 'take'; line_id: string } | { kind: 'line'; after: string | null };
@@ -209,6 +210,22 @@ class AppState {
   blocked = $state<{ text: string; x: number; y: number } | null>(null);
   /** Where the pointer last pressed, and when. */
   pointer = { x: 0, y: 0, at: 0 };
+  /** What the review screen shows around the scene. */
+  review = $state<ReviewView | null>(null);
+  /** The round looked at; the current one until another is picked. */
+  reviewRound = $state<string | null>(null);
+  /** Who's writing notes here. */
+  reviewer = $state<ReviewerView | null>(null);
+  /** "Who's reviewing?" is up. `then` carries on with what asked. */
+  asking = $state<{ then?: () => void; closable: boolean } | null>(null);
+  /** The page editing was on before review. */
+  private reviewFrom: Page = 'arrange';
+  /** The note to bring into view, wherever notes show. */
+  noteFocus = $state<string | null>(null);
+  /** The scene sounds panel: its sounds, or the scene's notes. */
+  panelTab = $state<'sounds' | 'notes'>('sounds');
+  /** Keys on the review screen. */
+  reviewUi: { marker(): void; note(): void; search(): void; cancel(): boolean } | null = null;
   /** The open show (studio mode): its home shows when no episode is open. */
   show = $state<ShowView | null>(null);
   /** The show's backdrop (a data URL), loaded once per show. */
@@ -281,7 +298,7 @@ class AppState {
     try {
       return await f();
     } catch (e) {
-      if (e instanceof BridgeError && e.code === 'scene_locked') this.refuse(e.message);
+      if (e instanceof BridgeError && (e.code === 'scene_locked' || e.code === 'review_only')) this.refuse(e.message);
       else this.say(e instanceof BridgeError ? e.message : String(e));
       return undefined;
     }
@@ -342,7 +359,8 @@ class AppState {
     try {
       this.status = await call<Status>('project_status');
       this.noProject = false;
-      if (this.status.path) remember({ name: this.status.show ? `${this.status.show.name} · ${this.status.name}` : this.status.name, path: this.status.path });
+      // a package opened for review is no place to come back to as an editor
+      if (this.status.path && !this.status.review.package) remember({ name: this.status.show ? `${this.status.show.name} · ${this.status.name}` : this.status.name, path: this.status.path });
       if (this.status.show) await this.loadShow();
       else this.show = null;
       if (this.status.warnings.length && this.warned !== this.status.path) {
@@ -359,7 +377,10 @@ class AppState {
       this.say(String(e));
       return;
     }
-    if (this.status && this.status.scenes > 0) {
+    void this.loadReviewer();
+    if (this.status?.review.active) {
+      await this.bootReview();
+    } else if (this.status && this.status.scenes > 0) {
       await this.resume();
       if (this.status.takes === 0) this.page = 'import';
       void this.loadExports();
@@ -368,8 +389,152 @@ class AppState {
       this.page = 'import';
     }
     this.resumed = this.status?.path ?? '';
-    if (this.status?.path) keepLast({ name: this.status.name, path: this.status.path });
+    if (this.status?.path && !this.status.review.package) keepLast({ name: this.status.name, path: this.status.path });
     this.watch();
+  }
+
+  // ---- review ----
+
+  /** The bus takes notes only, here or in a package opened for review. */
+  get inReview(): boolean {
+    return !!this.status?.review.active;
+  }
+
+  /** Opens an episode or a show read-only, to review it. */
+  async openForReview(path: string) {
+    if (!this.noProject) await this.closeProject();
+    this.busy = true;
+    const r = await this.run(() => call<{ file?: string; show?: ShowView }>('open_review', { path }));
+    this.busy = false;
+    if (!r) return;
+    if (r.show) {
+      await this.loadShow();
+      return;
+    }
+    await this.boot();
+  }
+
+  /** Into review mode, from the Export page or the episode menu. */
+  async enterReview() {
+    if (this.page !== 'review') this.reviewFrom = this.page;
+    if (this.playing) await this.stop();
+    await this.method('enter_review', {}, false);
+    this.status = await call<Status>('project_status');
+    await this.bootReview();
+  }
+
+  private async bootReview() {
+    this.drawer = null;
+    this.overlay = null;
+    this.page = 'review';
+    await this.loadReviewer();
+    if (!this.status?.scenes) {
+      this.say('This episode has no scenes to review yet');
+      return;
+    }
+    // a package opens on the round's first scene, not on whatever comes first in the script
+    if (!this.sceneId) {
+      const v = await this.run(() => call<ReviewView>('review_view'));
+      await this.loadScene(v?.rounds.find((r) => r.id === v.round)?.scenes[0]?.id ?? '1');
+    } else {
+      await this.loadScene(this.sceneId);
+    }
+    this.askOnEntry();
+  }
+
+  async loadReviewer() {
+    this.reviewer = (await this.run(() => call<ReviewerView>('reviewer'))) ?? null;
+  }
+
+  /** Asked once: someone remembered on this computer goes straight in. */
+  private askOnEntry() {
+    if (!this.reviewer?.current) this.asking = { closable: false };
+  }
+
+  /** Done: back to editing, or out of a package altogether. */
+  async leaveReview() {
+    if (this.playing) await this.stop();
+    if (this.status?.review.package) {
+      await this.closeProject();
+      return;
+    }
+    await this.method('leave_review', {}, false);
+    this.status = await call<Status>('project_status');
+    this.review = null;
+    this.reviewRound = null;
+    this.setPage(this.reviewFrom);
+    await this.refresh();
+  }
+
+  async loadReview() {
+    const scene = this.sceneId;
+    if (!scene) return;
+    const v = await this.run(() => call<ReviewView>('review_view', { scene, round: this.reviewRound ?? undefined }));
+    // the scene may have changed while it was on its way
+    if (v && scene === this.sceneId) this.review = v;
+  }
+
+  async pickRound(id: string) {
+    this.reviewRound = id;
+    await this.loadReview();
+    const first = this.review?.rounds.find((r) => r.id === id)?.scenes[0];
+    if (first && !this.review?.rounds.find((r) => r.id === id)?.scenes.some((s) => s.id === this.sceneId)) await this.loadScene(first.id);
+  }
+
+  /** The next scene of the round, or of the episode when there's no round. */
+  stepScene(d: number) {
+    const all = this.view?.scenes ?? [];
+    const on = this.review?.scenes.filter((s) => s.in_round).map((s) => s.id) ?? all.map((s) => s.id);
+    const i = on.indexOf(this.sceneId);
+    const next = i < 0 ? on[0] : on[i + d];
+    if (next) void this.loadScene(next);
+  }
+
+  /** Editing pages reply and resolve too: the first time, they say who's doing it. */
+  whoFirst(then: () => void) {
+    if (this.reviewer?.current) then();
+    else this.asking = { then, closable: true };
+  }
+
+  async setReviewer(name: string, role: ReviewRole, remember: boolean) {
+    this.reviewer = (await this.run(() => call<ReviewerView>('set_reviewer', { name, role, remember }))) ?? this.reviewer;
+    if (this.inReview) await this.loadReview();
+  }
+
+  /** Writes a note, a reply, a resolve; the view comes back from the core. */
+  async note<T = Note>(method: string, params: object) {
+    const r = await this.run(() => call<T>(method, params));
+    await this.refresh();
+    return r;
+  }
+
+  addNote(target: object, text: string, tag: NoteTag | null) {
+    return this.note('add_note', { ...target, text, tag: tag ?? undefined, round: this.reviewRound ?? undefined });
+  }
+
+  /** The scenes go out for review, and review opens on them. */
+  async startReview(scenes: string[]) {
+    await this.loadReviewer();
+    // the round says who picked its scenes
+    if (!this.reviewer?.current) {
+      this.asking = { then: () => void this.startReview(scenes), closable: true };
+      return;
+    }
+    const r = await this.run(() => call<{ round: string; number: number }>('start_review_round', { scenes }));
+    if (!r) return;
+    this.reviewRound = null;
+    await this.refresh();
+    if (!scenes.includes(this.sceneId) && scenes[0]) await this.loadScene(scenes[0]);
+    await this.enterReview();
+  }
+
+  /** From a marker on an editing page: to the note, in the scene's panel. */
+  openNote(id: string) {
+    this.noteFocus = id;
+    this.panelTab = 'notes';
+    if (this.page !== 'edit' && this.page !== 'arrange') this.setPage('arrange');
+    if (this.page === 'arrange' && !this.soundsOn) this.toggleSounds();
+    this.setBucket(true);
   }
 
   /** At launch, opens what was open at the end. True when an episode took over the boot. */
@@ -419,8 +584,10 @@ class AppState {
   /** Where Rob is in this episode, or null until it has landed. */
   get spot(): Spot | null {
     if (!this.status?.path || this.resumed !== this.status.path || !this.sceneId) return null;
+    // a review isn't a place in the episode to come back to, and a package isn't Rob's to mark
+    if (this.status.review.package) return null;
     return {
-      page: this.page,
+      page: this.page === 'review' ? this.reviewFrom : this.page,
       tab: this.importTab,
       scene: this.sceneId,
       line: this.curId,
@@ -439,7 +606,7 @@ class AppState {
     if (this.playing) await this.stop();
     const r = await this.run(() => call<{ snapshot: string | null }>('close_project'));
     if (!r) return;
-    const show = this.status?.show;
+    const show = this.status?.review.package ? null : this.status?.show;
     this.resetEpisode();
     // closed on purpose: the next launch comes back to the show's home, or to the start screen
     keepLast(show ? { name: show.name, path: show.root, show: true } : null);
@@ -468,6 +635,12 @@ class AppState {
     this.soundCue = null;
     this.lineSel = [];
     this.lineAttrs = null;
+    this.review = null;
+    this.reviewRound = null;
+    this.reviewer = null;
+    this.asking = null;
+    this.noteFocus = null;
+    this.panelTab = 'sounds';
     this.depthPreview = {};
     this.hiddenBuckets = [];
     this.openBucket = null;
@@ -550,6 +723,8 @@ class AppState {
     if (this.revTimer) return;
     this.revTimer = setInterval(async () => {
       try {
+        // what others said comes in here, and what's said here goes out
+        await call('review_sync');
         const s = await call<Status>('project_status');
         this.status = s;
         if (s.rev !== this.lastRev && this.view) await this.refresh();
@@ -583,11 +758,12 @@ class AppState {
       }
     }
     if (this.wantsSounds) await this.loadEdit();
+    if (this.inReview) await this.loadReview();
   }
 
-  /** The Edit page, and Arrange with its sounds layer, read the placed sounds. */
+  /** The Edit page, Arrange with its sounds layer and the review screen read the placed sounds. */
   private get wantsSounds() {
-    return this.page === 'edit' || (this.page === 'arrange' && this.soundsOn);
+    return this.page === 'edit' || this.page === 'review' || (this.page === 'arrange' && this.soundsOn);
   }
 
   async loadEdit() {

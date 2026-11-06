@@ -54,6 +54,7 @@ fn app_menu(h: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &item("new_show", "New Show from a Folder…", None)?,
             &PredefinedMenuItem::separator(h)?,
             &item("open_episode", "Open Standalone Episode…", None)?,
+            &item("open_review", "Open Project Package in Review Mode…", None)?,
             &PredefinedMenuItem::separator(h)?,
             &item("show_home", "Show Home", None)?,
             &item("close", "Close", None)?,

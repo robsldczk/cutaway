@@ -73,6 +73,15 @@
     ['Tool menu, then the tool letter', ['T']],
     ['Back to the pointer / clear selection', ['Esc']],
   ];
+  const review: [string, string[]][] = [
+    ['Marker at the playhead', ['M']],
+    ['Note on the current line', ['N']],
+    ['Previous / next scene', ['←', '→']],
+    ['Previous / next line', ['↑', '↓']],
+    ['Search scenes, lines and notes', ['⌘K']],
+    ['Add the note', ['↩']],
+    ['Undo your last note', ['⌘Z']],
+  ];
   const ed: [string, string[]][] = [
     ['Play / play from locator', ['Space', '⇧ Space']],
     ['Nudge segment', ['←', '→']],
@@ -95,6 +104,8 @@
     {#each sounds as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
     <div class="h2">On the Edit page</div>
     {#each edit as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
+    <div class="h2">In review</div>
+    {#each review as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
     <div class="h2">In the box editor</div>
     {#each ed as [l, ks] (l)}<div class="hk"><span>{l}</span><span>{#each ks as k (k)}<span class="kb">{k}</span> {/each}</span></div>{/each}
   </div>

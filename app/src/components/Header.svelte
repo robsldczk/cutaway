@@ -50,6 +50,8 @@
             <button role="menuitem" onclick={() => { menu = false; void app.showHome(); }}>Show home</button>
           {/if}
           <button role="menuitem" onclick={() => { menu = false; app.overlay = 'history'; }}>Versions and history…</button>
+          <button role="menuitem" onclick={() => { menu = false; void app.enterReview(); }} disabled={!ready} data-testid="enter-review">Review…{#if app.status?.review.open_notes}<span class="muted"> · {app.status.review.open_notes} open</span>{/if}</button>
+          <button role="menuitem" onclick={() => { menu = false; app.overlay = 'review-history'; }} data-testid="open-review-history">Review history…</button>
           <button role="menuitem" onclick={() => { menu = false; void (show ? app.closeShow() : app.closeProject()); }}>Back to start screen</button>
         </div>
       {/if}

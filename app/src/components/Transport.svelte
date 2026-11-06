@@ -97,6 +97,8 @@
 
   const mid = $derived.by(() => {
     const z = zoom > 1.05 ? `zoom ×${zoom.toFixed(1)} · ` : '';
+    // takes are the editor's business
+    if (app.inReview) return `${z}Sc. ${app.view?.scene.number} · ${app.view?.scene.place}`;
     if (app.page === 'arrange') return z.replace(/ · $/, '');
     if (!cur) return z;
     const n = cur.takes.length;
@@ -104,9 +106,22 @@
     return z + (n ? `${charLabel(app.view, cur.character)} · take ${k} of ${n}${fav ? ' · ★' : ''}` : `${charLabel(app.view, cur.character)} · no takes`);
   });
   const nameColor = $derived(cur ? charColor(app.view, cur.character).name : 'var(--text-3)');
+
+  /** Notes on the map. In review all of them, with the resolved ones faint; elsewhere what's open. */
+  const pins = $derived(
+    app.inReview
+      ? (app.review?.notes ?? []).flatMap((n) => (n.start_s === null || n.on === 'scene' ? [] : [{ id: n.id, n: n.n, t: n.start_s, done: n.status === 'resolved', tip: `${n.author.name}: ${n.text}` }]))
+      : (app.view?.notes ?? []).map((n) => ({ id: n.id, n: n.n, t: n.start_s, done: false, tip: `${n.who}: ${n.text}` })),
+  );
+
+  function pinTo(p: (typeof pins)[number]) {
+    app.seek(p.t);
+    if (app.inReview) app.noteFocus = p.id;
+    else app.openNote(p.id);
+  }
 </script>
 
-<section class="glass transport" aria-label="Transport" data-keeps-sound>
+<section class="glass transport" class:wide={app.inReview} aria-label="Transport" data-keeps-sound>
   <div class="tabclip" aria-hidden="true">
     <div class="stab" class:on={!!app.soundPicked} style={tabText?.tone ? `--c: var(${tabText.tone})` : ''} data-testid="sound-tab">
       <span class="tdot"></span>
@@ -129,10 +144,14 @@
         <span class="vline" style="background: var(--locator); top: -6px; bottom: -6px; left: {(app.locator / total) * 100}%"></span>
         <span class="flag" style="top: -6px; left: {(app.locator / total) * 100}%"></span>
         <span class="vline head" style="left: {(head / total) * 100}%"></span>
+        {#each pins as p (p.id)}<button class="pin" class:done={p.done} style="left: {(p.t / total) * 100}%" title={p.tip} aria-label="Note {p.n}" onmousedown={(e) => e.stopPropagation()} onclick={() => pinTo(p)} data-testid="note-pin"></button>{/each}
       </div>
     </div>
   </div>
   {#if app.page === 'arrange'}<VoicePans />{/if}
+  {#if app.inReview}
+    <div class="keys" aria-hidden="true"><span><span class="kb">M</span> marker <span class="kb">N</span> note</span><span><span class="kb">←→</span> scenes <span class="kb">␣</span> play</span></div>
+  {:else}
   <div class="btns">
     <button class="icb" onclick={() => app.toggleFav()} aria-label="Favorite take (F)" title="Favorite (F)" style="color: {fav ? nameColor : 'var(--text-3)'}; background: {fav ? rgba(curShade, 0.16) : 'transparent'}">
       <svg width="20" height="20" viewBox="0 0 24 24" fill={fav ? nameColor : 'none'} stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><polygon points="12 3 14.8 8.7 21 9.6 16.5 14 17.6 20.2 12 17.3 6.4 20.2 7.5 14 3 9.6 9.2 8.7" /></svg>
@@ -144,6 +163,7 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 6 4 18" /><path d="M9 6v12l9-6z" /></svg>
     </button>
   </div>
+  {/if}
 </section>
 
 <style>
@@ -161,6 +181,38 @@
     border-radius: var(--radius-panel);
     background: var(--panel);
     z-index: 10;
+  }
+  .transport.wide {
+    left: 24px;
+    right: 24px;
+    width: auto;
+    transform: none;
+  }
+  .pin {
+    position: absolute;
+    top: -5px;
+    width: 12px;
+    height: 12px;
+    margin-left: -6px;
+    border-radius: 50% 50% 50% 2px;
+    transform: rotate(-45deg);
+    background: var(--accent);
+    box-shadow: 0 0 0 1.5px var(--stage-bg);
+  }
+  .pin.done {
+    opacity: 0.45;
+  }
+  .keys {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-5);
+  }
+  .keys .kb {
+    margin: 0;
   }
   /* The selected sound, on a tab growing out of the transport's top edge: same material, and
      curved into it at the foot, so the two read as one piece. The clip is where it rises from. */

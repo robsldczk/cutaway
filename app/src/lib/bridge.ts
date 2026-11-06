@@ -42,6 +42,14 @@ export async function call<T = unknown>(method: string, params: object = {}): Pr
   return body.result as T;
 }
 
+/** Where to save a file: the native dialog in the app, a question in the browser. Null when
+ *  there's no answer. */
+export async function savePath(opts: { title: string; name: string; filters?: { name: string; extensions: string[] }[] }): Promise<string | null> {
+  if (!inTauri) return window.prompt(opts.title, opts.name);
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  return save({ title: opts.title, defaultPath: opts.name, filters: opts.filters });
+}
+
 /** Native file dialog in the app; null in the browser (the UI offers a path field instead). */
 export async function pickPath(opts: { directory?: boolean; multiple?: boolean; title?: string; filters?: { name: string; extensions: string[] }[] }): Promise<string[] | null> {
   if (!inTauri) return null;

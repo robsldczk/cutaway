@@ -54,6 +54,8 @@
   let presetName = $state('');
   let pipelinePath = $state('');
   let pipelineOpen = $state(false);
+  /** Exporting and opening for review in one go: a delivered cut is usually what gets reviewed. */
+  let thenReview = $state(false);
 
   const s = $derived(show ? local : app.exportSettings);
   const pipeline = $derived<Pipeline | null>(show ? (showStatus?.pipeline ?? null) : (status?.pipeline ?? null));
@@ -228,6 +230,12 @@
     running = false;
     await load();
     if (!show) await app.refresh();
+    if (!show && thenReview && !failed) await openForReview();
+  }
+
+  /** The scenes ticked, or every one with something in it when it's the whole episode. */
+  async function openForReview() {
+    await app.startReview(pickedScenes.map((x) => x.id));
   }
 
   onMount(() => {
@@ -393,6 +401,7 @@
                 {/if}
               {/if}
               {@render tick(s.subtitles, (v) => s && (s.subtitles = v), 'Subtitles', 'SRT', '', 'also-srt')}
+              {#if !show}{@render tick(thenReview, (v) => (thenReview = v), 'Then open for review', 'these scenes', '', 'also-review')}{/if}
               <div class="inline">
                 {@render tick(s.cut_list !== null, (v) => s && (s.cut_list = v ? 'csv' : null), 'Cut list', s.cut_list === null ? 'CSV' : '', '', 'also-cutlist')}
                 {#if s.cut_list}
@@ -470,6 +479,7 @@
         {:else if !show}
           <button class="btnx" onclick={() => (naming = true)} disabled={running} data-testid="save-preset">Save preset</button>
         {/if}
+        {#if !show}<button class="btnx" onclick={openForReview} disabled={running || !pickedScenes.length} title="Starts a review round on these scenes: it keeps which cut they're in and marks them Review" data-testid="open-for-review">Open these scenes for review</button>{/if}
         <button class="btnx pri" onclick={run} disabled={!canExport} data-testid="export-go">Export{#if !show}<span class="key">⌘E</span>{/if}</button>
       </div>
     {/if}
@@ -836,6 +846,9 @@
   @media (max-width: 860px) {
     .page {
       overflow-y: auto;
+    }
+    .foot {
+      flex-wrap: wrap;
     }
     .sheet-x {
       flex: none;

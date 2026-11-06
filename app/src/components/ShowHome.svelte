@@ -90,17 +90,19 @@
     <div class="shade" aria-hidden="true"></div>
 
     <div class="tools">
+      {#if !show.review}
       <button class="tb" onclick={backdrop} title="Set once for the show; it syncs to everyone">{app.backdrop ? 'Change backdrop…' : 'Set backdrop…'}</button>
       <button class="tb" onclick={rescan} title="Read Sound/ again (files from the pipeline)">Rescan library</button>
       <button class="tb" onclick={() => { migrating = !migrating; plan = null; }}>Copy in an episode…</button>
+      {/if}
       <button class="tb" onclick={() => app.closeShow()}>Close show</button>
     </div>
-    {#if !inTauri}
+    {#if !inTauri && !show.review}
       <input class="field imgpath" placeholder="Image path for the backdrop" bind:value={imagePath} />
     {/if}
 
     <div class="card">
-      <div class="kicker">Show</div>
+      <div class="kicker">{show.review ? 'Show, for review' : 'Show'}</div>
       <h1>{show.name}</h1>
       <div class="muted ellip root" title={show.file}>{show.root}</div>
 
@@ -112,12 +114,12 @@
             </select>
             <span class="selv">{ep?.label}</span><Icon name="chevron" size={12} stroke={2.4} />
           </label>
-          <button class="btn primary go" onclick={open} disabled={app.busy}>{app.busy ? 'Opening…' : ep?.file ? 'Open' : 'Create and open'}</button>
+          <button class="btn primary go" onclick={open} disabled={app.busy || (show.review && !ep?.file)}>{app.busy ? 'Opening…' : show.review ? 'Review' : ep?.file ? 'Open' : 'Create and open'}</button>
         </div>
         <div class="muted hint">
           {#if ep?.file}Project in {dir}{:else}Opening makes its project in {dir}{/if}
         </div>
-        {#if eps.some((e) => e.file)}
+        {#if eps.some((e) => e.file) && !show.review}
           <button class="btn deliver" onclick={() => (app.showExport = true)} data-testid="show-export">Export for the show…</button>
         {/if}
       {:else}

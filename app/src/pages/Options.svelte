@@ -2,6 +2,7 @@
   import ClipState from '../components/ClipState.svelte';
   import DeleteSheet from '../components/DeleteSheet.svelte';
   import Icon from '../components/Icon.svelte';
+  import NoteBadge from '../components/NoteBadge.svelte';
   import MappingEditor from '../components/MappingEditor.svelte';
   import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
@@ -251,6 +252,7 @@
         <div class="boxs" class:passage={inPassage(r.it.line_id)} class:clip-muted={r.it.muted} class:clip-dropped={r.it.dropped} onclick={() => app.select(r.it.line_id)} ondblclick={() => { app.select(r.it.line_id); openEditor(); }} style="flex: none; {lineStyle(r.it, r.j)}" role="button" tabindex="-1" onkeydown={() => {}}>
           <div class="hd small">
             <span class="nm" style="color: {charColor(app.view, r.it.character).name}; font-size: {Math.max(10, Math.round(11 * sc))}px">{charLabel(app.view, r.it.character)}</span>
+            <NoteBadge line={r.it.line_id} />
             <div class="tools" data-own-keys>
               <button class="rm" ondblclick={(e) => e.stopPropagation()} aria-label="Delete this line" title="Delete" onclick={(e) => { e.stopPropagation(); app.askDelete(r.it.line_id); }} data-testid="delete-line">×</button>
               <span class="info">{r.it.takes[r.it.take_index ?? 0]?.favorite ? '★ ' : ''}{r.it.takes.length ? `${(r.it.take_index ?? 0) + 1}/${r.it.takes.length}` : '—'}{r.it.adlib ? ' · added' : ''}{r.it.edited_in_edit ? ' · Edit' : ''}{r.it.dropped ? ' · cut' : r.it.muted ? ' · muted' : ''}</span>

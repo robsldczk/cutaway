@@ -14,7 +14,11 @@ export function onKey(e: KeyboardEvent) {
   // a slider keeps the focus after a drag: its undo must still work, its arrows stay its own
   const sliderUndo = t instanceof HTMLInputElement && t.type === 'range' && (e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z');
   const exportKey = (e.metaKey || e.ctrlKey) && (e.key === 'e' || e.key === 'E');
-  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && e.key !== 'Escape' && !sliderUndo && !exportKey) return;
+  const searchKey = app.inReview && (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K');
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') && e.key !== 'Escape' && !sliderUndo && !exportKey && !searchKey) return;
+  // a sheet has the keys while it's up
+  if (app.asking) return;
+  if (app.inReview) return reviewKey(e);
   if (app.overlay === 'editor' || app.overlay === 'mapping') return;
   if (ownArrows(e)) return;
   // a button reached with Tab does what it says; after a click Space still plays
@@ -84,6 +88,35 @@ export function onKey(e: KeyboardEvent) {
   else if (k === '-' || k === '_') app.scale = Math.max(0.8, Math.round((app.scale - 0.05) * 100) / 100);
   else if (k === ',') void app.nudgeGap(-0.1);
   else if (k === '.') void app.nudgeGap(0.1);
+  else handled = false;
+  if (handled) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}
+
+/** Review has keys of its own, and none that would reach for the cut. */
+function reviewKey(e: KeyboardEvent) {
+  const k = e.key;
+  const mod = e.metaKey || e.ctrlKey;
+  let handled = true;
+  if (mod && (k === 'k' || k === 'K')) app.reviewUi?.search();
+  else if (mod && (k === 'z' || k === 'Z')) void (e.shiftKey ? app.redo() : app.undo());
+  else if (k === 'Escape') {
+    if (app.overlay) app.overlay = null;
+    else handled = !!app.reviewUi?.cancel();
+  } else if (app.overlay) handled = false;
+  else if (k === '?') app.overlay = 'help';
+  else if (mod) handled = false;
+  else if (k === ' ' && e.shiftKey) void app.playFromLocator();
+  else if (k === ' ') void app.togglePlay();
+  else if (k === 'Enter') void app.playLineInContext();
+  else if (k === 'ArrowUp') app.go(-1);
+  else if (k === 'ArrowDown') app.go(1);
+  else if (k === 'ArrowLeft') app.stepScene(-1);
+  else if (k === 'ArrowRight') app.stepScene(1);
+  else if (k === 'm' || k === 'M') app.reviewUi?.marker();
+  else if (k === 'n' || k === 'N') app.reviewUi?.note();
   else handled = false;
   if (handled) {
     e.preventDefault();

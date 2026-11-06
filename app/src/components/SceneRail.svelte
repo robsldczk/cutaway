@@ -20,6 +20,10 @@
   /** An open row has two lines to fit. */
   const OPEN_MIN = 38;
   const scenes = $derived(app.view?.scenes ?? []);
+  /** In review the rail sits on the right, and it only says things: bright is in the round,
+   *  dim isn't, a dot is open notes, the lock is exported and locked. */
+  const review = $derived(app.inReview);
+  const inRound = (id: string) => app.review?.scenes.find((s) => s.id === id)?.in_round ?? true;
   // an act label above the first scene of each act (only in the open list)
   const actStart = (i: number) => !!scenes[i].act && (i === 0 || scenes[i - 1].act !== scenes[i].act);
   const history = (id: string) => {
@@ -50,6 +54,7 @@
 
   function openMenu(e: MouseEvent, s: SceneSummary) {
     e.preventDefault();
+    if (review) return;
     const box = slot?.getBoundingClientRect();
     const rail = (e.currentTarget as HTMLElement).closest('nav')?.getBoundingClientRect();
     if (!box || !rail) return;
@@ -98,7 +103,7 @@
   });
 </script>
 
-<div class="slot" bind:this={slot} bind:clientHeight={slotH}>
+<div class="slot" class:right={review} bind:this={slot} bind:clientHeight={slotH}>
 <nav class="glass rail" aria-label="Scenes" class:open style="--cell: {size.cell}px; --cell-gap: {size.gap}px">
   <button class="toggle" onclick={() => (open = !open)} aria-label={open ? 'Collapse scene list' : 'Expand scene list'} title="Scene list">
     {open ? '‹' : '›'}
@@ -113,6 +118,7 @@
       class="sc"
       class:cur={s.id === app.sceneId}
       class:marked={!!mk}
+      class:dimmed={review && !inRound(s.id)}
       style={mk ? `--mark: var(${mk.tone})` : undefined}
       aria-label="Scene {s.number}{s.title ? `, ${s.title}` : ''}{s.id === app.sceneId ? ', current' : ''}{mk ? `, ${mk.label}` : ''}{s.flagged ? `, ${s.flagged} flagged` : ''}{s.lock ? ', locked' : ''}"
       title={tip(s)}
@@ -125,9 +131,12 @@
       {#if open}
         <span class="info"><span class="ellip h">{s.title || s.place || s.heading}</span><span class="st ellip">{s.title && s.place ? `${s.place} · ` : ''}{s.lines_with_takes}/{s.lines} lines{s.flagged ? ` · ${s.flagged} flagged` : ''}</span></span>
       {/if}
-      {#if s.flagged}<span class="fl"></span>{/if}
+      {#if review ? s.open_notes : s.flagged}<span class="fl" class:notes={review}></span>{/if}
+      {#if !review && s.open_notes}<span class="nd" title="{s.open_notes} open {s.open_notes === 1 ? 'note' : 'notes'}" data-testid="rail-notes"></span>{/if}
     </button>
-    {#if s.lock || open}
+    {#if review}
+      {#if s.lock}<span class="lk on still" title="Exported and locked" data-testid="rail-lock-state"><Icon name="lock" size={11} /></span>{/if}
+    {:else if s.lock || open}
       <button class="lk" class:on={!!s.lock} aria-label={s.lock ? `Unlock scene ${s.number}` : `Lock scene ${s.number}`} aria-pressed={!!s.lock} title={s.lock ? 'Unlock this scene' : "Lock this scene's timing"} onclick={() => (s.lock ? (app.unlocking = s.id) : app.lockScene(s.id))} data-testid="rail-lock"><Icon name={s.lock ? 'lock' : 'unlock'} size={11} /></button>
     {/if}
     </div>
@@ -165,6 +174,30 @@
     justify-content: center;
     pointer-events: none;
     z-index: 12;
+  }
+  .slot.right {
+    left: auto;
+    right: 24px;
+    align-items: flex-end;
+  }
+  .sc.dimmed {
+    opacity: 0.35;
+  }
+  .lk.still {
+    pointer-events: none;
+  }
+  .fl.notes {
+    background: var(--warn);
+    box-shadow: none;
+  }
+  .nd {
+    position: absolute;
+    left: 4px;
+    bottom: 4px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
   }
   .rail {
     box-sizing: border-box;

@@ -1,3 +1,4 @@
+import type { NoteMark } from './review';
 // Mirrors apc-app::views (Rust). Read-only view models.
 
 export interface WordView {
@@ -163,6 +164,8 @@ export interface SceneSummary {
   lock: SceneLock | null;
   /** How far along the editor has marked it. */
   status: SceneStatus | null;
+  /** Review notes on it that nobody has resolved. */
+  open_notes: number;
 }
 
 export type SceneStatus = 'in_progress' | 'review' | 'finished';
@@ -233,6 +236,8 @@ export interface SceneView {
   characters: CharacterView[];
   /** The characters who speak in this scene and where they stand. */
   pans: VoicePan[];
+  /** The scene's open review notes, where they are on the cut now. */
+  notes: NoteMark[];
   story: SceneStoryView;
   rev: number;
   can_undo: boolean;
@@ -241,6 +246,8 @@ export interface SceneView {
 }
 
 export interface Status {
+  /** Review mode: `active` takes notes only, `package` is someone's project opened read-only. */
+  review: { active: boolean; package: boolean; open_notes: number; notes: number; rounds: number };
   app: string;
   name: string;
   path: string;
@@ -297,6 +304,8 @@ export interface ShowView {
   sound: string;
   episodes: ShowEpisode[];
   theme: { colors: string[]; backdrop: string | null };
+  /** Opened for review: its episodes open read-only. */
+  review?: boolean;
 }
 
 export interface Job {

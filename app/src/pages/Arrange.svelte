@@ -4,6 +4,7 @@
   import ClipState from '../components/ClipState.svelte';
   import Icon from '../components/Icon.svelte';
   import LineMenu from '../components/LineMenu.svelte';
+  import NoteBadge from '../components/NoteBadge.svelte';
   import { tick } from 'svelte';
   import { app } from '../lib/app.svelte';
   import { call } from '../lib/bridge';
@@ -555,6 +556,7 @@
         <span class="script ellip txt" style="font-size: {Math.round(15 * sc)}px">{#if r.it.words.length && !r.it.dropped}{#each lineWords(r.it).filter((w) => !w.deleted) as w, wi (w.j)}{wi ? ' ' : ''}<span class:wmuted={w.muted}>{w.text}</span>{/each}{:else}{r.it.text}{/if}</span>
         <ClipState it={r.it} />
         {#if r.it.moved}<span class="badge moved">Moved</span>{/if}
+        <NoteBadge line={r.it.line_id} />
         {#if app.depthOf(r.it) > 0}<span class="badge back tn" title="Further back in the room. Right click to change it." data-testid="depth-chip">{depthText(app.depthOf(r.it))}</span>{/if}
         {#if !r.it.beside}<span class="dur" data-testid="row-dur">{(r.it.end_s - r.it.start_s).toFixed(1)} s</span>{/if}
         {#if r.it.beside}

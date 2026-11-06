@@ -28,6 +28,9 @@
   import Import from './pages/Import.svelte';
   import Export from './pages/Export.svelte';
   import Dev from './pages/Dev.svelte';
+  import Review from './pages/Review.svelte';
+  import ReviewHistory from './components/ReviewHistory.svelte';
+  import ReviewerSheet from './components/ReviewerSheet.svelte';
 
   let root: HTMLDivElement | undefined = $state();
   let innerWidth = $state(1440);
@@ -40,7 +43,7 @@
   function onWheel(e: WheelEvent) {
     if (app.overlay || app.page === 'edit' || app.page === 'import' || app.page === 'export' || app.page === 'dev') return;
     const t = e.target as HTMLElement;
-    if (t.closest('.rail')) return; // the scene list scrolls itself
+    if (t.closest('.rail') || t.closest('[role="listbox"], [role="menu"]')) return; // these scroll themselves
     // the opened sound's handles are sliders for the keyboard; the wheel still scrubs there
     if (t.closest('[role="slider"]:not([data-part])') || t.closest('aside') || t.tagName === 'INPUT') return;
     e.preventDefault();
@@ -92,6 +95,9 @@
         await app.run(() => call('open_project', { path: r[0] }));
         await app.boot();
       }
+    } else if (id === 'open_review') {
+      const r = await pickPath({ title: 'Open a project package for review', filters: [{ name: `${brand.displayName} episode or show`, extensions: [brand.episodeExt, brand.showExt] }] });
+      if (r && r.length) await app.openForReview(r[0]);
     } else if (id === 'show_home' && app.status?.show) {
       await app.showHome();
     } else if (id === 'close') {
@@ -102,6 +108,9 @@
 
   /** `x`, `y`: on macOS Tauri's "physical" drop position is really in points, so CSS pixels. */
   async function dropped(paths: string[], x: number, y: number) {
+    const reviews = paths.filter((p) => p.endsWith(`.${brand.reviewExt}`));
+    for (const r of reviews) await addReview(r);
+    paths = paths.filter((p) => !reviews.includes(p));
     const scripts = paths.filter((p) => /\.(fountain|thrl|txt)$/i.test(p));
     const audio = paths.filter((p) => AUDIO.test(p));
     for (const s of scripts) await app.method('import_script', { path: s });
@@ -123,6 +132,16 @@
       app.importTab = 'files';
       app.setPage('import');
     }
+  }
+
+  /** A review file on the window: the same as Add review. */
+  async function addReview(path: string) {
+    if (app.noProject) return app.say('Open the episode first, then add the review');
+    const r = await app.run(() => call<{ who: string; notes: number; replies: number; notice: string | null }>('add_review', { path }));
+    if (!r) return;
+    await app.refresh();
+    app.say(`${r.who}: ${r.notes} new ${r.notes === 1 ? 'note' : 'notes'}, ${r.replies} ${r.replies === 1 ? 'reply' : 'replies'}${r.notice ? `. ${r.notice}` : ''}`);
+    app.overlay = 'review-history';
   }
 
   /** Pages where a sound from the Finder is filed into a bucket. */
@@ -181,6 +200,10 @@
     <ShowHome />
   {:else if app.noProject}
     <Welcome />
+  {:else if app.page === 'review' && app.view}
+    <Review />
+    <SceneRail />
+    <Transport />
   {:else if app.page === 'import' && app.status}
     <Import />
     <Header />
@@ -210,6 +233,8 @@
   {#if app.overlay === 'help'}<HelpOverlay />{/if}
   {#if app.overlay === 'settings'}<Settings />{/if}
   {#if app.overlay === 'history'}<History />{/if}
+  {#if app.overlay === 'review-history'}<ReviewHistory />{/if}
+  {#if app.asking}<ReviewerSheet />{/if}
   {#if app.unlocking}<UnlockSheet />{/if}
 
   {#if app.toast}<div class="toast" role="status">{app.toast}</div>{/if}

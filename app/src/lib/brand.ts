@@ -7,6 +7,7 @@ export interface Brand {
   cliName: string;
   episodeExt: string;
   showExt: string;
+  reviewExt: string;
   bundleId: string;
   tagline: string;
 }

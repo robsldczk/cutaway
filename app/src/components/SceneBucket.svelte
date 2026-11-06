@@ -6,8 +6,11 @@
   import { grab } from '../lib/drag.svelte';
   import { len } from '../lib/format';
   import Icon from './Icon.svelte';
+  import NotesPanel from './NotesPanel.svelte';
   import PreviewPlayer from './PreviewPlayer.svelte';
   import Waveform from './Waveform.svelte';
+  import { tick } from 'svelte';
+  import type { Note } from '../lib/review';
   import type { Asset, Bucket, BucketsView } from '../lib/types';
 
   /** Up to here a dropped sound keeps its length, looped or not. */
@@ -71,6 +74,14 @@
     return () => clearTimeout(wait);
   });
 
+  /** A sound or music note goes looking for its sound. */
+  let finder = $state<HTMLInputElement>();
+  function toBucket(n: Note) {
+    app.panelTab = 'sounds';
+    q = n.on === 'sound' ? n.quote : '';
+    void tick().then(() => finder?.focus());
+  }
+
   function searchKey(e: KeyboardEvent) {
     if (e.key !== 'Escape') return;
     e.stopPropagation();
@@ -125,11 +136,18 @@
     <button class="btn" onclick={() => app.toggleFullBucket()}>Full bucket <span class="kb">⇧B</span></button>
     <button class="ib" aria-label="Hide bucket (B)" title="Hide (B)" onclick={() => app.setBucket(false)}><Icon name="chevron-right" /></button>
   </div>
+  <div class="tabs" role="tablist" aria-label="Scene panel">
+    <button role="tab" aria-selected={app.panelTab === 'sounds'} class:on={app.panelTab === 'sounds'} onclick={() => (app.panelTab = 'sounds')} data-testid="panel-sounds">Sounds</button>
+    <button role="tab" aria-selected={app.panelTab === 'notes'} class:on={app.panelTab === 'notes'} onclick={() => (app.panelTab = 'notes')} data-testid="panel-notes">Notes{#if app.view?.notes.length}<span class="cnt tn">{app.view.notes.length}</span>{/if}</button>
+  </div>
+  {#if app.panelTab === 'notes'}
+    <NotesPanel onbucket={toBucket} />
+  {:else}
   <div class="legend muted">
     <span><span class="dot gold"></span>Downloaded</span>
     <span><span class="dot ring"></span>Preview, downloads on drop</span>
   </div>
-  <input class="field find" type="search" placeholder="Search sounds" aria-label="Search sounds" bind:value={q} onkeydown={searchKey} data-testid="bucket-search" />
+  <input class="field find" bind:this={finder} type="search" placeholder="Search sounds" aria-label="Search sounds" bind:value={q} onkeydown={searchKey} data-testid="bucket-search" />
   <div class="list">
     {#if eyes?.others}
       {@const faded = eyes.hidden.includes(eyes.others.id)}
@@ -203,6 +221,7 @@
     {/if}
   </div>
   {#if !off}<PreviewPlayer />{/if}
+  {/if}
 </aside>
 
 <style>
@@ -278,6 +297,39 @@
     gap: 10px;
     background: var(--bar-strong);
     z-index: 8;
+  }
+  .tabs {
+    display: flex;
+    gap: 2px;
+  }
+  .tabs button {
+    height: 26px;
+    padding: 0 11px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--text-3);
+  }
+  .tabs button.on {
+    background: var(--glass-active);
+    color: var(--text-strong);
+    font-weight: 600;
+  }
+  .tabs .cnt {
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    background: var(--accent);
+    color: var(--text-on-pill);
   }
   .hd {
     display: flex;
