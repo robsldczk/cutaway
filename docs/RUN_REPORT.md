@@ -478,15 +478,15 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 **Verified:** `check.sh` green, Playwright 202 of 202. In the real webview with in-page events on a temp demo: a dot and a card dragged and landed, Esc changing nothing, undo of a move and a remove, and the wheel easing over a 100 px notch and back up over the gaps between cards.
 
 **Not verified:** a real trackpad and mouse, so how the glide feels is Rob's to judge (`GLIDE` and `FAST` in `Review.svelte` tune it). Dragging past the edge of a long scene is written but only exercised on the demo's short scene. A remove across two machines is tested with copied files, not Syncthing.
-## Welcome screen, Shelf B (2026-11-06, D144–D150)
+## Welcome screen, Shelf B (2026-11-06, D146–D152)
 
 **Built:** the start screen from `tasks/Welcome`. A hero for the selected item and two rows of cover tiles, Recent episodes and Shows. A click selects; Edit, Review, ↩ and ⌥↩ open. A show takes over the first row, and Esc or the row's title brings it back. Single episodes group in one tile. New episode and New show are short sheets that make a project without opening it. Scripts and recordings dropped on the window start an episode, an image on a tile or the hero sets its cover, a review file goes to its episode. Missing items are dimmed with *Locate…*; a right click has *Set cover…* and *Remove from recents*. A full-screen transition shows while a project loads, for as long as it loads. On the CLI as `cutaway shelf` and `cutaway cover`, on the MCP as `welcome_view`, `set_cover` and `add_review_to`.
 
-**Conflicts with the app (all in D145):**
+**Conflicts with the app (all in D147):**
 - Launch still reopens what was open (D131), so the welcome screen shows after closing on purpose or with nothing left open. The handover calls it the first thing you see; say if you want it at every launch.
-- There was no stage in the app, so it's worked out from the work done (D146).
-- New single episodes and shows go to `~/Documents/Cutaway` unless *Choose…* says otherwise (D149).
-- New episodes in a show get no number unless the name carries one: numbers belong to the pipeline (D149).
+- There was no stage in the app, so it's worked out from the work done (D148).
+- New single episodes and shows go to `~/Documents/Cutaway` unless *Choose…* says otherwise (D151).
+- New episodes in a show get no number unless the name carries one: numbers belong to the pipeline (D151).
 
 **Not built:** a view gathering notes across a show's episodes: Review on a show opens its home for review, as it did (D141). A focal point for covers: the handover says later.
 

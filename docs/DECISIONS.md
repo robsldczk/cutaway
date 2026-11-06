@@ -1169,7 +1169,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **The wheel moves the column pixel for pixel,** and the playhead with it, with no sound. ⇧ is four times as fast. It keeps the page's scrub rule from Arrange: playing, it starts again from where the scroll stops.
 - **An eased glide, not a CSS transition:** a mouse notch is a 100 px jump, and a transition restarted on every trackpad event lags behind the finger. A frame loop eases towards a target, and handles both. With reduced motion it goes straight there.
 - **The height is kept, not worked out from the playhead.** Between cards no time passes, so a height can't be got back from a time, and slow upward scrolling caught on every gap. It's dropped when the playhead moves for any other reason.
-### D144 The welcome screen: a click selects, nothing opens without being asked (2026-11-06)
+### D146 The welcome screen: a click selects, nothing opens without being asked (2026-11-06)
 - **The handover over the mockup.** The mockup previews on hover and opens on click. The handover says neither, and says it wins. Hover only highlights; a click selects; Edit, Review, ↩ and ⌥↩ open.
 - **Open… (⌘O) puts the item on the shelf and selects it.** The handover lists it as *open from disk*, and also says a click should never commit to Edit or Review. So it does what New does: the item is selected, and how to open it is still to choose. The Show menu's Open items open straight away, as before.
 - **The New tiles leave the hero alone.** Arrows can land on them, and ↩ there opens the sheet.
@@ -1177,7 +1177,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **The mockup's Tab toggle for the mode is left out.** The handover has two buttons and no mode.
 - **Note counts show on every tile with notes,** not only the selected one as in the mockup: the handover wants the count to say where feedback is waiting.
 
-### D145 Conflicts with the app, and which way each went (2026-11-06)
+### D147 Conflicts with the app, and which way each went (2026-11-06)
 - **The first thing you see at launch.** The handover: the welcome screen. D131: the app reopens what was open at the end. The codebase wins, as the handover says it should: the welcome screen shows after closing on purpose, and at a launch with nothing left open.
 - **Recent stays in the webview's storage,** per viewer, as it was. `welcome_view` takes the list as a parameter. The list keeps 24 items, up from 6, since the row scrolls.
 - **Review and Recent.** D143 keeps packages out of Recent so a review doesn't come back as an editing session. On the shelf that can't happen: nothing opens without choosing. So Review from the shelf moves the item to the front. A package opened from the Show menu still stays out, and the launch reopen and remembered spot are unchanged.
@@ -1187,24 +1187,24 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **The demo session** moved from the old screen to the empty shelf and the Show menu.
 - **The stage dots, the take deck icon** weren't in the app, whatever the handover assumes. Both are new here. The icon's colours come from the accent token, not the mockup's literals.
 
-### D146 An episode's stage is worked out from what's been done to it (2026-11-06)
+### D148 An episode's stage is worked out from what's been done to it (2026-11-06)
 - **Context:** the handover shows *Import, Options, Arrange, Edit, Exported*. The document has no such field, and a scene's status (D119) is a different thing.
 - **Choice:** the furthest page with something to show for it. Exported: an export on disk in either destination, or a locked scene. Edit: a split, fade, gain, pin, mute or dropped part on a line. Arrange: a placed sound, a spacer, or a gap, beside or depth on a line. Options: takes. Otherwise Import.
 - **Options not taken:** the page last open (`cutaway.spots`), which is one viewer's and says where you were, not how far the work is; a stored field, which every command would have to keep true.
 
-### D147 Note counts include what's waiting in the shared folder (2026-11-06)
+### D149 Note counts include what's waiting in the shared folder (2026-11-06)
 - **Context:** the consolidated set is folded from the episode's events. Notes that arrived in `Reviews/` only merge when the episode is open, so a count from the file alone would be behind exactly when it matters: the handover wants it to say *where feedback is waiting*.
 - **Choice:** `welcome_view` adds the events of the folder's review files to the loaded document in memory, the way a merge would, and folds. Nothing is written. One fold, so a note resolved in a review file counts as resolved.
 - **Cost:** a read of Episode 2 takes about 50 ms warm. Readings are kept until the file, its log, the exports folder or a review file changes, so the window coming forward costs a few `stat`s.
 
-### D148 Covers (2026-11-06)
+### D150 Covers (2026-11-06)
 - **Where:** `Cover.jpg` (or `.jpeg`, `.png`) in the show's root or the episode's folder, which for a show episode is Cutaway's `Sound/` folder in it, next to the project file.
 - **Setting one** re-encodes to JPEG at no more than 2400 px, the way the backdrop is (D67), turned the right way up by its EXIF, and replaces any other cover there. It isn't a command: it's a file beside the project, like the backdrop, and needs no open episode.
 - **A show's backdrop counts:** a show with a backdrop and no cover uses the backdrop, and a show with a cover and no backdrop wears it at home. Otherwise Rob's show would need the same picture set twice. A show without theme colours takes them from its cover.
 - **Episodes fall back to their show's cover;** then to a wash of the show's colour, or one that stays the same for its name when it has no theme; grey for single episodes.
 - **Scaled copies** live in this machine's data folder under the image's path, time and length. A tile asks for 480 px and the hero for 1800, so the shelf doesn't send a dozen full images as data URLs.
 
-### D149 Making things from the shelf (2026-11-06)
+### D151 Making things from the shelf (2026-11-06)
 - **`create_episode` and `create_show` take `open: false`,** so what's made is closed and selected. CLI and MCP keep opening by default.
 - **Where a single episode or a new show goes:** `~/Documents/Cutaway`, shown in the sheet with *Choose…*. The handover's sheet has no folder, but a project needs one, and asking every time would be a dialog in a two-field sheet. `CUTAWAY_PROJECTS_DIR` overrides it for tests.
 - **A name is required.** The mockup falls back to *Untitled*, which collides on the second one.
@@ -1213,7 +1213,7 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **A dropped review** (`add_review_to`) is matched by episode id against the shelf and the shows on it. A rolling file about several episodes is merged into each and archived once. Each is opened, merged and closed: nothing stays open. If it matches nothing, it's said, and the file stays where it was.
 - **An image dropped anywhere else** than a tile or the hero says so. Over the sheet it's the sheet's cover.
 
-### D150 The opening transition, and small things (2026-11-06)
+### D152 The opening transition, and small things (2026-11-06)
 - **It lasts as long as the load and no longer.** It's up while the open runs and goes when it returns. Its bar slides without saying how far: the mockup's 2-second fill would be a made-up number.
 - **Missing or unreadable:** a file that can't be found is dimmed with *Locate…* (↩ too). One that's there and can't be read shows what's known and says why when opened: a sync tool may be halfway through it. Locating keeps the item's place in the list.
 - **Remove from recents on a show** removes its episodes too, or they'd bring the tile straight back.

@@ -1,6 +1,6 @@
 <script lang="ts">
   // While a project loads: its cover, its title and how it's opening. It goes the moment the
-  // load is done; nothing here waits (D150).
+  // load is done; nothing here waits (D152).
   import { fade } from 'svelte/transition';
   import { app } from '../lib/app.svelte';
 

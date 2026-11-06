@@ -1,5 +1,5 @@
 // The welcome screen's logic, without the screen: what's in the two rows, what's selected, and
-// where the keys go from there. Selecting never opens anything (D144).
+// where the keys go from there. Selecting never opens anything (D146).
 import { colorOf, type Rgb } from '../theme';
 import type { RecentEpisode } from './app.svelte';
 

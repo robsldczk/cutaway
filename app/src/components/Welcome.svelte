@@ -1,6 +1,6 @@
 <script lang="ts">
   // The first screen: a hero for what's selected, recent episodes, shows. A click selects; only
-  // Edit, Review, ↩ and ⌥↩ open anything (D144).
+  // Edit, Review, ↩ and ⌥↩ open anything (D146).
   import { onDestroy, onMount, tick } from 'svelte';
   import { fade } from 'svelte/transition';
   import { app, forgetRecent, recentEpisodes, relinkRecent, remember } from '../lib/app.svelte';

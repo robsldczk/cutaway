@@ -1,4 +1,4 @@
-//! The welcome screen (D144–D150): what's on the shelf, read straight from the files. Nothing is
+//! The welcome screen (D146–D152): what's on the shelf, read straight from the files. Nothing is
 //! opened for writing and nothing is left next to a project by looking at it.
 //!
 //! The recent list is the UI's (this viewer's); it's passed in, and everything shown about an
@@ -168,7 +168,7 @@ pub fn projects_dir() -> PathBuf {
 }
 
 /// How far along an episode is, by what's been done to it. The pages are in working order, so
-/// the furthest one with something to show for it (D146).
+/// the furthest one with something to show for it (D148).
 pub fn stage_of(doc: &Document, exported: bool) -> u8 {
     let boxes = || doc.boxes.values();
     if exported || doc.scenes.values().any(|s| s.lock.is_some()) {
