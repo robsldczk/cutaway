@@ -36,6 +36,8 @@ npm run tauri dev
 
 The npm commands only work in `app/`: the repo root has no `package.json`. Use `npm ci`, not `npm install`: it installs exactly what the lockfile says and never changes it.
 
+`npm run tauri dev` keeps machine-local data (covers, show indexes, review packages) in its own folder, `cutaway-dev` next to the real `cutaway` data folder, so a dev build can't change real data. Set `CUTAWAY_DATA_DIR` to use another folder.
+
 The first build compiles the whole Rust workspace, which takes about 2 minutes on a recent Apple Silicon Mac and longer on slower machines. Later builds are incremental.
 
 The app opens on the welcome screen. To try it without any recordings, click **Demo session** and choose a folder: it builds a synthetic episode, analyzes it and opens it. Once the welcome screen lists projects, the same option is at **Show → Demo Session…**.

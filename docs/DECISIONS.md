@@ -1265,3 +1265,10 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Choice:** two Playwright projects, `chromium` and `webkit`, run one per call (`npm run test:e2e`, `npm run test:e2e:webkit`). The tests share and change one demo session, so one call with both engines would give the second engine the first one's leftovers. CI runs both on macOS.
 - **The first WebKit run:** 230 of 236 passed. The six failures also fail when run alone, and pass in Chromium. Each is marked `test.fail` for WebKit with a `BUG:` reason, and the test itself is unchanged. `docs/STATUS.md` lists them.
 - **Playwright's WebKit is not WKWebView.** It is the closest test engine to it, but a failure there still needs a check in the real app.
+### D158 `tauri dev` keeps its own data folder (Albert, 2026-11-07)
+- **Why:** `tauri dev` wrote to the same folder as an installed build: `<data dir>/cutaway`, which holds covers, show indexes, review packages and the reviewer's name. A dev build could change or migrate them.
+- **Choice:** `npm run tauri` goes through `scripts/tauri.mjs`, which sets `CUTAWAY_DATA_DIR` to `<data dir>/cutaway-dev` for `tauri dev` only. A value already set wins, so `CUTAWAY_DATA_DIR=… npm run tauri dev` still reaches any folder, the real one included. `tauri build`, the CLI and the MCP server are unchanged.
+- **What a developer sees:** the first `tauri dev` after this starts with no covers, show indexes or reviewer name. Projects are not affected: they live in their own folders, and the welcome list was already separate (localStorage is per origin, and dev runs on `localhost:1420`).
+- **Not changed:** the bundle ID. The Keychain entry for API keys is named after it (`crates/apc-sound/src/secrets.rs`), so dev and real builds share saved keys. Changing the ID needs a key migration; `docs/STATUS.md` asks Rob.
+- **Not done:** a dev bundle ID through a second Tauri config. The app uses no Tauri path API, so it would change almost nothing.
+
