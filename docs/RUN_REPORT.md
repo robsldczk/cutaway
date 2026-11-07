@@ -575,3 +575,13 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 - Point Resolve (or Jetplane) at a file in a scene's `current/`, export that scene again, and see the new version arrive under the same path.
 - Open a `versions/…/*.fcpxml` in Resolve: its room tracks should be found.
 - Let Syncthing settle, then check that Albert's copy of the share has the same layout.
+
+## `current/` per track (2026-11-07, D166)
+
+**Built:** `current/` now takes each track from the newest version that has it, while the scene's cut is unchanged. The dialogue (one file or per character) and individual clips each come as a set. The manifest in `current/` says which version each file came from.
+
+**Done on the share:** Episode 2's 17 `current/` folders were rebuilt, after a rehearsal on a clone. Sc02 and Sc03 have v002's dialogue with v001's mix and stems.
+
+**Verified:** `check.sh` green. A new Rust test covers a dialogue-only export keeping the older mix, then a moved cut dropping it. The independent checker passed on the share, apart from the known SARA file.
+
+**Rob's check:** open `Sc02_Canteen/current/` and play the mix against the dialogue: it should line up.
