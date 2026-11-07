@@ -3,7 +3,7 @@
   export type IconName =
     | 'mic' | 'speaker' | 'sparkle' | 'chevron' | 'chevron-left' | 'chevron-right' | 'play' | 'check' | 'x' | 'download'
     | 'plus' | 'pointer' | 'split' | 'fade' | 'gain' | 'marquee' | 'start' | 'cycle' | 'inspector' | 'mixer' | 'back' | 'grip' | 'stop' | 'pan'
-    | 'lock' | 'unlock' | 'search' | 'more' | 'chevron-up';
+    | 'lock' | 'unlock' | 'search' | 'more' | 'chevron-up' | 'copy' | 'gear';
   let { name, size = 15, stroke = 2 }: { name: IconName; size?: number; stroke?: number } = $props();
 </script>
 
@@ -27,6 +27,8 @@
     {:else if name === 'chevron-left'}<polyline points="15 6 9 12 15 18" />
     {:else if name === 'chevron-right'}<polyline points="9 6 15 12 9 18" />
     {:else if name === 'check'}<polyline points="5 12 10 17 19 7" />
+    {:else if name === 'copy'}<rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h8" />
+    {:else if name === 'gear'}<circle cx="12" cy="12" r="3" /><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" />
     {:else if name === 'x'}<line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />
     {:else if name === 'download'}<path d="M12 4v11" /><polyline points="7 10 12 15 17 10" /><path d="M5 19h14" />
     {:else if name === 'more'}<circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" />

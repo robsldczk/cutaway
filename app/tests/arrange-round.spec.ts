@@ -92,6 +92,7 @@ test('pan: how far a panned voice goes back into the room is a setting', async (
   const status = () => rpc<{ pan_room: number }>('project_status');
   expect((await status()).pan_room).toBe(0.5);
   await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByTestId('settings-tab-pacing').click();
   const slider = page.getByTestId('pan-room-setting');
   await setSlider(slider, 20);
   await expect.poll(async () => (await status()).pan_room).toBe(0.2);

@@ -8,7 +8,7 @@ test('dev panel: transcript, link a sentence to a line, make a take, learn tab',
   await expect(page.getByTestId('current-box')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Dev', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByTestId('dev-switch').check();
+  await page.getByTestId('dev-switch').getByRole('radio', { name: 'On' }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Dev', exact: true }).click();
   await expect(page.getByTestId('dev-page')).toBeVisible();

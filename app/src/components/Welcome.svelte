@@ -346,6 +346,7 @@
     <button class="btn" onclick={() => newEpisode()}>New episode <span class="kb">⌘N</span></button>
     <button class="btn" onclick={newShow}>New show <span class="kb">⇧⌘N</span></button>
     <button class="btn" onclick={openFile}>Open… <span class="kb">⌘O</span></button>
+    <button class="btn icon" onclick={() => (app.overlay = 'settings')} aria-label="Settings" title="Settings (⌘,)" data-testid="welcome-settings"><Icon name="gear" size={15} /></button>
   </div>
 
   {#if both}
@@ -548,6 +549,11 @@
     top: 30px;
     display: flex;
     gap: 8px;
+  }
+  .top .btn.icon {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
   }
   .top .btn {
     color: var(--text-strong);

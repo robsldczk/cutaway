@@ -34,6 +34,13 @@ export function tourMouse(e: MouseEvent) {
 }
 
 export function onKey(e: KeyboardEvent) {
+  // ⌘, opens Settings anywhere (in the app the menu has it first)
+  if ((e.metaKey || e.ctrlKey) && e.key === ',' && !app.tour && !app.asking) {
+    e.preventDefault();
+    e.stopPropagation();
+    app.overlay = app.overlay === 'settings' ? null : 'settings';
+    return;
+  }
   // nothing's open: the shelf has the keys, and only help is left for the map below
   if (app.welcomeUi) {
     if (app.welcomeUi.key(e)) {
