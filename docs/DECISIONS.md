@@ -1272,3 +1272,76 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Not changed:** the bundle ID. The Keychain entry for API keys is named after it (`crates/apc-sound/src/secrets.rs`), so dev and real builds share saved keys. Changing the ID needs a key migration; `docs/STATUS.md` asks Rob.
 - **Not done:** a dev bundle ID through a second Tauri config. The app uses no Tauri path API, so it would change almost nothing.
 
+### D159 A review package that won't open again (Albert, 2026-11-07)
+- **Reported:** after Done in review, the package wouldn't open again to send the notes: `database error: unable to open database: …/Application Support/cutaway/review/678d391023194881/copy_xz0jv9c8w19w.cutaway`.
+- **What the message says:** "unable to open database: <path>" (without "file") is SQLite's ATTACH failing, and `VACUUM INTO` attaches its target. So the fresh private copy couldn't be created in the package's private folder. The folder is made just before.
+- **Not reproduced.** Tests reopen a package three times, with the editor closed and with it still writing (a live log, as Syncthing delivers it), with a data folder named like `Application Support`. All pass. Descriptor counts stay flat across five open, play, note and close cycles with audio off.
+- **Likely cause, not proven:** the open-file limit. An app started from the Dock gets a soft limit of 256. The mixer kept one file open for every source it had played, sounds included, with no cap, and SQLite needs three files for each episode. A long review of a scene full of sounds can reach 256. Then creating the copy fails with exactly this message.
+- **Done:**
+  - The app and the `cutaway` binary raise the soft limit towards the hard one at start, up to 10,240 (`apc_app::limits`).
+  - The mixer keeps at most 32 readers open. Decoded clips are cached anyway.
+  - The copy is tried three times, and a failed try leaves nothing behind.
+  - If no new copy can be made, the last copy opens again, with everything said in it. The next look at the package tries a fresh copy.
+  - The error now names the package and the private folder.
+- **Rob or Albert to confirm:** whether it still happens on Albert's Mac. If it does, the full message and `ulimit -n` from Terminal will say more.
+### D160 Split dialogue with or without pan (Rob, 2026-11-07)
+- **Asked for:** after "Split dialogue · by character", a choice to keep the pan or to have none, with the track mono.
+- **Choice:** `tracks.split_mono` on the export settings, off by default, so presets and manifests from before mean the same. In the UI it's a pair under the tracks, shown only while Split dialogue is ticked: *Keep pan · stereo* / *No pan · mono*. CLI: `--split-mono` (needs `--split-dialogue`). MCP takes the same settings.
+- **No pan means all of it:**
+  - The scene's pan of the character, the lane's pan on Edit, and a breath's pan on the dialogue lane all go.
+  - What D122 takes from the direct sound of a panned voice ("pan into the room") goes too: centred, nothing is taken.
+  - The file is the middle of a centred render, one channel. A centred voice is the same on both sides, so nothing is lost.
+- **Kept:** a line's depth (D129). It's where the line stands, not where it's panned.
+- **Rendered from its own schedule** (`schedule_centred`, `MixSettings::centre_voices`), so the other stems and the mix are unchanged. The FCPXML gives a mono stem one channel, and the size estimate counts one.
+### D161 Imprint, licenses, and what Jetplane does that Cutaway didn't (Rob, 2026-11-07)
+- **Asked for:** a Licenses tab, an imprint with Rob's details from robertsladeczek.com, and a comparison with Jetplane's legal setup.
+- **Jetplane has, and Cutaway lacked:**
+  1. The imprint in Settings, English then the German original.
+  2. A Licenses tab: the app's name, copyright, a proprietary statement, and every package with its license text, searchable.
+  3. License texts in the generated notices, not only names.
+  4. A list of allowed licenses that stops anything new.
+  5. Work that isn't a package listed by hand (Jetplane: its depth model).
+  6. `LICENSE.md`.
+  7. Proprietary license fields in `Cargo.toml` and `package.json`.
+  8. Copyright and publisher in the app bundle.
+  9. An About box with the copyright, and Settings… in the app menu.
+  10. A copyable version.
+- **All ten built:**
+  - **Imprint:** § 5 DDG, Robert Sladeczek, c/o Autorenglück #16657, Albert-Einstein-Str. 47, 02977 Hoyerswerda, the e-mail written `[at]` as on the site. English first, as in Jetplane.
+  - Left out from the website: the "responsible for content" line (§ 18 Abs. 2 MStV), because it's about the site's editorial content and the app has none. Also left out: liability and copyright paragraphs. Jetplane's consumer dispute sentence isn't on Rob's site, so it isn't here either.
+  - **License list:** `scripts/licenses.mjs` now writes `app/src/legal/third-party-licenses.json` (the tab, loaded only when it opens, 620 KB) and `THIRD_PARTY_LICENSES.md` with every text. What ships is the normal dependencies of the app and the `cutaway` binary on every platform, plus the npm packages that aren't development tools: 602 entries, 270 distinct texts. Development tools are listed by name only.
+  - **A choice of licenses** ("MIT OR Apache-2.0"): the one with the fewest obligations, and only its text.
+  - **Standard texts:** for the 47 packages that name a license without its text, from `scripts/licenses/`. The MIT and Apache texts come from `serde`, BSD from `alloc-no-stdlib`, MPL from `cssparser`, and ISC as the OSI publishes it.
+  - **Allowed:** MIT, MIT-0, 0BSD, ISC, BSD-2/3-Clause, Zlib, Apache-2.0 (also WITH LLVM-exception), Unlicense, CC0-1.0, BSL-1.0, Unicode-3.0/DFS-2016, OFL-1.1, bzip2-1.0.6, MPL-2.0, CDLA-Permissive-2.0 and CC-BY-4.0. Anything else fails `check.sh` until it's decided. The copyleft check of D156 still covers every package, development tools included.
+  - **CDLA-Permissive-2.0** (`webpki-roots`, the root certificates HTTPS checks against) is a permissive data license. It's allowed here and asked about in STATUS.
+  - **Listed by hand:** the Parakeet model (CC-BY-4.0, NVIDIA; downloaded at first use; credit and a link to the license, which the license allows), and the libraries inside the prebuilt sherpa-onnx library: ONNX Runtime, the Kaldi parts, OpenFst, SentencePiece, KISS FFT, utf8proc and PortAudio.
+  - **`LICENSE.md`:** proprietary, © 2026 Robert Sladeczek. `Cargo.toml` says `LicenseRef-Proprietary` (`UNLICENSED` isn't an SPDX id), and `package.json` says `UNLICENSED` (npm's word for it).
+  - **`brand.json`** has `owner` and `copyright`; the UI, the About box and `tauri.conf.json` (bundle copyright and publisher) use them, and a test keeps the bundle in step.
+  - **About and Settings…:** on macOS, About Cutaway shows the version, the commit and the copyright, and the app menu has Settings… (⌘,). Elsewhere both are at the end of the Show menu.
+- **Written independently:** the generator follows Jetplane's design, but no code was copied. Jetplane's `LICENSE.md` keeps its code to Peak State.
+- **Not done:** a privacy notice. Neither app has one. Cutaway sends text to the AI provider, and API keys reach Epidemic Sound and ElevenLabs, so it's asked about in STATUS. The imprint wasn't checked by a lawyer.
+### D162 The version is the release and the commit (Rob, 2026-11-07)
+- **Choice:** Settings shows `0.1.0 · 3c70818` beside the tabs, as Jetplane shows its commit. A click copies `Cutaway 0.1.0 (3c70818)`, ready for a bug report.
+- **`-modified`** is added when tracked files differ from the commit. Vite reads the commit at build time; the Tauri build script does the same for About.
+- **Why both:** Jetplane shows only the commit. Cutaway also has a release number, which manifests and exports already record.
+### D163 Settings in tabs (Rob, 2026-11-07)
+- **Asked for:** Settings that look like Jetplane's.
+- **Choice:** a fixed-size sheet, so switching tabs doesn't make it jump. Tabs as a pill (General, Pacing, Connections, Imprint, Licenses), the version beside them, a fading line under them. Rows have the name and a hint on the left and On / Off on the right; small capitals head the groups.
+- **What moved where:**
+  - **General:** appearance, follow playhead, the Dev page, playback level, room tone.
+  - **Pacing:** the scene's tightness and room tone, then the episode's breath gap, lead-in, tail, edge fade and pan into the room. With no episode open, it says so.
+  - **Connections:** the sound services and the AI model.
+- **Checkboxes became On / Off pairs**, as in Jetplane. Settings opens on General each time.
+- **Reachable everywhere:** ⌘, (menu and keys), the ⚙ in the header, and a new ⚙ on the welcome screen, so the imprint and licenses are there without an episode.
+### D164 Review: the arrows walk the cards, and a Script tag (Albert, 2026-11-07)
+- **Reported:** ↑ ↓ in review skipped some lines, always the same ones, and it felt bouncy.
+- **Cause:** the arrows set the playhead to the next line's start, and the column scrolled to wherever that moment falls. A line with no length of its own (taken out of the cut, or no take), or one wholly under the line before it (an overlap, a line beside another), adds nothing to the time map. The column landed on its neighbour, and the time-based highlight lit that card. The +0.4 s grace often lit two cards at once.
+- **Every layout refresh** (the review sync reloads the scene) also dropped the held position and snapped to the playhead's row: the bounce.
+- **Fix:**
+  - The arrows walk the cards as laid out, and the column centres on the card.
+  - Stopped, the card lit is the current line, one card only. Playing, it's still the one under the playhead.
+  - Playing, an arrow carries on from the line.
+  - A card the arrows or a click brought up stays in the middle across refreshes.
+  - A Playwright test drops a line from the cut and walks every card down and up. It fails on the old code.
+- **Script tag:** Albert called wrong words and missing lines "a script issue". Notes can now be tagged Script beside Performance, Timing, Sound and Music.
+- **Older builds** reading a review file with a Script note can't read that file, as with any new tag. Rob and Albert build from the same `dev`.

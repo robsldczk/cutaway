@@ -755,6 +755,30 @@ Verify:
 - [x] Real webview, on a copy of the real show.
 - [x] Specs, `DECISIONS.md`, `RUN_REPORT.md`.
 
+### Albert's review report, split dialogue without pan, Settings like Jetplane, imprint and licenses (Rob, 2026-11-07; D159 onwards)
+
+Albert's notes from his Mac, plus Rob's requests: a per-character export without pan, Settings in Jetplane's look, a Licenses tab, an imprint, a copyable version, and whatever legal parts Jetplane has that Cutaway lacks.
+
+Review (Albert):
+- [x] ↑ ↓ walk the cards as laid out, so lines with no length of their own are reached; one card lit; no snap back on a refresh (D164).
+- [x] A Script tag for wrong words and missing lines (D164).
+- [x] A package that won't open again after Done: not reproduced. The likely cause (open files) is handled: limit raised, readers capped, copy retried, the last copy reopened as a fallback (D159).
+
+Export:
+- [x] `tracks.split_mono`: per-character files with no pan, centred and mono; UI, CLI, MCP (D160).
+
+Settings and legal:
+- [x] Settings in tabs: General, Pacing, Connections, Imprint, Licenses; On / Off pairs; fixed size (D163).
+- [x] Version and commit beside the tabs; a click copies it; About shows it (D162).
+- [x] Imprint from robertsladeczek.com, English then German (D161).
+- [x] License list with every text, an allow-list, models and native libraries by hand; Licenses tab (D161).
+- [x] `LICENSE.md`, license fields, bundle copyright and publisher, About and Settings… in the menu (D161).
+
+Verify:
+- [x] Rust tests: reopen with and without a live editor, the copy's failure and fallback pick, the limit, the mono split, the bundle's copyright.
+- [x] Playwright: the arrows over a dropped line (fails on the old code), Settings tabs, version copy, imprint, licenses; specs moved to the tabs.
+- [ ] Real webview and Albert's Mac: see RUN_REPORT.
+
 ### End of run
 - [x] `docs/RUN_REPORT.md`, PLAN updated
 - [x] Pushed `dev` (after the run, at Rob's request)
@@ -842,3 +866,4 @@ Verify:
 - 2026-11-06 Welcome screen, Shelf B (D146–D152) on branch `welcome`, a worktree because `tauri dev` was running: a hero and two rows of covers, a click selects and Edit, Review, ↩ and ⌥↩ open. Stage, last edit, open notes and covers come straight from the files, with what's waiting in `Reviews/` counted. Sheets make episodes and shows without opening them; drops start an episode, set a cover or add a review; missing items offer Locate. Driven in the real webview with in-page events and Tauri's drop events on a clone of Episode 2, whose file came out of a review byte for byte the same. A real mouse, keyboard, Finder drag and the native dialogs wait for Rob. A session with no network needs `SHERPA_ONNX_LIB_DIR`: the build script otherwise hangs on its download.
 - 2026-11-06 Tours (D153): a chapter per page for Options, Arrange, Edit, Export and Review, on at the first visit and from the ? sheet. Each stop says what can be tried, and the tour undoes its own steps at the end, or at the next open after a quit. Review got a ? of its own. No change in the core: `history` already says who did what.
 - 2026-11-06 Every launch starts on the welcome screen, and every project remembers (D154), on branch `welcome-launch`, a worktree because `tauri dev` was running. The launch reopen is gone; spots lost their cap of 30, and move with a project found through Locate…; a show opens on the episode last worked in.
+- 2026-11-07 Albert's review report and Rob's Settings and legal round (D159–D164). ↑ ↓ in review walk the cards, so a line with no length of its own is no longer skipped; a Script tag. A package that wouldn't reopen after Done couldn't be reproduced; the likely cause, running out of open files, is handled four ways. Split dialogue can go out with no pan, mono. Settings has tabs like Jetplane's, the version and commit beside them, an imprint and a Licenses tab with every text, and Cutaway now has a LICENSE.md, license fields, the bundle's copyright and an About box. Checked in Playwright (Chromium) and Rust tests; not run in the real webview or on Albert's Mac.

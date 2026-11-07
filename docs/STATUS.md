@@ -9,9 +9,16 @@ This file holds only what is open now. The history is in `docs/RUN_REPORT.md`, t
 Do not guess the answers. Add a question here when the docs do not answer it.
 
 - **Bundle ID.** `com.cutaway.app` ends in `.app`, and Tauri warns about that on each build. Changing it also renames the Keychain entry (`crates/apc-sound/src/secrets.rs`), so saved API keys would need a migration. Change it before the first release, or keep it?
-- **MPL-2.0 dependencies.** `THIRD_PARTY_LICENSES.md` lists MPL-2.0 packages. `CLAUDE.md` asks for a DECISIONS entry for GPL and LGPL only. Is MPL-2.0 acceptable as it is?
+- **MPL-2.0 dependencies.** `THIRD_PARTY_LICENSES.md` lists 17 MPL-2.0 packages, used unchanged. D161 put MPL-2.0 on the allowed list, as Jetplane does. Is that acceptable?
+- **Proprietary.** D161 made Cutaway proprietary: `LICENSE.md` says all rights reserved, © 2026 Robert Sladeczek. Is that the license you want?
+- **CDLA-Permissive-2.0.** `webpki-roots` (the root certificates HTTPS checks against) is under it, a permissive data license. D161 allowed it. Agreed?
+- **Privacy notice.** Neither Cutaway nor Jetplane has one. Cutaway sends script and transcript text to the AI provider, and API keys to Epidemic Sound and ElevenLabs. Add one to Settings, and with what text?
+- **Imprint.** Settings › Imprint has § 5 DDG and the contact from robertsladeczek.com. The website's § 18 MStV line was left out (D161). Is that right for an app?
 
 ## Known problems
+
+- **Albert's review package that wouldn't reopen (D159) wasn't reproduced.** The likely cause, running out of open files, is handled. Ask Albert whether it happens again. If it does, ask for the full message and the output of `ulimit -n` in Terminal.
+- **The Script tag is new (D164).** A build from before it can't read a review file that has a Script note. Update every machine first, and restart any idle `cutaway mcp` servers.
 
 - **Six UI tests fail in WebKit and pass in Chromium.** Each is marked with `test.fail(browserName === 'webkit', 'BUG: …')`, so CI stays green and reports when one starts to pass. Two kinds:
   - Escape doesn't close the line menu after a right click (`arrange-lines.spec.ts`) or the pan popover (`arrange-round.spec.ts`). A likely cause: WebKit doesn't focus a button on click, unlike Chromium. If so, users of the app hit it.
