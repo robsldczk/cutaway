@@ -2,6 +2,10 @@
 //! (D165). Another app points at `Exports/Sc02_Canteen/current/E02_S02_Mix.wav` once and always
 //! gets the newest. Every version stays in `versions/`, as written; `current/` is a copy.
 //!
+//! The newest of each track, not the newest folder (D166): a version that exported only the
+//! dialogue again leaves the mix of the version before in `current/`, as long as the scene is
+//! still as it was then.
+//!
 //! ```text
 //! Sc02_Canteen/versions/v003_2026-11-07/E02_S02_v003_Mix.wav   the version, as exported
 //! Sc02_Canteen/current/E02_S02_Mix.wav                         the same file, its newest
@@ -107,26 +111,139 @@ fn group_of(version_dir: &Path) -> Result<PathBuf> {
         .ok_or_else(|| ExportError::Invalid("a version folder has no scene folder".into()))
 }
 
-/// Writes `current/` from a version: a copy with the version taken out of every name, its text
-/// files pointing at the copies. It's built beside the old one and swapped in, so whatever reads
-/// `current/` finds the old export or the new one, never half of one.
-pub fn publish(record: &ExportRecord) -> Result<PathBuf> {
-    let vdir = &record.folder;
-    let m = &record.manifest;
-    let group = group_of(vdir)?;
-    let current = group.join(CURRENT_FOLDER);
-    let (g, v) = (url_part(&name_of(&group)), url_part(&name_of(vdir)));
-    let mut pairs = vec![
-        (
-            format!("/{g}/{VERSIONS_FOLDER}/{v}/"),
-            format!("/{g}/{CURRENT_FOLDER}/"),
-        ),
-        (format!("/{g}/{v}/"), format!("/{g}/{CURRENT_FOLDER}/")),
-    ];
-    if let Some(stem) = stem_of(m) {
-        pairs.push((stem.clone(), unversioned(&stem, m.version)));
-    }
+/// What a file is, so the same track from two versions is one entry of `current/`: the track
+/// in lower case with `_` and `-` alike (`Dialogue_THE_COLONEL`, written before D135, is
+/// `Dialogue_THE-COLONEL`), whatever its format.
+fn key_of(track: &str) -> String {
+    track.to_lowercase().replace('_', "-")
+}
 
+/// Kinds of file that come as a set: the newest version with any of them gives all of them.
+/// The dialogue as one file and per character are one family, so it's never there twice;
+/// individual clips are another, so clips of takes no longer in the cut don't stay.
+fn family_of(track: &str) -> Option<&'static str> {
+    let k = key_of(track);
+    if k == "dialogue" || k.starts_with("dialogue-") {
+        Some("dialogue")
+    } else if k == "clip" {
+        Some("clips")
+    } else {
+        None
+    }
+}
+
+/// One version of a group, as found on disk.
+struct Found {
+    dir: PathBuf,
+    manifest: Manifest,
+}
+
+/// A file of `current/`: where it comes from and what it's called there.
+struct Pick {
+    from: PathBuf,
+    version: u32,
+    /// The version's own folder and stem, which its text files name.
+    pairs: Vec<(String, String)>,
+    file: crate::versions::ManifestFile,
+}
+
+/// Every version of a scene's (or the episode's) folder, newest first.
+fn versions_in(group: &Path) -> Vec<Found> {
+    let mut out: Vec<Found> = version_dirs(group)
+        .into_iter()
+        .filter_map(|dir| read_manifest(&dir).map(|manifest| Found { dir, manifest }))
+        .collect();
+    out.sort_by(|a, b| {
+        (b.manifest.version, &b.manifest.date).cmp(&(a.manifest.version, &a.manifest.date))
+    });
+    out
+}
+
+/// What `current/` should hold (D166): of each track, the newest version that has it. An older
+/// version counts only while the scene is as it was then (the same timeline hash): once the cut
+/// moved, its files would no longer line up with the newer ones. They stay in `versions/`.
+fn picks(group: &Path) -> Vec<Pick> {
+    let found = versions_in(group);
+    let Some(newest) = found.first() else {
+        return Vec::new();
+    };
+    let hash = newest.manifest.timeline_hash.clone();
+    let (g, current) = (url_part(&name_of(group)), CURRENT_FOLDER);
+    let mut taken_keys = std::collections::HashSet::new();
+    let mut taken_families = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for (i, f) in found.iter().enumerate() {
+        let m = &f.manifest;
+        if i > 0 && (hash.is_empty() || m.timeline_hash != hash) {
+            continue;
+        }
+        let v = url_part(&name_of(&f.dir));
+        let mut pairs = vec![
+            (
+                format!("/{g}/{VERSIONS_FOLDER}/{v}/"),
+                format!("/{g}/{current}/"),
+            ),
+            (format!("/{g}/{v}/"), format!("/{g}/{current}/")),
+        ];
+        if let Some(stem) = stem_of(m) {
+            pairs.push((stem.clone(), unversioned(&stem, m.version)));
+        }
+        // a family this version has is decided here, by its newest version
+        let families: std::collections::HashSet<&str> =
+            m.files.iter().filter_map(|x| family_of(&x.track)).collect();
+        for x in &m.files {
+            let key = key_of(&x.track);
+            let take = match family_of(&x.track) {
+                Some(fam) => !taken_families.contains(fam),
+                None => !taken_keys.contains(&key),
+            };
+            if take {
+                taken_keys.insert(key);
+                out.push(Pick {
+                    from: f.dir.join(&x.name),
+                    version: m.version,
+                    pairs: pairs.clone(),
+                    file: x.clone(),
+                });
+            }
+        }
+        taken_families.extend(families);
+    }
+    out
+}
+
+/// `current/` already holds these picks: the same names from the same versions.
+fn holds(current: &Path, picks: &[Pick]) -> bool {
+    let Some(m) = read_manifest(current) else {
+        return false;
+    };
+    let mut have: Vec<(String, Option<u32>)> = m
+        .files
+        .iter()
+        .map(|f| (f.name.clone(), f.version))
+        .collect();
+    let mut want: Vec<(String, Option<u32>)> = picks
+        .iter()
+        .map(|p| (unversioned(&p.file.name, p.version), Some(p.version)))
+        .collect();
+    have.sort();
+    want.sort();
+    have == want && want.iter().all(|(n, _)| current.join(n).is_file())
+}
+
+/// Writes `current/` for a scene's (or the episode's) folder: the picks copied under names
+/// without their version, the text files pointing at the copies. It's built beside the old one
+/// and swapped in, so whatever reads `current/` finds the old set or the new one, never half.
+/// Gives the newest version, or `None` when there's nothing to write or it's already in place.
+pub fn refresh(group: &Path) -> Result<Option<u32>> {
+    let picks = picks(group);
+    let current = group.join(CURRENT_FOLDER);
+    let Some(newest) = versions_in(group).into_iter().next() else {
+        return Ok(None);
+    };
+    if picks.is_empty() || holds(&current, &picks) {
+        return Ok(None);
+    }
     let pid = std::process::id();
     let building = group.join(format!(".{CURRENT_FOLDER}_writing_{pid}"));
     if building.exists() {
@@ -134,21 +251,27 @@ pub fn publish(record: &ExportRecord) -> Result<PathBuf> {
     }
     std::fs::create_dir_all(&building)?;
     let made = (|| -> Result<()> {
-        let mut out = m.clone();
-        for f in out.files.iter_mut() {
-            let from = vdir.join(&f.name);
-            f.name = unversioned(&f.name, m.version);
+        let mut files = Vec::new();
+        for p in &picks {
+            let mut f = p.file.clone();
+            f.name = unversioned(&f.name, p.version);
+            f.version = Some(p.version);
             let to = building.join(&f.name);
             if is_text(&f.name) {
-                std::fs::write(&to, replaced(&std::fs::read_to_string(&from)?, &pairs))?;
+                std::fs::write(&to, replaced(&std::fs::read_to_string(&p.from)?, &p.pairs))?;
                 f.bytes = std::fs::metadata(&to)?.len();
                 f.checksum = checksum(&to)?;
             } else {
-                std::fs::copy(&from, &to)?;
+                std::fs::copy(&p.from, &to)?;
             }
+            files.push(f);
         }
+        let out = Manifest {
+            files,
+            ..newest.manifest.clone()
+        };
         std::fs::write(building.join(MANIFEST), serde_json::to_vec_pretty(&out)?)?;
-        // the swap: the old copy steps aside, the new one takes its name, the old one goes
+        // the swap: the old set steps aside, the new one takes its name, the old one goes
         let old = group.join(format!(".{CURRENT_FOLDER}_old_{pid}"));
         if current.exists() {
             if old.exists() {
@@ -165,7 +288,14 @@ pub fn publish(record: &ExportRecord) -> Result<PathBuf> {
     if made.is_err() {
         let _ = std::fs::remove_dir_all(&building);
     }
-    made.map(|()| current)
+    made.map(|()| Some(newest.manifest.version))
+}
+
+/// After an export: `current/` of the version's folder, with what it brought.
+pub fn publish(record: &ExportRecord) -> Result<PathBuf> {
+    let group = group_of(&record.folder)?;
+    refresh(&group)?;
+    Ok(group.join(CURRENT_FOLDER))
 }
 
 /// What `reorganize` did, by folder relative to the base.
@@ -242,22 +372,9 @@ pub fn reorganize(base: &Path) -> Result<Reorganized> {
             done.moved.push(rel(&to));
             done.rewritten += rewritten;
         }
-        let newest = version_dirs(&group)
-            .into_iter()
-            .filter_map(|folder| {
-                read_manifest(&folder).map(|manifest| ExportRecord { manifest, folder })
-            })
-            .max_by(|a, b| {
-                (a.manifest.version, &a.manifest.date).cmp(&(b.manifest.version, &b.manifest.date))
-            });
-        let Some(newest) = newest else { continue };
-        let current = group.join(CURRENT_FOLDER);
-        let up_to_date = read_manifest(&current).is_some_and(|m| {
-            m.version == newest.manifest.version && m.date == newest.manifest.date
-        });
-        if !up_to_date {
-            publish(&newest)?;
-            done.current.push((rel(&current), newest.manifest.version));
+        if let Some(version) = refresh(&group)? {
+            done.current
+                .push((rel(&group.join(CURRENT_FOLDER)), version));
         }
     }
     Ok(done)

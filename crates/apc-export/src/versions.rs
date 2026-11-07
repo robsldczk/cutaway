@@ -138,6 +138,10 @@ pub struct ManifestFile {
     pub bytes: u64,
     /// `blake3:<hex>`
     pub checksum: String,
+    /// In `current/` only: the version the file came from, which can be older than the newest
+    /// when only some tracks were exported again (D166).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<u32>,
 }
 
 /// A scene as a whole-episode version holds it.

@@ -1541,3 +1541,84 @@ fn versions_from_before_move_into_versions_with_their_paths() {
     assert_eq!(again["folders"][0]["done"]["moved"], json!([]));
     assert_eq!(again["folders"][0]["done"]["current"], json!([]));
 }
+
+/// Only the dialogue, split by character.
+fn dialogue_only(s: &mut ExportSettings) {
+    s.tracks = apc_core::config::ExportTracks {
+        dialogue: false,
+        room_voices: false,
+        effects: false,
+        room_effects: false,
+        ambience: false,
+        music: false,
+        mix: false,
+        split_dialogue: true,
+        split_mono: true,
+    };
+}
+
+#[test]
+fn current_keeps_the_newest_of_each_track_while_the_scene_is_unchanged() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    with_sound(&mut svc, dir.path());
+    let r = export(&mut svc, json!(["1"]), settings(|_| {}));
+    let v1 = folder(&r, 0);
+    let current = v1.parent().unwrap().parent().unwrap().join("current");
+    assert!(names(&current).contains(&"E01_S01_Dialogue.wav".to_string()));
+
+    // something technical about the dialogue: only it goes out again
+    let r = export(&mut svc, json!(["1"]), settings(dialogue_only));
+    let v2 = folder(&r, 0);
+    assert!(!names(&v2).iter().any(|n| n.ends_with("_Mix.wav")));
+    let have = names(&current);
+    for n in [
+        "E01_S01_Dialogue_PAUL.wav",
+        "E01_S01_Dialogue_SARA.wav",
+        "E01_S01_Mix.wav",
+        "E01_S01_Effects.wav",
+        "E01_S01_RoomVoices.wav",
+        "E01_S01.fcpxml",
+    ] {
+        assert!(have.contains(&n.to_string()), "{n} in {have:?}");
+    }
+    // the dialogue is there once: per character now, so not as one file too
+    assert!(
+        !have.contains(&"E01_S01_Dialogue.wav".to_string()),
+        "{have:?}"
+    );
+    let m = manifest(&current);
+    assert_eq!(m.version, 2);
+    let from = |n: &str| m.files.iter().find(|f| f.name == n).and_then(|f| f.version);
+    assert_eq!(from("E01_S01_Dialogue_PAUL.wav"), Some(2));
+    assert_eq!(from("E01_S01_Mix.wav"), Some(1));
+    assert_eq!(from("E01_S01.fcpxml"), Some(2));
+    assert_eq!(
+        std::fs::read(current.join("E01_S01_Mix.wav")).unwrap(),
+        std::fs::read(v1.join("E01_S01_v001_Mix.wav")).unwrap()
+    );
+    manifest_holds(&current);
+
+    // the cut moves: the old mix no longer lines up, so it leaves current/
+    let v = svc.call("scene_view", &json!({ "scene": "1" })).unwrap();
+    let line = v["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|i| i["kind"] == "line")
+        .nth(1)
+        .and_then(|i| i["line_id"].as_str())
+        .unwrap()
+        .to_string();
+    svc.call("set_gap", &json!({ "line_id": line, "gap_s": 2.0 }))
+        .unwrap();
+    export(&mut svc, json!(["1"]), settings(dialogue_only));
+    let have = names(&current);
+    assert!(!have.contains(&"E01_S01_Mix.wav".to_string()), "{have:?}");
+    assert!(have.contains(&"E01_S01_Dialogue_PAUL.wav".to_string()));
+    assert!(manifest(&current)
+        .files
+        .iter()
+        .all(|f| f.version == Some(3)));
+    manifest_holds(&current);
+}

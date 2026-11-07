@@ -504,6 +504,7 @@ fn listed(path: &Path, track: &str, audio: Option<(u64, u32)>) -> Result<Manifes
         frames: audio.map(|(frames, _)| frames),
         bytes: std::fs::metadata(path)?.len(),
         checksum: checksum(path)?,
+        version: None,
     })
 }
 
