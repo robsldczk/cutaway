@@ -17,6 +17,8 @@ Do not guess the answers. Add a question here when the docs do not answer it.
 
 ## Known problems
 
+- **One exported file doesn't match its manifest** (found while reorganizing, D165): `Episode 2/Sound/Exports/Sc03_Colonels-Office/versions/v002_2026-11-07/E02_S03_v002_Dialogue_SARA.wav`, and its copy in `current/`, have 64,754 bytes after the end of the audio. It plays the same as the other voices. Was Sc03 exported on two machines at once around 11:57 on 2026-11-07? A new export of Sc03 replaces it in `current/`.
+
 - **Albert's review package that wouldn't reopen (D159) wasn't reproduced.** The likely cause, running out of open files, is handled. Ask Albert whether it happens again. If it does, ask for the full message and the output of `ulimit -n` in Terminal.
 - **The Script tag is new (D164).** A build from before it can't read a review file that has a Script note. Update every machine first, and restart any idle `cutaway mcp` servers.
 

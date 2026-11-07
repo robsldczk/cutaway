@@ -1345,3 +1345,22 @@ One entry per decision: context, choice, reason. Newest at the bottom.
   - A Playwright test drops a line from the cut and walks every card down and up. It fails on the old code.
 - **Script tag:** Albert called wrong words and missing lines "a script issue". Notes can now be tagged Script beside Performance, Timing, Sound and Music.
 - **Older builds** reading a review file with a Script note can't read that file, as with any new tag. Rob and Albert build from the same `dev`.
+### D165 Exports: `current/` for the newest, `versions/` for all (Rob, 2026-11-07)
+- **Asked for:** the newest export in a `current` folder, so an app using the file always gets the newest, and the dated versions in a `versions` folder. The same for what's already on disk.
+- **Layout:** `Sc02_Canteen/versions/v002_2026-11-07/E02_S02_v002_Mix.wav` and `Sc02_Canteen/current/E02_S02_Mix.wav`. The whole-episode folder has the same pair: `Episode/versions/…` and `Episode/current/E02_Mix.mp3`. The same holds in a pipeline's `Exports/Ep02/`.
+- **Rob's answers:**
+  1. No version in the names in `current/`, or a link would break at the next export.
+  2. `current/` is a copy of the newest, and `versions/` keeps every version, the newest too.
+- **How `current/` is made** (`apc_export::current`), after each export:
+  - The version is copied with `_v002` taken out of every name. On APFS a copy is a clone and takes no room on that disk; Syncthing still sends it as a file of its own.
+  - The FCPXML and cut list of the copy point at the copies.
+  - Its manifest lists the copies, with the version number of the export it came from.
+  - It's built in a hidden folder beside the old one and swapped in, so a reader sees the old export or the new one, never half of one.
+- **Not part of the history:** `current/` doesn't count as a version. History reads `versions/` and, for older ones, version folders straight in the scene's folder.
+- **Reorganizing:**
+  - `reorganize_exports` (MCP), `cutaway exports --reorganize`, and every export before it writes do the same: versions straight in a scene's folder move into `versions/`, their FCPXML paths and manifest checksums follow, and each `current/` becomes the newest.
+  - Run again, it does nothing.
+  - `--folder <Exports>` does it to a folder without opening any episode, so the episode file and its lock aren't touched.
+- **Changes the "never overwrite" promise (D112):** `current/` is replaced at each export. The versions are still never overwritten.
+- **Episode 2 on the share, at Rob's word:** rehearsed on an APFS clone, then run on the share, with a clone of the folder as it was kept in the scratchpad for the session. 28 versions moved, 17 `current/` folders made, 13 FCPXMLs rewritten. A separate check went over 45 manifests and 30 links into the exports: all good except one file.
+- **That file was already wrong:** `Sc03_Colonels-Office/…/v002_2026-11-07/E02_S03_v002_Dialogue_SARA.wav` has 64,754 bytes after the end of its audio chunk, and its manifest has the size without them. Its header and length match the other voices, so it plays the same. Why is not known; asked about in STATUS.

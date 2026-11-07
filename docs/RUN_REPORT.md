@@ -557,3 +557,21 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 - Read Settings › Imprint and Settings › Licenses, and the open questions in STATUS (proprietary, MPL-2.0, CDLA, privacy, § 18 MStV).
 - Export a scene with Split dialogue and *No pan · mono*: the `Dialogue_<NAME>` files are mono, centred, and line up in Resolve.
 - Ask Albert to try ↑ ↓ in review on the scene where lines were skipped, and whether a package still fails to reopen after Done.
+
+## Exports: `current/` and `versions/` (2026-11-07, D165)
+
+**Built:** each scene, and the whole episode, now has `versions/` with every dated version and `current/` with a copy of the newest, under names without the version (`current/E02_S02_Mix.wav`). The FCPXML in `current/` points at the files in `current/`. Each export refreshes `current/` in one swap. Older exports move over on the next export, through `reorganize_exports`, or with `cutaway exports --reorganize [--folder <Exports>]`.
+
+**Done on the share:** Episode 2's exports were reorganized, after a rehearsal on a clone: 28 versions in `versions/`, 17 `current/` folders. Every manifest and every link in the FCPXMLs was checked afterwards.
+
+**Found:** Sc03 v002's `Dialogue_SARA.wav` was already off its manifest before the move (STATUS).
+
+**Verified:**
+- `check.sh` green.
+- New Rust tests: `current/` after one and after two exports, the whole-episode `current/`, old-layout versions moved with their paths, a second reorganize doing nothing.
+- The export Playwright specs.
+
+**Manual checks for Rob:**
+- Point Resolve (or Jetplane) at a file in a scene's `current/`, export that scene again, and see the new version arrive under the same path.
+- Open a `versions/…/*.fcpxml` in Resolve: its room tracks should be found.
+- Let Syncthing settle, then check that Albert's copy of the share has the same layout.
