@@ -6,5 +6,7 @@
   "showExt": "cutawayshow",
   "reviewExt": "cutawayreview",
   "bundleId": "com.cutaway.app",
-  "tagline": "Script-matched rough cuts from unslated audio play sessions"
+  "tagline": "Script-matched rough cuts from unslated audio play sessions",
+  "owner": "Robert Sladeczek",
+  "copyright": "© 2026 Robert Sladeczek. All rights reserved."
 }

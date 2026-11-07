@@ -23,11 +23,11 @@ rustc --version
 step "brand"
 node scripts/rebrand.mjs --check
 
-step "licenses"
-node scripts/licenses.mjs --check
-
 step "ui: install"
 if [ ! -d app/node_modules ]; then (cd app && npm ci); fi
+
+step "licenses (reads app/node_modules for the npm license texts)"
+node scripts/licenses.mjs --check
 
 step "ui: build (Tauri embeds app/dist)"
 (cd app && npm run build --silent)
