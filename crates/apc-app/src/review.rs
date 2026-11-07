@@ -289,14 +289,42 @@ fn drop_copy(path: &Path) {
     }
 }
 
-/// A fresh private copy of the package. The undo log is the editor's, so it stays behind.
-fn take_copy(source: &Path, dir: &Path) -> Result<EpisodeStore> {
+/// A fresh private copy of the package. The undo log is the editor's, so it stays behind. A sync
+/// tool can be mid-write, or the machine short of open files for a moment, so it tries again a
+/// few times; a failed try leaves nothing behind (D159).
+fn take_copy(source: &Path, dir: &Path, tries: u32) -> Result<EpisodeStore> {
     std::fs::create_dir_all(dir)?;
-    let copy = dir.join(format!("{}.{}", new_id("copy"), brand::EPISODE_EXT));
-    EpisodeStore::copy_file(source, &copy)?;
-    let store = EpisodeStore::open(&copy)?;
-    store.clear_log()?;
-    Ok(store)
+    let mut failed = None;
+    for attempt in 0..tries.max(1) {
+        if attempt > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(150 * u64::from(attempt)));
+        }
+        let copy = dir.join(format!("{}.{}", new_id("copy"), brand::EPISODE_EXT));
+        let made = EpisodeStore::copy_file(source, &copy)
+            .and_then(|()| EpisodeStore::open(&copy))
+            .and_then(|store| store.clear_log().map(|()| store));
+        match made {
+            Ok(store) => return Ok(store),
+            Err(e) => {
+                drop_copy(&copy);
+                failed = Some(e);
+            }
+        }
+    }
+    let why = failed.map_or_else(|| "no try was made".to_string(), |e| e.to_string());
+    Err(AppError::Other(format!(
+        "couldn't make a private copy of {} to review it, in {}: {why}",
+        source.display(),
+        dir.display()
+    )))
+}
+
+/// The copy last written to: what was said in it is the newest.
+fn newest(copies: &[PathBuf]) -> Option<&PathBuf> {
+    copies.iter().max_by_key(|p| {
+        let wal = stamp_of(&wal_of(p)).0;
+        stamp_of(p).0.max(wal)
+    })
 }
 
 /// What was said in the session a copy held: nothing of it is lost when the copy goes.
@@ -316,12 +344,25 @@ pub fn open_package(path: &Path, client: &str) -> Result<Service> {
     paths.cache = dir.join("Cache");
     std::fs::create_dir_all(paths.cache.join("media"))?;
     let older = copies_in(&dir);
-    let stamp = package_stamp(&file);
-    let store = take_copy(&file, &dir)?;
+    let mut stamp = package_stamp(&file);
+    // when no new copy can be made, the last one opens again, with everything said in it; the
+    // next look at the package tries the copy again (D159)
+    let (store, reused) = match take_copy(&file, &dir, 3) {
+        Ok(store) => (store, None),
+        Err(e) => {
+            match newest(&older).and_then(|p| EpisodeStore::open(p).ok().map(|s| (s, p.clone()))) {
+                Some((store, p)) => {
+                    stamp = Default::default();
+                    (store, Some(p))
+                }
+                None => return Err(e),
+            }
+        }
+    };
     let mut svc = Service::from_private(paths, store, client)?;
-    for old in older {
-        carry(&mut svc, said_in(&old))?;
-        drop_copy(&old);
+    for old in older.iter().filter(|o| Some(*o) != reused.as_ref()) {
+        carry(&mut svc, said_in(old))?;
+        drop_copy(old);
     }
     svc.review.package = Some(Package {
         source: file,
@@ -358,7 +399,7 @@ fn refresh_package(svc: &mut Service) -> Result<bool> {
     }
     let (source, dir) = (p.source.clone(), p.dir.clone());
     // a sync tool can be mid-write: the next look tries again
-    let Ok(store) = take_copy(&source, &dir) else {
+    let Ok(store) = take_copy(&source, &dir, 1) else {
         return Ok(false);
     };
     let before = svc.bus.store().path().to_path_buf();
@@ -621,7 +662,7 @@ pub struct AddNoteP {
     #[serde(flatten)]
     pub target: TargetP,
     pub text: String,
-    /// performance, timing, sound or music.
+    /// performance, timing, sound, music or script.
     #[serde(default)]
     pub tag: Option<NoteTag>,
     /// The round it's for; defaults to the newest open round with this scene in it.
@@ -1805,4 +1846,38 @@ pub fn locked_with_notes(doc: &Document) -> Vec<String> {
 #[derive(Deserialize, JsonSchema)]
 pub struct CloseRoundP {
     pub round: String,
+}
+
+#[cfg(test)]
+mod copy_tests {
+    use super::*;
+
+    #[test]
+    fn a_copy_that_fails_says_where_and_leaves_nothing() {
+        let d = tempfile::tempdir().unwrap();
+        let dir = d.path().join("private");
+        let e = take_copy(&d.path().join("gone.cutaway"), &dir, 2)
+            .err()
+            .expect("no source, no copy");
+        let msg = e.to_string();
+        assert!(msg.contains("gone.cutaway"), "{msg}");
+        assert!(msg.contains("private"), "{msg}");
+        assert!(copies_in(&dir).is_empty());
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn the_newest_copy_is_the_one_written_last() {
+        let d = tempfile::tempdir().unwrap();
+        let a = d.path().join("a.cutaway");
+        let b = d.path().join("b.cutaway");
+        std::fs::write(&a, b"a").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(&b, b"b").unwrap();
+        assert_eq!(newest(&[a.clone(), b.clone()]), Some(&b));
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(wal_of(&a), b"log").unwrap();
+        assert_eq!(newest(&[a.clone(), b]), Some(&a));
+        assert_eq!(newest(&[]), None);
+    }
 }

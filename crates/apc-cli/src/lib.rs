@@ -67,7 +67,7 @@ pub enum NoteCmd {
         to_word: Option<usize>,
         #[arg(long)]
         sound: Option<String>,
-        /// performance, timing, sound or music.
+        /// performance, timing, sound, music or script.
         #[arg(long)]
         tag: Option<String>,
         #[command(flatten)]

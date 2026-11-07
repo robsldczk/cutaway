@@ -114,6 +114,8 @@ pub enum NoteTag {
     Timing,
     Sound,
     Music,
+    /// Words that differ from the script, or a line missing from the cut.
+    Script,
 }
 
 /// What a note hangs on. Word numbers are the script's, so they hold across takes, exactly as

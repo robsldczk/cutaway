@@ -66,6 +66,7 @@ fn app_menu(h: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 }
 
 pub fn run() {
+    apc_app::limits::raise_open_files();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {

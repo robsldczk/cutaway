@@ -14,7 +14,10 @@ use apc_core::review::ReviewFile;
 fn with_mock() {
     static LOCAL: OnceLock<PathBuf> = OnceLock::new();
     let local = LOCAL.get_or_init(|| {
-        let d = std::env::temp_dir().join(format!("cutaway-review-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!(
+            "Application Support {}/cutaway",
+            std::process::id()
+        ));
         std::env::set_var("CUTAWAY_AI_PROVIDER", "mock");
         std::env::set_var("CUTAWAY_NO_AUDIO", "1");
         std::env::set_var("CUTAWAY_SECRETS", "memory");
@@ -1127,4 +1130,68 @@ fn reviewing_a_show_writes_nothing_but_the_reviewers_own_file() {
     )
     .unwrap();
     assert!(shared.join("rob.cutawayreview").exists());
+}
+
+#[test]
+fn a_package_closed_with_done_opens_again_with_its_notes() {
+    let _turn = one_reviewer();
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    let (line, _) = first_line(&mut svc);
+    let file = svc.paths.file.clone();
+    svc.close().unwrap();
+    drop(svc);
+
+    for round in 0..3 {
+        let mut s = Session::new("ui");
+        s.call("open_review", &json!({ "path": file.to_string_lossy() }))
+            .unwrap_or_else(|e| panic!("open {round}: {e}"));
+        s.call(
+            "set_reviewer",
+            &json!({ "name": "Albert", "role": "producer", "remember": false }),
+        )
+        .unwrap();
+        s.call(
+            "add_note",
+            &json!({ "line_id": line, "word": 0, "text": format!("note {round}") }),
+        )
+        .unwrap();
+        let n = s.call("list_notes", &json!({})).unwrap();
+        assert_eq!(n["count"], round + 1, "{n}");
+        s.call("close_project", &json!({})).unwrap();
+    }
+}
+
+#[test]
+fn a_package_open_in_the_editor_opens_again_after_done() {
+    let _turn = one_reviewer();
+    let dir = tempfile::tempdir().unwrap();
+    let mut ed = demo_episode(dir.path());
+    let (line, _) = first_line(&mut ed);
+    let file = ed.paths.file.clone();
+    ed.call("set_gap", &json!({ "line_id": line, "gap_s": 1.0 }))
+        .unwrap();
+
+    for round in 0..3 {
+        let mut s = Session::new("ui");
+        s.call("open_review", &json!({ "path": file.to_string_lossy() }))
+            .unwrap_or_else(|e| panic!("open {round}: {e}"));
+        s.call(
+            "set_reviewer",
+            &json!({ "name": "Albert", "role": "producer", "remember": false }),
+        )
+        .unwrap();
+        s.call(
+            "add_note",
+            &json!({ "line_id": line, "word": 0, "text": format!("note {round}") }),
+        )
+        .unwrap();
+        s.call("review_sync", &json!({})).unwrap();
+        s.call("close_project", &json!({})).unwrap();
+        ed.call(
+            "set_gap",
+            &json!({ "line_id": line, "gap_s": 1.5 + round as f64 }),
+        )
+        .unwrap();
+    }
 }

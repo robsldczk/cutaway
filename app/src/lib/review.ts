@@ -2,7 +2,7 @@
 // core: a page only arranges what it's given.
 import type { ItemView } from './types';
 
-export type NoteTag = 'performance' | 'timing' | 'sound' | 'music';
+export type NoteTag = 'performance' | 'timing' | 'sound' | 'music' | 'script';
 export type NoteStatus = 'open' | 'resolved' | 'reopened';
 export type ReviewRole = 'director' | 'producer' | 'writer' | 'actor' | 'client' | 'editor' | 'other';
 
@@ -11,6 +11,7 @@ export const TAGS: { id: NoteTag; label: string }[] = [
   { id: 'timing', label: 'Timing' },
   { id: 'sound', label: 'Sound' },
   { id: 'music', label: 'Music' },
+  { id: 'script', label: 'Script' },
 ];
 
 /** What a reviewer can say they are. The editor's role comes with the editing pages. */

@@ -1160,7 +1160,7 @@ registry! {
     "add_note", review::AddNoteP, Write, true, "Write a note on the cut. Give at_s (and to_s for a range) to hang it on what's said there, or line_id (with word, to_word), or placement_id, or just the scene. It follows its element through reordering, take swaps and gap changes. Undoable.";
     "reply_note", review::NoteTextP, Write, true, "Reply to a note. Undoable.";
     "edit_note", review::NoteTextP, Write, true, "Change a note's text. Undoable.";
-    "tag_note", review::NoteTagP, Write, true, "Change a note's tag: performance, timing, sound or music. Undoable.";
+    "tag_note", review::NoteTagP, Write, true, "Change a note's tag: performance, timing, sound, music or script (wrong words, a missing line). Undoable.";
     "resolve_note", review::NoteP, Write, true, "Resolve a note. It records who and when, and shows as done in review at once. Undoable.";
     "reopen_note", review::NoteP, Write, true, "Reopen a resolved note. It records who and when, and shows as open on the editing pages. Undoable.";
     "move_note", review::MoveNoteP, Write, true, "Hang a note on another spot, given as for add_note. A detached note comes back into the cut this way. Its author's or the editor's to do. Undoable.";

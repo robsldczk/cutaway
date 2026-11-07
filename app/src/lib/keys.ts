@@ -128,6 +128,13 @@ export function onKey(e: KeyboardEvent) {
   }
 }
 
+/** The review column walks its cards as they're laid out, so a line with no time of its own is
+ *  reached too. */
+function stepReview(d: number) {
+  if (app.reviewUi) app.reviewUi.step(d);
+  else app.go(d);
+}
+
 /** Review has keys of its own, and none that would reach for the cut. */
 function reviewKey(e: KeyboardEvent) {
   const k = e.key;
@@ -144,8 +151,8 @@ function reviewKey(e: KeyboardEvent) {
   else if (k === ' ' && e.shiftKey) void app.playFromLocator();
   else if (k === ' ') void app.togglePlay();
   else if (k === 'Enter') void app.playLineInContext();
-  else if (k === 'ArrowUp') app.go(-1);
-  else if (k === 'ArrowDown') app.go(1);
+  else if (k === 'ArrowUp') stepReview(-1);
+  else if (k === 'ArrowDown') stepReview(1);
   else if (k === 'ArrowLeft') app.stepScene(-1);
   else if (k === 'ArrowRight') app.stepScene(1);
   else if (k === 'm' || k === 'M') app.reviewUi?.marker();

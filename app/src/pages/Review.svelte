@@ -40,16 +40,18 @@
   const end = $derived(v?.duration_s ?? 0);
   /** Where the wheel left the column. Between cards no time passes, so a height can't be got
    *  back from the playhead: the height itself is kept for as long as the playhead stays put. */
-  let scroll = $state<{ y: number; t: number } | null>(null);
+  let scroll = $state<{ y: number; t: number; line?: string } | null>(null);
   let gliding = $state(false);
   const off = $derived(scroll && (gliding || scroll.t === app.pos) ? scroll.y : map.y(Math.min(app.pos, end)));
   const sounds = $derived((app.edit?.placements ?? []).filter((p) => p.lane !== 'dialogue'));
 
-  // a new layout has other heights
+  // a new layout has other heights; a card the arrows or a click brought up stays in the middle
   $effect(() => {
     void laid;
     untrack(() => {
-      if (!gliding) scroll = null;
+      if (gliding) return;
+      const held = scroll?.line && scroll.t === app.pos ? laid.rows.find((x) => x.kind === 'line' && x.it?.line_id === scroll?.line) : undefined;
+      scroll = held && scroll ? { ...scroll, y: held.top } : null;
     });
   });
 
@@ -320,6 +322,40 @@
     return true;
   }
 
+  // ---- the arrows ----
+
+  /** The cards in the order they're laid out. A line with no time of its own (missing, or no
+   *  take), or one wholly under the line before it, has no height of its own in the time map:
+   *  the playhead alone can't bring it to the middle, so the arrows go by the cards. */
+  const cards = $derived(laid.rows.filter((x) => x.kind === 'line' && x.it));
+  const focusId = $derived(app.cur?.line_id ?? null);
+
+  /** The card nearest the middle of the column, when the current line isn't one of them. */
+  function nearestCard(): number {
+    let best = 0;
+    cards.forEach((c, i) => {
+      if (Math.abs(c.top - off) < Math.abs(cards[best].top - off)) best = i;
+    });
+    return best;
+  }
+
+  function stepCard(d: number) {
+    if (!cards.length) return;
+    const at = cards.findIndex((c) => c.it?.line_id === focusId);
+    const row = cards[clamp((at < 0 ? nearestCard() : at) + d, 0, cards.length - 1)];
+    const it = row.it;
+    if (!it) return;
+    cancelAnimationFrame(frame);
+    frame = 0;
+    target = null;
+    gliding = false;
+    // playing, it plays on from the line; the line is picked after the seek, which would pick
+    // the line playing at that moment
+    if (app.playing) app.seek(it.start_s);
+    app.select(it.line_id);
+    scroll = { y: row.top, t: app.pos, line: it.line_id };
+  }
+
   // ---- going to a note ----
   async function goTo(n: Note) {
     if (n.scene_id !== app.sceneId) await app.loadScene(n.scene_id);
@@ -354,6 +390,7 @@
       note: () => void (app.cur ? write({ line_id: app.cur.line_id }) : write(onScene())),
       search: () => search?.focus(),
       wheel,
+      step: stepCard,
       cancel: () => {
         if (grab) {
           letGo();
@@ -417,9 +454,9 @@
         {#if row.kind === 'line' && row.it}
           {@const it = row.it}
           {@const c = charColor(v, it.character).rgb}
-          {@const cur = app.pos >= it.start_s && app.pos < it.end_s + 0.4}
+          {@const cur = app.playing ? app.pos >= it.start_s && app.pos < it.end_s + 0.4 : it.line_id === focusId}
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions (the arrows walk the lines) -->
-          <div class="card glass" class:cur style="left: {LEFT}px; width: {cardW}px; top: {row.top}px; height: {row.height}px; background: linear-gradient(90deg, {rgba(c, cur ? 0.4 : 0.22)}, {rgba(c, 0.06)} 70%, var(--glass-fill-1)); box-shadow: inset 0 0 0 {cur ? 1.5 : 1}px {rgba(c, cur ? 0.7 : 0.16)}" onclick={() => { app.select(it.line_id); app.seek(it.start_s); }} data-testid="review-line" data-line={it.line_id} data-tour="card">
+          <div class="card glass" class:cur style="left: {LEFT}px; width: {cardW}px; top: {row.top}px; height: {row.height}px; background: linear-gradient(90deg, {rgba(c, cur ? 0.4 : 0.22)}, {rgba(c, 0.06)} 70%, var(--glass-fill-1)); box-shadow: inset 0 0 0 {cur ? 1.5 : 1}px {rgba(c, cur ? 0.7 : 0.16)}" onclick={() => { app.seek(it.start_s); app.select(it.line_id); scroll = { y: row.top, t: app.pos, line: it.line_id }; }} data-testid="review-line" data-line={it.line_id} data-tour="card">
             <div class="ch"><span class="nm" style="color: {charColor(v, it.character).name}">{charLabel(v, it.character)}</span><span class="tn tcd">{fmt(it.start_s)}</span></div>
             <div class="script ellip txt" title={it.text}>{it.words.length ? lineWords(it).filter((w) => !w.deleted).map((w) => w.text).join(' ') : it.text}</div>
             <button class="addn" aria-label="Note on this line" title="Note on this line (N)" onclick={(e) => { e.stopPropagation(); void write({ line_id: it.line_id }); }} data-testid="line-note" data-tour="add-note"><Icon name="plus" size={12} stroke={2.6} /></button>

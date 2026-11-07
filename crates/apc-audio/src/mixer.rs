@@ -20,6 +20,9 @@ use crate::schedule::{PlaySchedule, ScheduledClip};
 /// Source, in and out point, the roll-off (0 = none), the shelves in hundredths of a dB, looped.
 type ClipKey = (String, u64, u64, u32, i32, i32, bool);
 
+/// Files a source set keeps open at once (one per source it reads from).
+const MAX_OPEN_READERS: usize = 32;
+
 /// Decoded clip audio (mono, at the mix rate), cached per source range.
 pub struct SourceSet {
     rate: u32,
@@ -250,6 +253,11 @@ impl SourceSet {
             .lock()
             .map_err(|_| AudioError::Other("readers poisoned".into()))?;
         if !readers.contains_key(&c.source_id) {
+            // each reader holds its file open, and a scene can have hundreds of sounds: the
+            // decoded clips are cached anyway, so the readers are let go now and then (D159)
+            if readers.len() >= MAX_OPEN_READERS {
+                readers.clear();
+            }
             readers.insert(c.source_id.clone(), AudioReader::open(path)?);
         }
         let r = readers

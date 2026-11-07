@@ -266,7 +266,7 @@ class AppState {
   /** The scene sounds panel: its sounds, or the scene's notes. */
   panelTab = $state<'sounds' | 'notes'>('sounds');
   /** Keys on the review screen. */
-  reviewUi: { marker(): void; note(): void; search(): void; cancel(): boolean; wheel(e: WheelEvent): boolean } | null = null;
+  reviewUi: { marker(): void; note(): void; search(): void; cancel(): boolean; wheel(e: WheelEvent): boolean; step(d: number): void } | null = null;
   /** The welcome screen sees keys and drops first, while it's up. */
   welcomeUi: { key(e: KeyboardEvent): boolean; drop(paths: string[], x: number, y: number): Promise<void> } | null = null;
   /** The tour under way. */
