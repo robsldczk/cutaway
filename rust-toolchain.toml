@@ -1,0 +1,5 @@
+# The Rust version for local builds and CI. A new version can bring new clippy lints, so
+# move it on purpose: change this line, then run scripts/check.sh.
+[toolchain]
+channel = "1.92.0"
+components = ["rustfmt", "clippy"]

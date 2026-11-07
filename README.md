@@ -10,8 +10,8 @@ The product name lives in `brand.json` (see `docs/specs/architecture.md`, *Namin
 
 | Tool | Version | Notes |
 |---|---|---|
-| Rust | Current stable, through [rustup](https://rustup.rs) | |
-| Node.js | 22 | Same as CI |
+| Rust | Set in `rust-toolchain.toml`, through [rustup](https://rustup.rs) | rustup downloads it at the first build |
+| Node.js | 22 or newer (`.nvmrc`) | CI uses 22 |
 | Tauri's system dependencies | | macOS: Xcode Command Line Tools (`xcode-select --install`). Windows: Microsoft C++ Build Tools and WebView2. See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) |
 
 Cutaway runs on macOS and Windows; CI builds and tests both. Linux is not a target.
