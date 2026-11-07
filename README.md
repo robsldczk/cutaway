@@ -20,13 +20,21 @@ The first build needs a network connection: it downloads the Rust crates and the
 
 ### Run the app
 
+Get the code:
+
 ```sh
 git clone https://github.com/robsldczk/cutaway.git
-cd cutaway
-cd app          # the npm commands only work in app/. The repo root has no package.json
-npm install
+```
+
+Open a terminal in the `cutaway` folder. If you opened the folder in VS Code, its terminal is already there. Then run:
+
+```sh
+cd app
+npm ci
 npm run tauri dev
 ```
+
+The npm commands only work in `app/`: the repo root has no `package.json`. Use `npm ci`, not `npm install`: it installs exactly what the lockfile says and never changes it.
 
 The first build compiles the whole Rust workspace, which takes about 2 minutes on a recent Apple Silicon Mac and longer on slower machines. Later builds are incremental.
 
@@ -99,7 +107,20 @@ One script makes a Dock app that builds the latest Cutaway each time you open it
 scripts/dock-app.sh      # installs ~/Applications/App It/Cutaway Latest.app
 ```
 
-Drag it to the Dock. Each open pulls `dev` (only if your checkout is clean and on `dev`), builds the app and starts it. The first open takes several minutes. Later opens are incremental. The build log is `~/Library/Logs/app-it/cutaway/build.log`. Run the script again if you move the repo.
+Drag it to the Dock. Each open pulls `dev` and builds if the code changed, then starts Cutaway. If nothing changed, Cutaway opens at once. If Cutaway is already open, it comes to the front without a build. The first open takes several minutes.
+
+The pull only runs on `dev` with no local changes. Otherwise a notification says so, and the Dock app uses the code on disk.
+
+| Command, from the repo root | What it does |
+|---|---|
+| `scripts/dock-app.sh --doctor` | Reports what is installed and built |
+| `scripts/dock-app.sh --build` | Updates and builds now, without opening |
+| `scripts/dock-app.sh --quit` | Quits Cutaway |
+| `scripts/dock-app.sh --background` | Also rebuilds every 15 minutes while Cutaway is closed, so opens don't wait. `--no-background` stops it |
+
+The same commands are `npm run desktop:install`, `desktop:build`, `desktop:doctor` and `desktop:quit` in `app/`. The build log is `~/Library/Logs/app-it/cutaway/build.log`. Run `scripts/dock-app.sh` again if you move the repo.
+
+The Dock app builds into `target/dock/`, so it can't overwrite the `cutaway` CLI (see *If something goes wrong*).
 
 ## Using Cutaway from Claude (MCP)
 

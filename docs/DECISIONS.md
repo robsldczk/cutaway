@@ -1243,3 +1243,13 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Locate… carries the spot** to the new path. It was keyed by the old one, so a relinked project would have started over.
 - **A show opens on the episode last worked in,** from the recent list, instead of its first with a project.
 - **Unchanged:** a spot is per machine (D131), and a package opened for review keeps none (D143).
+### D155 A Dock app that builds the latest on every open (Albert, 2026-11-07)
+- **Asked for:** an App It launcher that builds the latest Cutaway on every open.
+- **Options:** the App It Swift web shell, which has no Tauri commands and can't run this app. A snapshot `tauri build` rebuilt in the background, which is the vibekit default. A small launcher that builds at open. The third is what was asked for.
+- **Choice:** `scripts/dock-app.sh` installs `Cutaway Latest.app`, which pulls, runs `tauri build --bundles app` and opens the result. The price is a wait at each open after new code lands.
+- **No change, no build:** the commit of the last build is kept in `target/dock/built-commit`. A clean checkout at that commit opens at once.
+- **Background rebuild is opt-in** (`--background`), a LaunchAgent every 15 minutes. It skips while Cutaway is open. It spends disk and CPU without being asked, so it stays off by default.
+- **Pull:** only on `dev` with a clean tree, fast-forward only. Otherwise it builds what is on disk, so it can't touch local work.
+- **Already open:** Cutaway comes to the front with no build. A build would replace the app under a running session.
+- **Own target folder, `target/dock/`:** on a case-insensitive disk `target/release/Cutaway` and the CLI's `target/release/cutaway` are one file, and the README's MCP setup runs the second. The price is a second copy of the release build. `clean-target.sh` removes it last.
+- **Unchanged:** it shares the bundle ID and data of any other Cutaway build on the machine.
