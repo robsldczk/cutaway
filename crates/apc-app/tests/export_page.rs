@@ -823,6 +823,51 @@ fn split_dialogue_writes_one_full_length_file_per_character() {
     }
 }
 
+/// PAUL stands hard left in scene 1; the split with and without pan.
+fn split_paul(mono: bool) -> (u64, u16, Vec<f32>) {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    svc.call(
+        "set_character_pan",
+        &json!({ "scene": "1", "character": "PAUL", "pan": -1.0 }),
+    )
+    .unwrap();
+    let r = export(
+        &mut svc,
+        json!(["1"]),
+        settings(|s| {
+            s.tracks.split_dialogue = true;
+            s.tracks.split_mono = mono;
+        }),
+    );
+    let f = folder(&r, 0);
+    let frames = manifest(&f).frames;
+    let p = f.join("E01_S01_v001_Dialogue_PAUL.wav");
+    let channels = hound::WavReader::open(&p).unwrap().spec().channels;
+    let (_, samples) = read(&p);
+    (frames, channels, samples)
+}
+
+#[test]
+fn a_split_without_pan_is_one_centred_channel_per_character() {
+    let (frames, channels, panned) = split_paul(false);
+    assert_eq!(channels, 2);
+    let right: Vec<f32> = panned.iter().skip(1).step_by(2).copied().collect();
+    let left: Vec<f32> = panned.iter().step_by(2).copied().collect();
+    assert!(peak(&left) > 0.01);
+    assert!(peak(&right) < 1e-4, "hard left: {}", peak(&right));
+
+    let (mono_frames, channels, mono) = split_paul(true);
+    assert_eq!(channels, 1);
+    assert_eq!(mono_frames, frames);
+    assert_eq!(mono.len() as u64, frames, "one sample a frame");
+    assert!(peak(&mono) > 0.01);
+    // centred, the voice is as loud as on the side it was panned to (constant power, unity
+    // in the centre), give or take what panning took from the direct sound
+    let ratio = peak(&mono) / peak(&left);
+    assert!((0.5..=1.05).contains(&ratio), "{ratio}");
+}
+
 #[test]
 fn individual_clips_have_handles_and_the_fcpxml_points_at_them() {
     let dir = tempfile::tempdir().unwrap();

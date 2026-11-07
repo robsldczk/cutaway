@@ -13,6 +13,8 @@ export interface ExportTracks {
   music: boolean;
   mix: boolean;
   split_dialogue: boolean;
+  /** The per-character files without pan: centred, one channel (D160). */
+  split_mono: boolean;
 }
 
 export interface ExportSettings {

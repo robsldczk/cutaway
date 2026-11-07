@@ -399,6 +399,9 @@ pub struct DeliverSettings {
     /// One full-length file per character instead of one dialogue file.
     #[arg(long)]
     split_dialogue: bool,
+    /// With --split-dialogue: each character's file without pan, in the centre and mono.
+    #[arg(long, requires = "split_dialogue")]
+    split_mono: bool,
     /// wav, flac, or mp3 (mix and one-file only).
     #[arg(long, default_value = "wav")]
     format: String,
@@ -461,6 +464,7 @@ impl DeliverSettings {
                 "effects": on("effects"), "room_effects": on("room-effects"),
                 "ambience": on("ambience"), "music": on("music"), "mix": on("mix"),
                 "split_dialogue": self.split_dialogue,
+                "split_mono": self.split_mono,
             },
             "codec": self.format,
             "sample_rate": self.rate,

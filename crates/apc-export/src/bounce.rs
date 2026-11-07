@@ -60,6 +60,18 @@ pub fn schedule_of(doc: &Document, scene: &Scene) -> PlaySchedule {
     PlaySchedule::from_scene(doc, scene, &cfg.pacing(), &settings)
 }
 
+/// The scene as `schedule_of` has it, with every voice in the centre: what the per-character
+/// files exported without pan are rendered from (D160).
+pub fn schedule_centred(doc: &Document, scene: &Scene) -> PlaySchedule {
+    let cfg = ProjectConfig::from_doc(doc);
+    let settings = MixSettings {
+        room_tone: cfg.pacing.room_tone,
+        centre_voices: true,
+        ..MixSettings::default()
+    };
+    PlaySchedule::from_scene(doc, scene, &cfg.pacing(), &settings)
+}
+
 /// Encodes a WAV as MP3 or FLAC next to it and removes the WAV.
 pub fn encode(wav: &Path, out: &Path, codec: AudioCodec) -> Result<()> {
     let args: &[&str] = match codec {

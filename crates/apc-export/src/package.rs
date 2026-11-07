@@ -19,7 +19,7 @@ use apc_core::config::{
 use apc_core::project::EpisodePaths;
 use apc_core::{Document, Scene};
 
-use crate::bounce::{encode, ffmpeg_available, schedule_of, source_set};
+use crate::bounce::{encode, ffmpeg_available, schedule_centred, schedule_of, source_set};
 use crate::error::{ExportError, Result};
 use crate::fcpxml::{self, media_info, MediaInfo, Options, ROOM_EFFECTS_LANE, ROOM_VOICES_LANE};
 use crate::timeline::{EpisodeTimeline, ExportScope, TimelineClip};
@@ -67,6 +67,26 @@ struct TrackFile {
     /// `Dialogue`, `Dialogue_PAUL`, `RoomVoices` …
     suffix: String,
     track: Track,
+    /// One channel, every voice in the centre: a character's file exported without pan.
+    mono: bool,
+}
+
+impl TrackFile {
+    fn channels(&self) -> u16 {
+        if self.mono {
+            1
+        } else {
+            2
+        }
+    }
+}
+
+/// The middle of a stereo render. With nothing panned both sides are the same.
+fn to_mono(stereo: &[f32]) -> Vec<f32> {
+    stereo
+        .chunks_exact(2)
+        .map(|f| 0.5 * (f[0] + f[1]))
+        .collect()
 }
 
 fn is_voice(lane: &str) -> bool {
@@ -75,7 +95,7 @@ fn is_voice(lane: &str) -> bool {
 
 /// One file per character, or one for the dialogue when nobody speaks: the
 /// stack stays complete either way.
-fn voice_files(sched: &PlaySchedule) -> Vec<TrackFile> {
+fn voice_files(sched: &PlaySchedule, mono: bool) -> Vec<TrackFile> {
     let mut voices: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for c in sched.clips.iter().filter(|c| is_voice(&c.lane)) {
         voices
@@ -87,6 +107,7 @@ fn voice_files(sched: &PlaySchedule) -> Vec<TrackFile> {
         return vec![TrackFile {
             suffix: "Dialogue".into(),
             track: Track::Group(StemGroup::Dialogue),
+            mono,
         }];
     }
     voices
@@ -94,6 +115,7 @@ fn voice_files(sched: &PlaySchedule) -> Vec<TrackFile> {
         .map(|(name, lanes)| TrackFile {
             suffix: format!("Dialogue_{name}"),
             track: Track::Voice(lanes.into_iter().collect()),
+            mono,
         })
         .collect()
 }
@@ -105,6 +127,7 @@ fn track_files(s: &ExportSettings, sched: &PlaySchedule) -> Vec<TrackFile> {
         on.then(|| TrackFile {
             suffix: suffix.into(),
             track,
+            mono: false,
         })
     };
     let mix = file(t.mix, "Mix", Track::Mix);
@@ -116,6 +139,7 @@ fn track_files(s: &ExportSettings, sched: &PlaySchedule) -> Vec<TrackFile> {
         ExportMode::Mix => vec![TrackFile {
             suffix: "Mix".into(),
             track: Track::Mix,
+            mono: false,
         }],
         // the clips are the dry tracks; what they can't be still renders whole
         ExportMode::Clips => [room_voices, room_effects, mix]
@@ -124,7 +148,7 @@ fn track_files(s: &ExportSettings, sched: &PlaySchedule) -> Vec<TrackFile> {
             .collect(),
         ExportMode::Stems => {
             let mut out = if t.split_dialogue {
-                voice_files(sched)
+                voice_files(sched, t.split_mono)
             } else {
                 file(t.dialogue, "Dialogue", Track::Group(StemGroup::Dialogue))
                     .into_iter()
@@ -454,7 +478,10 @@ fn scene_fcpxml(
         };
         let id = format!("bed:{}", r.name);
         out.clips.push(bed(scene, &lane, &label, &id, len_s));
-        media.insert(id, info(r.path.clone(), &r.name, len_s, 2, rate));
+        media.insert(
+            id,
+            info(r.path.clone(), &r.name, len_s, r.file.channels(), rate),
+        );
     }
     out.duration_s = out.duration_s.max(len_s);
     let options = Options {
@@ -583,14 +610,20 @@ pub fn write_scene(
         let (mut mix_gain_db, mut mix_lufs) = (None, None);
         let steps = (tracks.len() + clips.len()).max(1) as f64;
         let set = source_set(t.doc, t.paths, rate);
+        let mut centred = None;
         for (i, f) in tracks.iter().enumerate() {
             progress(i as f64 / steps, &f.suffix);
-            let mut buf = render(&f.track, &sched, &set, frames)?;
+            let mut buf = if f.mono {
+                let c = centred.get_or_insert_with(|| schedule_centred(t.doc, scene));
+                to_mono(&render(&f.track, c, &set, frames)?)
+            } else {
+                render(&f.track, &sched, &set, frames)?
+            };
             if f.track == Track::Mix {
                 (mix_gain_db, mix_lufs) = finish_mix(&mut buf, &s, &mut warnings)?;
             }
             let name = format!("{stem}_{}", f.suffix);
-            let path = write_audio(dir, &name, &buf, rate, 2, &s)?;
+            let path = write_audio(dir, &name, &buf, rate, f.channels(), &s)?;
             files.push(listed(&path, &f.suffix, Some((frames as u64, rate)))?);
             rendered.push(Rendered {
                 file: f.clone(),
@@ -926,7 +959,7 @@ fn plan_scene(t: &Target, scene: &Scene, history: &History) -> Result<ScenePlan>
     let mut bytes = 0.0;
     for f in track_files(s, &sched) {
         files.push(format!("{stem}_{}.{ext}", f.suffix));
-        bytes += bytes_per_s(s, 2) * length_s;
+        bytes += bytes_per_s(s, u64::from(f.channels())) * length_s;
     }
     for f in clip_files(doc, paths, &tl, s, &stem) {
         files.push(format!("{}.{ext}", f.name));

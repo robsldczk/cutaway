@@ -36,7 +36,7 @@ const planned = (number: number, v: number, unchanged_since: number | null = nul
 
 const plan = (scenes: ScenePlan[], episode_version: number | null = null): ExportPlan => ({ scenes, one_file: null, empty: [], episode_version, files: 18, bytes: 780e6 });
 
-const settings = (s: Partial<ExportSettings>): ExportSettings => ({ mode: 'stems', tracks: { dialogue: true, room_voices: true, effects: true, room_effects: true, ambience: true, music: true, mix: true, split_dialogue: false }, codec: 'wav', sample_rate: 48000, bit_depth: 24, loudness: -16, fcpxml: true, fcpxml_source: 'original', subtitles: true, cut_list: null, lock_after: true, save_to: 'episode', ...s });
+const settings = (s: Partial<ExportSettings>): ExportSettings => ({ mode: 'stems', tracks: { dialogue: true, room_voices: true, effects: true, room_effects: true, ambience: true, music: true, mix: true, split_dialogue: false, split_mono: false }, codec: 'wav', sample_rate: 48000, bit_depth: 24, loudness: -16, fcpxml: true, fcpxml_source: 'original', subtitles: true, cut_list: null, lock_after: true, save_to: 'episode', ...s });
 
 describe('the boxes of the Range', () => {
   const five = [1, 2, 3, 4, 5].map((n) => scene(n, 60));
