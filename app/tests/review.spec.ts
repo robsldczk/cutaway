@@ -413,7 +413,8 @@ test('a note drags by its dot to what is said there, in one undo step', async ({
   await leave(page);
 });
 
-test('a note drags by its card, and Esc puts it back', async ({ page }) => {
+test('a note drags by its card, and Esc puts it back', async ({ page, browserName }) => {
+  test.fail(browserName === 'webkit', 'BUG: in WebKit, a note dragged by its card lands on another line. Not yet checked in the Tauri app: may be Playwright mouse input, not the app.');
   await open(page);
   const v = await rpc(page, 'scene_view', { scene: '1' });
   const lines = v.items.filter((i) => i.kind === 'line');

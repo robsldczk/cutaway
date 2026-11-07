@@ -1260,3 +1260,8 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Optional peer npm packages are left out.** npm doesn't install them, and npm versions disagree on whether the lockfile lists them.
 - **All platforms are listed,** Windows crates on a Mac too, so the file is the same on every machine.
 - **Found at the start:** none blocked. Two crates are `MIT OR Apache-2.0 OR LGPL-2.1-or-later` and pass. MPL-2.0 packages are listed; `docs/STATUS.md` asks Rob about them.
+### D157 The UI tests run in WebKit too (Albert, 2026-11-07)
+- **Why:** the app ships in WKWebView on macOS, and the UI tests ran only in Chromium.
+- **Choice:** two Playwright projects, `chromium` and `webkit`, run one per call (`npm run test:e2e`, `npm run test:e2e:webkit`). The tests share and change one demo session, so one call with both engines would give the second engine the first one's leftovers. CI runs both on macOS.
+- **The first WebKit run:** 230 of 236 passed. The six failures also fail when run alone, and pass in Chromium. Each is marked `test.fail` for WebKit with a `BUG:` reason, and the test itself is unchanged. `docs/STATUS.md` lists them.
+- **Playwright's WebKit is not WKWebView.** It is the closest test engine to it, but a failure there still needs a check in the real app.

@@ -33,5 +33,6 @@ jobs:
         if: matrix.os == 'macos-latest'
         working-directory: app
         run: |
-          npx playwright install chromium
+          npx playwright install chromium webkit
           npm run test:e2e
+          npm run test:e2e:webkit

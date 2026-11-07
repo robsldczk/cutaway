@@ -1678,7 +1678,8 @@ test('opened: the Auto fade button hands the fade back to the length', async ({ 
   expect((await full(a)).fade_out_s).toBeCloseTo(0.3, 3);
 });
 
-test('opened: every part answers to the keys, a burst is one step', async ({ page }) => {
+test('opened: every part answers to the keys, a burst is one step', async ({ page, browserName }) => {
+  test.fail(browserName === 'webkit', 'BUG: in WebKit, Tab from the opened sound skips its close button. macOS WebKit tabs to buttons only with keyboard navigation on in System Settings.');
   const a = await place(1, 0.2);
   await open(page);
   await ballOf(page, a).focus();

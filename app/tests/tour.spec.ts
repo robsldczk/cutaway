@@ -160,7 +160,8 @@ test('? brings the page’s chapter back, after the keys', async ({ page }) => {
   await skip(page);
 });
 
-test('Arrange: a drag on the grip, a pause and the sounds all go back', async ({ page }) => {
+test('Arrange: a drag on the grip, a pause and the sounds all go back', async ({ page, browserName }) => {
+  test.fail(browserName === 'webkit', 'BUG: in WebKit, the tour drag on the grip does not reorder the lines. Not yet checked in the Tauri app: may be Playwright mouse input, not the app.');
   await seen(page, ['options']);
   await open(page);
   const before = await cut(page);
