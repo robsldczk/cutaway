@@ -1253,3 +1253,10 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Already open:** Cutaway comes to the front with no build. A build would replace the app under a running session.
 - **Own target folder, `target/dock/`:** on a case-insensitive disk `target/release/Cutaway` and the CLI's `target/release/cutaway` are one file, and the README's MCP setup runs the second. The price is a second copy of the release build. `clean-target.sh` removes it last.
 - **Unchanged:** it shares the bundle ID and data of any other Cutaway build on the machine.
+### D156 A generated license list (Albert, 2026-11-07)
+- **Why:** nothing listed the third-party licenses, and `CLAUDE.md` asks for a DECISIONS entry before any GPL or LGPL dependency. Nothing checked that.
+- **Choice:** `scripts/licenses.mjs` writes `THIRD_PARTY_LICENSES.md` from `Cargo.lock` (through `cargo metadata`) and `app/package-lock.json`. It needs no new dependency. `check.sh` runs it with `--check`.
+- **The check fails when:** the file is stale, a package has no license, or a license is GPL, AGPL or LGPL with no permissive alternative. A deliberate copyleft dependency goes into `ALLOWED_COPYLEFT` in the script, with its own DECISIONS entry.
+- **Optional peer npm packages are left out.** npm doesn't install them, and npm versions disagree on whether the lockfile lists them.
+- **All platforms are listed,** Windows crates on a Mac too, so the file is the same on every machine.
+- **Found at the start:** none blocked. Two crates are `MIT OR Apache-2.0 OR LGPL-2.1-or-later` and pass. MPL-2.0 packages are listed; `docs/STATUS.md` asks Rob about them.

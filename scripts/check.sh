@@ -23,6 +23,9 @@ rustc --version
 step "brand"
 node scripts/rebrand.mjs --check
 
+step "licenses"
+node scripts/licenses.mjs --check
+
 step "ui: install"
 if [ ! -d app/node_modules ]; then (cd app && npm ci); fi
 
