@@ -3,9 +3,16 @@
 //! because it isn't in the document, and it can't disagree with what's on disk (D112).
 //!
 //! ```text
-//! Exports/Sc02_Canteen/v003_2026-11-05/  E02_S02_v003_Dialogue.wav … manifest.json
-//! Exports/Episode/v002_2026-11-05/       E02_v002.fcpxml … manifest.json
+//! Exports/Sc02_Canteen/versions/v003_2026-11-05/  E02_S02_v003_Dialogue.wav … manifest.json
+//! Exports/Sc02_Canteen/current/                   E02_S02_Dialogue.wav … manifest.json
+//! Exports/Episode/versions/v002_2026-11-05/       E02_v002.fcpxml … manifest.json
+//! Exports/Episode/current/                        E02.fcpxml … manifest.json
 //! ```
+//!
+//! `current/` is a copy of the newest version with the version taken out of its names, so
+//! another app can point at it once and always get the newest (D165, `crate::current`). It isn't
+//! part of the history. Versions written before D165 sit straight in the scene's folder; they
+//! still count, and `crate::current::reorganize` moves them into `versions/`.
 //!
 //! That's the episode's own `Exports` folder. A pipeline folder holds every episode, so there
 //! the same tree sits under `Exports/Ep02/` (D117). The names stay machine readable, with no
@@ -27,6 +34,10 @@ pub const MANIFEST: &str = "manifest.json";
 pub const MANIFEST_SCHEMA: u32 = 1;
 /// The folder of whole-episode versions, beside the scenes'.
 pub const EPISODE_FOLDER: &str = "Episode";
+/// Inside a scene's (or the episode's) folder: every version.
+pub const VERSIONS_FOLDER: &str = "versions";
+/// Inside a scene's (or the episode's) folder: a copy of the newest version (D165).
+pub const CURRENT_FOLDER: &str = "current";
 
 /// An episode as exports name it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -88,6 +99,30 @@ pub fn scene_folder(scene: &Scene) -> String {
 /// `v003_2026-11-05`
 pub fn version_folder(version: u32, date: &str) -> String {
     format!("v{version:03}_{date}")
+}
+
+/// Where a version of a scene or of the episode goes: `<group>/versions/v003_2026-11-05`.
+pub fn version_path(group: &Path, version: u32, date: &str) -> PathBuf {
+    group
+        .join(VERSIONS_FOLDER)
+        .join(version_folder(version, date))
+}
+
+/// The version folders of a scene's (or the episode's) folder: in `versions/`, and those written
+/// before D165 straight in it. `current/` isn't one.
+pub fn version_dirs(group: &Path) -> Vec<PathBuf> {
+    let mut out = subfolders(&group.join(VERSIONS_FOLDER));
+    out.extend(subfolders(group).into_iter().filter(|p| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n != VERSIONS_FOLDER && n != CURRENT_FOLDER)
+    }));
+    out
+}
+
+/// The scene folders and the episode folder under an export base.
+pub fn groups(base: &Path) -> Vec<PathBuf> {
+    subfolders(base)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -164,7 +199,7 @@ pub struct ExportRecord {
 pub fn scan(base: &Path) -> Vec<ExportRecord> {
     let mut out = Vec::new();
     for scene_dir in subfolders(base) {
-        for folder in subfolders(&scene_dir) {
+        for folder in version_dirs(&scene_dir) {
             let Ok(bytes) = std::fs::read(folder.join(MANIFEST)) else {
                 continue;
             };
@@ -177,7 +212,7 @@ pub fn scan(base: &Path) -> Vec<ExportRecord> {
     out
 }
 
-fn subfolders(dir: &Path) -> Vec<PathBuf> {
+pub(crate) fn subfolders(dir: &Path) -> Vec<PathBuf> {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return Vec::new();
     };

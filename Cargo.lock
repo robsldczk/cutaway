@@ -214,6 +214,7 @@ dependencies = [
  "anyhow",
  "apc-app",
  "apc-core",
+ "apc-export",
  "apc-mcp",
  "clap",
  "rpassword",

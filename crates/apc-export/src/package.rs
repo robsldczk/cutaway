@@ -24,8 +24,9 @@ use crate::error::{ExportError, Result};
 use crate::fcpxml::{self, media_info, MediaInfo, Options, ROOM_EFFECTS_LANE, ROOM_VOICES_LANE};
 use crate::timeline::{EpisodeTimeline, ExportScope, TimelineClip};
 use crate::versions::{
-    checksum, scene_folder, token, version_folder, EpisodeTag, ExportRecord, History, Manifest,
-    ManifestFile, ManifestScene, EPISODE_FOLDER, MANIFEST, MANIFEST_SCHEMA,
+    checksum, scene_folder, token, version_folder, version_path, EpisodeTag, ExportRecord, History,
+    Manifest, ManifestFile, ManifestScene, EPISODE_FOLDER, MANIFEST, MANIFEST_SCHEMA,
+    VERSIONS_FOLDER,
 };
 use crate::{cutlist, srt};
 
@@ -590,10 +591,7 @@ pub fn write_scene(
 ) -> Result<ExportRecord> {
     preflight(&t.settings)?;
     let s = t.settings;
-    let folder = t
-        .base
-        .join(scene_folder(scene))
-        .join(version_folder(version, &t.date()));
+    let folder = version_path(&t.base.join(scene_folder(scene)), version, &t.date());
     let stem = t.ep.stem(scene.number, version);
     let sched = schedule_of(t.doc, scene);
     let tl = scene_timeline(t.doc, scene);
@@ -680,7 +678,9 @@ pub fn write_scene(
         std::fs::write(dir.join(MANIFEST), serde_json::to_vec_pretty(&manifest)?)?;
         Ok(manifest)
     })?;
-    Ok(ExportRecord { manifest, folder })
+    let record = ExportRecord { manifest, folder };
+    crate::current::publish(&record)?;
+    Ok(record)
 }
 
 fn cut_list(
@@ -748,10 +748,7 @@ fn episode_files(
 /// The whole-episode version: which scene versions it holds, and the episode's timeline files.
 pub fn write_episode(t: &Target, version: u32, scenes: &[ManifestScene]) -> Result<ExportRecord> {
     let s = t.settings;
-    let folder = t
-        .base
-        .join(EPISODE_FOLDER)
-        .join(version_folder(version, &t.date()));
+    let folder = version_path(&t.base.join(EPISODE_FOLDER), version, &t.date());
     let stem = t.ep.episode_stem(version);
     let tl = EpisodeTimeline::build(t.doc, &ExportScope::All);
     let manifest = into_folder(&folder, |dir| {
@@ -778,7 +775,9 @@ pub fn write_episode(t: &Target, version: u32, scenes: &[ManifestScene]) -> Resu
         std::fs::write(dir.join(MANIFEST), serde_json::to_vec_pretty(&manifest)?)?;
         Ok(manifest)
     })?;
-    Ok(ExportRecord { manifest, folder })
+    let record = ExportRecord { manifest, folder };
+    crate::current::publish(&record)?;
+    Ok(record)
 }
 
 /// The timeline of a one-file export: the scenes that have anything in them, in script order.
@@ -827,10 +826,7 @@ pub fn write_one_file(
     preflight(&t.settings)?;
     let s = t.settings;
     let rate = s.sample_rate;
-    let folder = t
-        .base
-        .join(EPISODE_FOLDER)
-        .join(version_folder(version, &t.date()));
+    let folder = version_path(&t.base.join(EPISODE_FOLDER), version, &t.date());
     let stem = t.ep.episode_stem(version);
     let tl = joined_timeline(t.doc, scenes);
     let frames = joined_frames(t.doc, &tl, scenes, rate);
@@ -886,7 +882,9 @@ pub fn write_one_file(
         std::fs::write(dir.join(MANIFEST), serde_json::to_vec_pretty(&manifest)?)?;
         Ok(manifest)
     })?;
-    Ok(ExportRecord { manifest, folder })
+    let record = ExportRecord { manifest, folder };
+    crate::current::publish(&record)?;
+    Ok(record)
 }
 
 /// What an export of one scene will do.
@@ -898,7 +896,7 @@ pub struct ScenePlan {
     pub version: u32,
     /// `Sc02 v003`
     pub label: String,
-    /// `Sc02_Canteen/v003_2026-11-05`
+    /// `Sc02_Canteen/versions/v003_2026-11-05`
     pub folder: String,
     pub files: Vec<String>,
     pub bytes: u64,
@@ -914,7 +912,7 @@ pub struct OneFilePlan {
     pub version: u32,
     /// `E02 v004`
     pub label: String,
-    /// `Episode/v004_2026-11-05`
+    /// `Episode/versions/v004_2026-11-05`
     pub folder: String,
     pub files: Vec<String>,
     pub bytes: u64,
@@ -983,7 +981,11 @@ fn plan_scene(t: &Target, scene: &Scene, history: &History) -> Result<ScenePlan>
         place: scene.place.clone(),
         version,
         label: format!("Sc{:02} v{version:03}", scene.number),
-        folder: format!("{}/{}", scene_folder(scene), version_folder(version, &date)),
+        folder: format!(
+            "{}/{VERSIONS_FOLDER}/{}",
+            scene_folder(scene),
+            version_folder(version, &date)
+        ),
         files,
         bytes: bytes as u64,
         length_s,
@@ -1028,7 +1030,10 @@ fn plan_one_file(t: &Target, scenes: &[&Scene], history: &History) -> Result<Pla
     p.one_file = Some(OneFilePlan {
         version,
         label: t.ep.episode_label(version),
-        folder: format!("{EPISODE_FOLDER}/{}", version_folder(version, &t.date())),
+        folder: format!(
+            "{EPISODE_FOLDER}/{VERSIONS_FOLDER}/{}",
+            version_folder(version, &t.date())
+        ),
         files,
         bytes,
         length_s,

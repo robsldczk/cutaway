@@ -280,11 +280,11 @@ function list(items: string[]): string {
 
 /** `Saved as Sc02 v003 and Sc03 v001.`, shortened for a long range. */
 export function savedCaption(plan: ExportPlan): string {
-  if (plan.one_file) return `Saved as ${plan.one_file.label}. Versions count up on their own, nothing is overwritten.`;
+  if (plan.one_file) return `Saved as ${plan.one_file.label}. Each version is kept in versions/, and current/ always holds the newest.`;
   const labels = plan.scenes.map((s) => s.label);
   const named = labels.length > 4 ? `${labels.length} scenes, each its next version` : list(labels);
   const episode = plan.episode_version ? ` The episode becomes ${version(plan.episode_version)}.` : '';
-  return `Saved as ${named}.${episode} Versions count up on their own, nothing is overwritten.`;
+  return `Saved as ${named}.${episode} Each version is kept in versions/, and current/ always holds the newest.`;
 }
 
 /** What's the same as its last version: exporting it again delivers nothing new. */

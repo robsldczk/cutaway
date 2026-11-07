@@ -1083,6 +1083,7 @@ registry! {
     "save_export_preset", PresetP, Write, true, "Save export settings under a name; the same name replaces them.";
     "delete_export_preset", PresetNameP, Write, true, "Remove a saved export preset.";
     "reveal_export", RevealP, Read, false, "Open a version folder of the export history in the Finder.";
+    "reorganize_exports", NoParams, Write, true, "Bring the episode's export folders (its own Exports and its pipeline folder) to the versions/ and current/ layout: versions written straight into a scene's folder move into its versions/, their FCPXML paths and manifest checksums with them, and each current/ becomes a copy of the newest version under names without the version. Exports do this first anyway. Run again, it changes nothing.";
     "pipeline_folder", NoParams, Read, true, "The show's confirmed folder for deliverables, and a proposal when it has none. The proposal is never written to.";
     "set_pipeline_folder", PipelineFolderP, Destructive, true, "Store the show's folder for deliverables in the show file. Show exports go nowhere else, so the editor decides it: ask them, and never confirm a proposal on your own.";
     "show_export_status", NoParams, Read, true, "The show's episodes and their scenes with length, lock and export history, for a show export.";
@@ -1783,6 +1784,7 @@ impl Service {
                 Ok(json!({ "path": file.to_string_lossy(), "duration_s": len }))
             }
             "export_status" => crate::exports::status(self),
+            "reorganize_exports" => crate::exports::reorganize(self),
             "export_plan" => crate::exports::plan(self, &parse(params)?),
             "export_scenes" => crate::exports::run(self, &parse(params)?, &|_, _| {}),
             "start_export" => {
