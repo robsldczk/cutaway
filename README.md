@@ -22,7 +22,8 @@ The first build needs a network connection: it downloads the Rust crates and the
 
 ```sh
 git clone https://github.com/robsldczk/cutaway.git
-cd cutaway/app
+cd cutaway
+cd app          # the npm commands only work in app/. The repo root has no package.json
 npm install
 npm run tauri dev
 ```
@@ -31,9 +32,10 @@ The first build compiles the whole Rust workspace, which takes about 2 minutes o
 
 The app opens on the welcome screen. To try it without any recordings, click **Demo session** and choose a folder: it builds a synthetic episode, analyzes it and opens it. Once the welcome screen lists projects, the same option is at **Show → Demo Session…**.
 
-You can also make the demo from the command line and open it directly, from the repo root:
+You can also make the demo from the command line and open it directly. Run the first command from the repo root:
 
 ```sh
+cd ..           # back to the repo root, if you are still in app/
 cargo run -p apc-cli -- demo /tmp/cutaway-demo --analyze
 cd app && CUTAWAY_PROJECT=/tmp/cutaway-demo/Demo/Demo.cutaway npm run tauri dev
 ```
@@ -61,7 +63,7 @@ scripts/check.sh    # fmt, clippy, tests, UI lint and typecheck (on Windows, run
 
 ### Use it from the command line
 
-Build the `cutaway` CLI and put it on your `PATH`:
+Build the `cutaway` CLI and put it on your `PATH`. Run this from the repo root:
 
 ```sh
 cargo build --release -p apc-cli
@@ -88,6 +90,16 @@ To build without speech recognition, and so without the ONNX Runtime download: `
 
 - **`cutaway` opens the desktop app instead of the CLI (macOS):** `tauri build` writes `Cutaway` into the same `target/` folder as the CLI's `cutaway`, and the default macOS disk ignores case. Run `rm target/debug/cutaway && cargo build -p apc-cli`, using `target/release` and `--release` if you built a release. `npm run tauri dev` doesn't cause this.
 - **The first build hangs or fails while fetching `sherpa-onnx`:** that's the ONNX Runtime download. Check your network and build again.
+
+### Start it from the Dock (macOS)
+
+One script makes a Dock app that builds the latest Cutaway each time you open it:
+
+```sh
+scripts/dock-app.sh      # installs ~/Applications/App It/Cutaway Latest.app
+```
+
+Drag it to the Dock. Each open pulls `dev` (only if your checkout is clean and on `dev`), builds the app and starts it. The first open takes several minutes. Later opens are incremental. The build log is `~/Library/Logs/app-it/cutaway/build.log`. Run the script again if you move the repo.
 
 ## Using Cutaway from Claude (MCP)
 
