@@ -4,7 +4,7 @@
 use std::sync::Mutex;
 
 use serde_json::Value;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use apc_app::error::ErrorBody;
@@ -40,11 +40,49 @@ fn initial_session() -> Session {
     }
 }
 
+/// Version, commit and copyright, for About (D162).
+fn about(h: &AppHandle) -> AboutMetadata<'static> {
+    let info = h.package_info();
+    AboutMetadata {
+        name: Some(info.name.clone()),
+        version: Some(format!("{} ({})", info.version, env!("CUTAWAY_COMMIT"))),
+        short_version: Some(info.version.to_string()),
+        copyright: Some(apc_core::brand::COPYRIGHT.into()),
+        authors: Some(vec![apc_core::brand::OWNER.into()]),
+        ..Default::default()
+    }
+}
+
 /// The app menu plus a Show menu (studio mode); its items go to the UI as `menu` events.
+/// Settings… (⌘,) is in the app menu on macOS, at the end of the Show menu elsewhere.
 fn app_menu(h: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let menu = Menu::default(h)?;
     let item =
         |id: &str, label: &str, key: Option<&str>| MenuItem::with_id(h, id, label, true, key);
+    #[cfg(target_os = "macos")]
+    {
+        let name = h.package_info().name.clone();
+        let app = Submenu::with_items(
+            h,
+            &name,
+            true,
+            &[
+                &PredefinedMenuItem::about(h, None, Some(about(h)))?,
+                &PredefinedMenuItem::separator(h)?,
+                &item("settings", "Settings…", Some("CmdOrCtrl+,"))?,
+                &PredefinedMenuItem::separator(h)?,
+                &PredefinedMenuItem::services(h, None)?,
+                &PredefinedMenuItem::separator(h)?,
+                &PredefinedMenuItem::hide(h, None)?,
+                &PredefinedMenuItem::hide_others(h, None)?,
+                &PredefinedMenuItem::show_all(h, None)?,
+                &PredefinedMenuItem::separator(h)?,
+                &PredefinedMenuItem::quit(h, None)?,
+            ],
+        )?;
+        menu.remove_at(0)?;
+        menu.insert(&app, 0)?;
+    }
     let show = Submenu::with_items(
         h,
         "Show",
@@ -61,11 +99,18 @@ fn app_menu(h: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &item("close", "Close", None)?,
         ],
     )?;
+    #[cfg(not(target_os = "macos"))]
+    {
+        show.append(&PredefinedMenuItem::separator(h)?)?;
+        show.append(&item("settings", "Settings…", Some("CmdOrCtrl+,"))?)?;
+        show.append(&PredefinedMenuItem::about(h, None, Some(about(h)))?)?;
+    }
     menu.insert(&show, 1)?;
     Ok(menu)
 }
 
 pub fn run() {
+    apc_app::limits::raise_open_files();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {

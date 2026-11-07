@@ -22,6 +22,8 @@ fn main() {
         ("REVIEW_EXT", "reviewExt"),
         ("BUNDLE_ID", "bundleId"),
         ("TAGLINE", "tagline"),
+        ("OWNER", "owner"),
+        ("COPYRIGHT", "copyright"),
     ];
     let mut out = String::from("// Generated from brand.json by build.rs. Do not edit.\n");
     for (name, key) in consts {

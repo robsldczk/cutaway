@@ -20,7 +20,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: app/package-lock.json
       - name: Install UI dependencies
@@ -33,5 +33,6 @@ jobs:
         if: matrix.os == 'macos-latest'
         working-directory: app
         run: |
-          npx playwright install chromium
+          npx playwright install chromium webkit
           npm run test:e2e
+          npm run test:e2e:webkit

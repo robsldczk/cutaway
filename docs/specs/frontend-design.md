@@ -237,6 +237,8 @@ A glass sheet with:
 - **AI:** provider and model (privacy note: only text leaves the machine).
 - **Cue-reading template (V2):** use the director's cue-reading rhythm as the timing template.
 
+*Changed in implementation (D161–D163):* the sheet has tabs, General, Pacing, Connections, Imprint and Licenses, at a fixed size, with the version and commit beside the tabs (a click copies it). Switches are On / Off pairs. ⌘, opens it from anywhere, the welcome screen included.
+
 ## Room tone
 
 - **Per location:** set once in the scene list or settings.

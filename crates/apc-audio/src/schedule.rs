@@ -80,6 +80,9 @@ pub struct MixSettings {
     pub target_lufs: f64,
     pub room_tone: bool,
     pub include_sound: bool,
+    /// Every voice in the centre: no scene or lane pan, and nothing taken from the direct sound
+    /// for being panned. For the per-character files exported without pan (D160).
+    pub centre_voices: bool,
 }
 
 impl Default for MixSettings {
@@ -89,6 +92,7 @@ impl Default for MixSettings {
             target_lufs: -23.0,
             room_tone: true,
             include_sound: true,
+            centre_voices: false,
         }
     }
 }
@@ -162,9 +166,14 @@ fn voice_space(
     character: Option<&str>,
     pan: f64,
     pacing: &Pacing,
+    centre: bool,
 ) -> Option<ClipSpace> {
     let id = character?;
-    let lane = doc.lane_mix.get(id).map_or(0.0, |m| m.pan);
+    let lane = if centre {
+        0.0
+    } else {
+        doc.lane_mix.get(id).map_or(0.0, |m| m.pan)
+    };
     let m = crate::depth::voice_mix(
         doc.characters.get(id)?.wet,
         (pan + lane).clamp(-1.0, 1.0),
@@ -252,7 +261,12 @@ impl PlaySchedule {
         let shape = RoomShape::new(scene.room.size, scene.room.damping, scene.room.wet);
         let mut clips = Vec::new();
         for item in &layout.items {
-            let voice = item.character.as_deref().map_or(0.0, |c| scene.pan_of(c));
+            let centre = settings.centre_voices;
+            let voice = item
+                .character
+                .as_deref()
+                .filter(|_| !centre)
+                .map_or(0.0, |c| scene.pan_of(c));
             let depth = doc.boxes.get(&item.item_id).map_or(0.0, |b| b.depth);
             // muted parts keep their time but are not heard; handles are
             for p in item.audio.iter().filter(|p| !p.muted) {
@@ -269,7 +283,7 @@ impl PlaySchedule {
                     pan: voice,
                     linear_fade: false,
                     owner: item.item_id.clone(),
-                    space: voice_space(doc, item.character.as_deref(), voice, pacing),
+                    space: voice_space(doc, item.character.as_deref(), voice, pacing, centre),
                 };
                 push_voice(&mut clips, clip, depth, shape.predelay_s);
             }
@@ -287,12 +301,17 @@ impl PlaySchedule {
             {
                 let start = placement_start(layout, p);
                 // an actor's breath stands where the actor does
-                let pan = (p.pan
-                    + p.character
-                        .as_deref()
-                        .filter(|_| p.lane == Lane::Dialogue)
-                        .map_or(0.0, |c| scene.pan_of(c)))
-                .clamp(-1.0, 1.0);
+                let centred = settings.centre_voices && p.lane == Lane::Dialogue;
+                let pan = if centred {
+                    0.0
+                } else {
+                    (p.pan
+                        + p.character
+                            .as_deref()
+                            .filter(|_| p.lane == Lane::Dialogue)
+                            .map_or(0.0, |c| scene.pan_of(c)))
+                    .clamp(-1.0, 1.0)
+                };
                 let space = if p.in_room() {
                     let m = depth_mix(p.depth);
                     Some(ClipSpace {
@@ -304,7 +323,7 @@ impl PlaySchedule {
                     })
                 } else if p.lane == Lane::Dialogue {
                     // an actor's breath sits in the room with their lines
-                    voice_space(doc, p.character.as_deref(), pan, pacing)
+                    voice_space(doc, p.character.as_deref(), pan, pacing, centred)
                 } else {
                     None
                 };
@@ -371,6 +390,14 @@ impl PlaySchedule {
             }
         }
         apply_lane_mix(doc, &mut clips);
+        if settings.centre_voices {
+            for c in clips
+                .iter_mut()
+                .filter(|c| StemGroup::of_lane(&c.lane) == StemGroup::Dialogue)
+            {
+                c.pan = 0.0;
+            }
+        }
         clips.sort_by(|a, b| a.start_s.total_cmp(&b.start_s));
         // after the lane mix: a muted lane sends nothing and leaves no tail
         let last_send = clips

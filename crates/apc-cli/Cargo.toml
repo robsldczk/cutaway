@@ -14,6 +14,7 @@ parakeet = ["apc-app/parakeet"]
 [dependencies]
 apc-core.workspace = true
 apc-app.workspace = true
+apc-export.workspace = true
 apc-mcp.workspace = true
 anyhow.workspace = true
 serde_json.workspace = true

@@ -1,6 +1,7 @@
 use clap::Parser;
 
 fn main() {
+    apc_app::limits::raise_open_files();
     let cli = apc_cli::Cli::parse();
     let report = matches!(cli.cmd, apc_cli::Cmd::Report);
     match apc_cli::run(cli) {

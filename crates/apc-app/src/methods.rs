@@ -1083,6 +1083,7 @@ registry! {
     "save_export_preset", PresetP, Write, true, "Save export settings under a name; the same name replaces them.";
     "delete_export_preset", PresetNameP, Write, true, "Remove a saved export preset.";
     "reveal_export", RevealP, Read, false, "Open a version folder of the export history in the Finder.";
+    "reorganize_exports", NoParams, Write, true, "Bring the episode's export folders (its own Exports and its pipeline folder) to the versions/ and current/ layout: versions written straight into a scene's folder move into its versions/, their FCPXML paths and manifest checksums with them, and each current/ becomes a copy of the newest version under names without the version. Exports do this first anyway. Run again, it changes nothing.";
     "pipeline_folder", NoParams, Read, true, "The show's confirmed folder for deliverables, and a proposal when it has none. The proposal is never written to.";
     "set_pipeline_folder", PipelineFolderP, Destructive, true, "Store the show's folder for deliverables in the show file. Show exports go nowhere else, so the editor decides it: ask them, and never confirm a proposal on your own.";
     "show_export_status", NoParams, Read, true, "The show's episodes and their scenes with length, lock and export history, for a show export.";
@@ -1160,7 +1161,7 @@ registry! {
     "add_note", review::AddNoteP, Write, true, "Write a note on the cut. Give at_s (and to_s for a range) to hang it on what's said there, or line_id (with word, to_word), or placement_id, or just the scene. It follows its element through reordering, take swaps and gap changes. Undoable.";
     "reply_note", review::NoteTextP, Write, true, "Reply to a note. Undoable.";
     "edit_note", review::NoteTextP, Write, true, "Change a note's text. Undoable.";
-    "tag_note", review::NoteTagP, Write, true, "Change a note's tag: performance, timing, sound or music. Undoable.";
+    "tag_note", review::NoteTagP, Write, true, "Change a note's tag: performance, timing, sound, music or script (wrong words, a missing line). Undoable.";
     "resolve_note", review::NoteP, Write, true, "Resolve a note. It records who and when, and shows as done in review at once. Undoable.";
     "reopen_note", review::NoteP, Write, true, "Reopen a resolved note. It records who and when, and shows as open on the editing pages. Undoable.";
     "move_note", review::MoveNoteP, Write, true, "Hang a note on another spot, given as for add_note. A detached note comes back into the cut this way. Its author's or the editor's to do. Undoable.";
@@ -1783,6 +1784,7 @@ impl Service {
                 Ok(json!({ "path": file.to_string_lossy(), "duration_s": len }))
             }
             "export_status" => crate::exports::status(self),
+            "reorganize_exports" => crate::exports::reorganize(self),
             "export_plan" => crate::exports::plan(self, &parse(params)?),
             "export_scenes" => crate::exports::run(self, &parse(params)?, &|_, _| {}),
             "start_export" => {

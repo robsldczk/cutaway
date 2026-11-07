@@ -520,3 +520,68 @@ All of it is on the CLI (`mark`, `beside`, `sfx glue`, `sfx voice-pan`) and MCP 
 **Built:** nothing reopens at launch; the welcome screen comes up with the most recent item selected, so ↩ gets you back. Every project keeps its page, scene, line, playhead and Edit zoom, with no limit on how many (it was 30). A spot follows a project through *Locate…*. A show opens on the episode last worked in.
 
 **Rob's check:** quit with an episode open on Arrange, launch, press ↩: same page, scene and playhead.
+
+## Albert's review report, split without pan, Settings, imprint and licenses (2026-11-07, D159–D164)
+
+**Built:**
+- **Review arrows:** ↑ ↓ walk the cards as they're laid out, one card lit, and the column no longer snaps back when the scene refreshes. Albert's skipped lines were the ones with no length of their own (taken out of the cut, or wholly overlapped), which the time map couldn't reach.
+- **Script tag:** for wrong words and missing lines.
+- **Package that wouldn't reopen:** not reproduced. The likely cause, running out of open files, is handled:
+  - the limit is raised at start;
+  - the mixer keeps at most 32 files open;
+  - the copy is tried three times;
+  - the last copy reopens if a new one can't be made.
+- **Split dialogue without pan:** *Keep pan · stereo* / *No pan · mono* under the tracks. No pan removes the scene, lane and breath pan and the pan-into-room loss; depth stays.
+- **Settings:** tabs (General, Pacing, Connections, Imprint, Licenses) in Jetplane's look, On / Off pairs, fixed size, ⌘, everywhere, ⚙ on the welcome screen.
+- **Version:** `0.1.0 · <commit>` beside the tabs; a click copies `Cutaway 0.1.0 (<commit>)`.
+- **Legal, matching Jetplane:**
+  - the imprint, from robertsladeczek.com;
+  - a Licenses tab with all 602 shipped entries and their texts, from a generator that refuses unknown licenses;
+  - `LICENSE.md` (proprietary);
+  - license fields in `Cargo.toml` and `package.json`;
+  - the bundle's copyright and publisher;
+  - About with version, commit and copyright;
+  - Settings… in the app menu.
+
+**Not built:** a privacy notice (neither app has one; asked in STATUS). The imprint is Rob's website text, not checked by a lawyer.
+
+**Verified:**
+- `check.sh` green.
+- New Rust tests: reopening a package three times, with and without the editor writing; the copy's failure and fallback; the open-file limit; the mono split (one channel, centred); the bundle's copyright.
+- New Playwright specs: the arrows over a dropped line (fails on the old code), Settings tabs and version copy, imprint, licenses; the old specs moved to the tabs, all passing in Chromium.
+
+**Not verified:** WebKit and the real webview (the menu, About, ⌘, from the native menu, the clipboard). Albert's Mac. A real export listened to.
+
+**Manual checks for Rob:**
+- In the app: ⌘, opens Settings; Cutaway › About shows the version, commit and © line; the version pill copies.
+- Read Settings › Imprint and Settings › Licenses, and the open questions in STATUS (proprietary, MPL-2.0, CDLA, privacy, § 18 MStV).
+- Export a scene with Split dialogue and *No pan · mono*: the `Dialogue_<NAME>` files are mono, centred, and line up in Resolve.
+- Ask Albert to try ↑ ↓ in review on the scene where lines were skipped, and whether a package still fails to reopen after Done.
+
+## Exports: `current/` and `versions/` (2026-11-07, D165)
+
+**Built:** each scene, and the whole episode, now has `versions/` with every dated version and `current/` with a copy of the newest, under names without the version (`current/E02_S02_Mix.wav`). The FCPXML in `current/` points at the files in `current/`. Each export refreshes `current/` in one swap. Older exports move over on the next export, through `reorganize_exports`, or with `cutaway exports --reorganize [--folder <Exports>]`.
+
+**Done on the share:** Episode 2's exports were reorganized, after a rehearsal on a clone: 28 versions in `versions/`, 17 `current/` folders. Every manifest and every link in the FCPXMLs was checked afterwards.
+
+**Found:** Sc03 v002's `Dialogue_SARA.wav` was already off its manifest before the move (STATUS).
+
+**Verified:**
+- `check.sh` green.
+- New Rust tests: `current/` after one and after two exports, the whole-episode `current/`, old-layout versions moved with their paths, a second reorganize doing nothing.
+- The export Playwright specs.
+
+**Manual checks for Rob:**
+- Point Resolve (or Jetplane) at a file in a scene's `current/`, export that scene again, and see the new version arrive under the same path.
+- Open a `versions/…/*.fcpxml` in Resolve: its room tracks should be found.
+- Let Syncthing settle, then check that Albert's copy of the share has the same layout.
+
+## `current/` per track (2026-11-07, D166)
+
+**Built:** `current/` now takes each track from the newest version that has it, while the scene's cut is unchanged. The dialogue (one file or per character) and individual clips each come as a set. The manifest in `current/` says which version each file came from.
+
+**Done on the share:** Episode 2's 17 `current/` folders were rebuilt, after a rehearsal on a clone. Sc02 and Sc03 have v002's dialogue with v001's mix and stems.
+
+**Verified:** `check.sh` green. A new Rust test covers a dialogue-only export keeping the older mix, then a moved cut dropping it. The independent checker passed on the share, apart from the known SARA file.
+
+**Rob's check:** open `Sc02_Canteen/current/` and play the mix against the dialogue: it should line up.

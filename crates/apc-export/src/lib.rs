@@ -1,6 +1,7 @@
 //! Cutaway export: FCPXML (Resolve, Logic), SRT, cut list (CSV, Markdown), mix bounce.
 
 pub mod bounce;
+pub mod current;
 pub mod cutlist;
 pub mod error;
 pub mod fcpxml;

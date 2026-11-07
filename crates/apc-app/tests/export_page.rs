@@ -516,7 +516,10 @@ fn one_file_counts_with_the_episode_and_says_when_nothing_changed() {
     assert_eq!(plan["files"], 2, "the mix and the manifest");
     assert_eq!(plan["one_file"]["unchanged_since"], Value::Null);
     let folder_name = plan["one_file"]["folder"].as_str().unwrap();
-    assert!(folder_name.starts_with("Episode/v001_"), "{folder_name}");
+    assert!(
+        folder_name.starts_with("Episode/versions/v001_"),
+        "{folder_name}"
+    );
     assert!(!folder_name.contains(' '), "{folder_name}");
 
     let first = svc
@@ -821,6 +824,51 @@ fn split_dialogue_writes_one_full_length_file_per_character() {
         assert_eq!(s.len() as u64, frames * 2);
         assert!(peak(&s) > 0.01, "{n}");
     }
+}
+
+/// PAUL stands hard left in scene 1; the split with and without pan.
+fn split_paul(mono: bool) -> (u64, u16, Vec<f32>) {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    svc.call(
+        "set_character_pan",
+        &json!({ "scene": "1", "character": "PAUL", "pan": -1.0 }),
+    )
+    .unwrap();
+    let r = export(
+        &mut svc,
+        json!(["1"]),
+        settings(|s| {
+            s.tracks.split_dialogue = true;
+            s.tracks.split_mono = mono;
+        }),
+    );
+    let f = folder(&r, 0);
+    let frames = manifest(&f).frames;
+    let p = f.join("E01_S01_v001_Dialogue_PAUL.wav");
+    let channels = hound::WavReader::open(&p).unwrap().spec().channels;
+    let (_, samples) = read(&p);
+    (frames, channels, samples)
+}
+
+#[test]
+fn a_split_without_pan_is_one_centred_channel_per_character() {
+    let (frames, channels, panned) = split_paul(false);
+    assert_eq!(channels, 2);
+    let right: Vec<f32> = panned.iter().skip(1).step_by(2).copied().collect();
+    let left: Vec<f32> = panned.iter().step_by(2).copied().collect();
+    assert!(peak(&left) > 0.01);
+    assert!(peak(&right) < 1e-4, "hard left: {}", peak(&right));
+
+    let (mono_frames, channels, mono) = split_paul(true);
+    assert_eq!(channels, 1);
+    assert_eq!(mono_frames, frames);
+    assert_eq!(mono.len() as u64, frames, "one sample a frame");
+    assert!(peak(&mono) > 0.01);
+    // centred, the voice is as loud as on the side it was panned to (constant power, unity
+    // in the centre), give or take what panning took from the direct sound
+    let ratio = peak(&mono) / peak(&left);
+    assert!((0.5..=1.05).contains(&ratio), "{ratio}");
 }
 
 #[test]
@@ -1201,7 +1249,7 @@ fn the_default_goes_straight_into_the_episodes_exports_with_no_folder_chosen() {
     let f = folder(&r, 0);
     assert_eq!(
         f.parent().unwrap(),
-        exports.join("Sc01_Lab"),
+        exports.join("Sc01_Lab/versions"),
         "no Ep02 inside Episode 2"
     );
     // the files still say which episode they're from, once they leave the folder
@@ -1212,7 +1260,7 @@ fn the_default_goes_straight_into_the_episodes_exports_with_no_folder_chosen() {
     assert!(plan["scenes"][0]["folder"]
         .as_str()
         .unwrap()
-        .starts_with("Sc01_Lab/v002_"));
+        .starts_with("Sc01_Lab/versions/v002_"));
 }
 
 #[test]
@@ -1284,4 +1332,293 @@ fn the_new_methods_reach_agents_and_unlocking_is_marked_destructive() {
     }
     assert_eq!(find("unlock_scene").access, Access::Destructive);
     assert_eq!(find("set_pipeline_folder").access, Access::Destructive);
+}
+
+/// The files an FCPXML points at, as paths.
+fn media_paths(xml: &str) -> Vec<PathBuf> {
+    let plain = xml.replace("<!DOCTYPE fcpxml>", "");
+    let doc = roxmltree::Document::parse(&plain).unwrap();
+    doc.descendants()
+        .filter(|n| n.has_tag_name("media-rep"))
+        .filter_map(|n| n.attribute("src"))
+        .map(|src| {
+            let raw = src.trim_start_matches("file://").as_bytes();
+            let mut out = Vec::new();
+            let mut i = 0;
+            while i < raw.len() {
+                if raw[i] == b'%' && i + 2 < raw.len() {
+                    let hex = std::str::from_utf8(&raw[i + 1..i + 3]).unwrap();
+                    out.push(u8::from_str_radix(hex, 16).unwrap());
+                    i += 3;
+                } else {
+                    out.push(raw[i]);
+                    i += 1;
+                }
+            }
+            PathBuf::from(String::from_utf8(out).unwrap())
+        })
+        .collect()
+}
+
+/// Every file a manifest lists is there, with its size and checksum.
+fn manifest_holds(dir: &Path) {
+    for f in manifest(dir).files {
+        let p = dir.join(&f.name);
+        assert!(p.is_file(), "{} is missing", p.display());
+        assert_eq!(std::fs::metadata(&p).unwrap().len(), f.bytes, "{}", f.name);
+        assert_eq!(
+            apc_export::versions::checksum(&p).unwrap(),
+            f.checksum,
+            "{}",
+            f.name
+        );
+    }
+}
+
+#[test]
+fn current_holds_the_newest_version_under_names_that_dont_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    with_sound(&mut svc, dir.path());
+    let stems = |s: &mut ExportSettings| s.fcpxml_source = apc_core::config::FcpxmlSource::Stems;
+    let r = export(&mut svc, json!(["1"]), settings(stems));
+    let v1 = folder(&r, 0);
+    assert_eq!(v1.parent().unwrap().file_name().unwrap(), "versions");
+    let scene = v1.parent().unwrap().parent().unwrap().to_path_buf();
+    let current = scene.join("current");
+    assert_eq!(
+        names(&scene),
+        ["current", "versions"],
+        "nothing else beside them"
+    );
+
+    // the same files, without the version in their names
+    let want: Vec<String> = names(&v1).iter().map(|n| n.replace("_v001", "")).collect();
+    assert_eq!(names(&current), want);
+    assert!(names(&current).contains(&"E01_S01_Mix.wav".to_string()));
+    assert_eq!(
+        std::fs::read(current.join("E01_S01_Mix.wav")).unwrap(),
+        std::fs::read(v1.join("E01_S01_v001_Mix.wav")).unwrap()
+    );
+    assert_eq!(manifest(&current).version, 1);
+    manifest_holds(&current);
+    manifest_holds(&v1);
+
+    // its FCPXML points at its own files; the version's at the version's
+    let xml = std::fs::read_to_string(current.join("E01_S01.fcpxml")).unwrap();
+    let paths = media_paths(&xml);
+    assert!(!paths.is_empty());
+    for p in &paths {
+        assert!(
+            p.starts_with(current.canonicalize().unwrap()) || p.starts_with(&current),
+            "{}",
+            p.display()
+        );
+        assert!(p.is_file(), "{}", p.display());
+        assert!(!p.to_string_lossy().contains("_v001"), "{}", p.display());
+    }
+    let old = std::fs::read_to_string(v1.join("E01_S01_v001.fcpxml")).unwrap();
+    assert!(media_paths(&old)
+        .iter()
+        .all(|p| p.starts_with(&v1) && p.is_file()));
+
+    // the next version takes its place there, and the history counts versions only
+    let r = export(&mut svc, json!(["1"]), settings(stems));
+    let v2 = folder(&r, 0);
+    assert_eq!(manifest(&current).version, 2);
+    assert_eq!(names(&current), want, "the same names");
+    assert_eq!(
+        std::fs::read(current.join("E01_S01_Mix.wav")).unwrap(),
+        std::fs::read(v2.join("E01_S01_v002_Mix.wav")).unwrap()
+    );
+    manifest_holds(&current);
+    let plan = svc
+        .call(
+            "export_plan",
+            &json!({ "scenes": ["1"], "settings": settings(stems) }),
+        )
+        .unwrap();
+    assert_eq!(plan["scenes"][0]["version"], 3);
+    assert!(
+        !names(&scene).iter().any(|n| n.starts_with('.')),
+        "nothing half written left: {:?}",
+        names(&scene)
+    );
+}
+
+#[test]
+fn the_whole_episode_has_its_current_too() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    svc.call("export_scenes", &json!({ "settings": one_file(|_| {}) }))
+        .unwrap();
+    let ep = svc.paths.exports.join("Episode");
+    assert_eq!(names(&ep), ["current", "versions"]);
+    assert!(names(&ep.join("current")).contains(&"E01_Mix.wav".to_string()));
+    manifest_holds(&ep.join("current"));
+}
+
+#[test]
+fn versions_from_before_move_into_versions_with_their_paths() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    with_sound(&mut svc, dir.path());
+    let stems = |s: &mut ExportSettings| s.fcpxml_source = apc_core::config::FcpxmlSource::Stems;
+    let mut old = Vec::new();
+    for _ in 0..2 {
+        let r = export(&mut svc, json!(["1"]), settings(stems));
+        old.push(folder(&r, 0));
+    }
+    let scene = old[0].parent().unwrap().parent().unwrap().to_path_buf();
+
+    // put them back as they were before: straight in the scene's folder, no current/
+    std::fs::remove_dir_all(scene.join("current")).unwrap();
+    for v in &old {
+        let name = v.file_name().unwrap().to_string_lossy().into_owned();
+        let to = scene.join(&name);
+        std::fs::rename(v, &to).unwrap();
+        let mut m = manifest(&to);
+        for f in m.files.iter_mut().filter(|f| f.name.ends_with(".fcpxml")) {
+            let p = to.join(&f.name);
+            let xml = std::fs::read_to_string(&p).unwrap();
+            std::fs::write(
+                &p,
+                xml.replace(&format!("/versions/{name}/"), &format!("/{name}/")),
+            )
+            .unwrap();
+            f.bytes = std::fs::metadata(&p).unwrap().len();
+            f.checksum = apc_export::versions::checksum(&p).unwrap();
+        }
+        std::fs::write(
+            to.join("manifest.json"),
+            serde_json::to_vec_pretty(&m).unwrap(),
+        )
+        .unwrap();
+        let xml = names(&to)
+            .into_iter()
+            .find(|n| n.ends_with(".fcpxml"))
+            .unwrap();
+        let paths = media_paths(&std::fs::read_to_string(to.join(xml)).unwrap());
+        assert!(
+            paths.iter().all(|p| p.starts_with(&to) && p.is_file()),
+            "{paths:?}"
+        );
+    }
+    std::fs::remove_dir(scene.join("versions")).unwrap();
+    // the old layout still counts
+    let plan = svc
+        .call(
+            "export_plan",
+            &json!({ "scenes": ["1"], "settings": settings(stems) }),
+        )
+        .unwrap();
+    assert_eq!(plan["scenes"][0]["version"], 3);
+
+    let r = svc.call("reorganize_exports", &json!({})).unwrap();
+    let done = &r["folders"][0]["done"];
+    assert_eq!(done["moved"].as_array().unwrap().len(), 2, "{r}");
+    assert_eq!(done["rewritten"], 2, "{r}");
+    assert_eq!(done["current"][0][1], 2, "{r}");
+    assert_eq!(names(&scene), ["current", "versions"]);
+    for v in &old {
+        assert!(v.is_dir(), "{} is back in versions/", v.display());
+        manifest_holds(v);
+        let xml = names(v)
+            .into_iter()
+            .find(|n| n.ends_with(".fcpxml"))
+            .unwrap();
+        let paths = media_paths(&std::fs::read_to_string(v.join(xml)).unwrap());
+        assert!(
+            paths.iter().all(|p| p.starts_with(v) && p.is_file()),
+            "{paths:?}"
+        );
+    }
+    manifest_holds(&scene.join("current"));
+    assert_eq!(manifest(&scene.join("current")).version, 2);
+
+    // again: nothing to do
+    let again = svc.call("reorganize_exports", &json!({})).unwrap();
+    assert_eq!(again["folders"][0]["done"]["moved"], json!([]));
+    assert_eq!(again["folders"][0]["done"]["current"], json!([]));
+}
+
+/// Only the dialogue, split by character.
+fn dialogue_only(s: &mut ExportSettings) {
+    s.tracks = apc_core::config::ExportTracks {
+        dialogue: false,
+        room_voices: false,
+        effects: false,
+        room_effects: false,
+        ambience: false,
+        music: false,
+        mix: false,
+        split_dialogue: true,
+        split_mono: true,
+    };
+}
+
+#[test]
+fn current_keeps_the_newest_of_each_track_while_the_scene_is_unchanged() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut svc = demo_episode(dir.path());
+    with_sound(&mut svc, dir.path());
+    let r = export(&mut svc, json!(["1"]), settings(|_| {}));
+    let v1 = folder(&r, 0);
+    let current = v1.parent().unwrap().parent().unwrap().join("current");
+    assert!(names(&current).contains(&"E01_S01_Dialogue.wav".to_string()));
+
+    // something technical about the dialogue: only it goes out again
+    let r = export(&mut svc, json!(["1"]), settings(dialogue_only));
+    let v2 = folder(&r, 0);
+    assert!(!names(&v2).iter().any(|n| n.ends_with("_Mix.wav")));
+    let have = names(&current);
+    for n in [
+        "E01_S01_Dialogue_PAUL.wav",
+        "E01_S01_Dialogue_SARA.wav",
+        "E01_S01_Mix.wav",
+        "E01_S01_Effects.wav",
+        "E01_S01_RoomVoices.wav",
+        "E01_S01.fcpxml",
+    ] {
+        assert!(have.contains(&n.to_string()), "{n} in {have:?}");
+    }
+    // the dialogue is there once: per character now, so not as one file too
+    assert!(
+        !have.contains(&"E01_S01_Dialogue.wav".to_string()),
+        "{have:?}"
+    );
+    let m = manifest(&current);
+    assert_eq!(m.version, 2);
+    let from = |n: &str| m.files.iter().find(|f| f.name == n).and_then(|f| f.version);
+    assert_eq!(from("E01_S01_Dialogue_PAUL.wav"), Some(2));
+    assert_eq!(from("E01_S01_Mix.wav"), Some(1));
+    assert_eq!(from("E01_S01.fcpxml"), Some(2));
+    assert_eq!(
+        std::fs::read(current.join("E01_S01_Mix.wav")).unwrap(),
+        std::fs::read(v1.join("E01_S01_v001_Mix.wav")).unwrap()
+    );
+    manifest_holds(&current);
+
+    // the cut moves: the old mix no longer lines up, so it leaves current/
+    let v = svc.call("scene_view", &json!({ "scene": "1" })).unwrap();
+    let line = v["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|i| i["kind"] == "line")
+        .nth(1)
+        .and_then(|i| i["line_id"].as_str())
+        .unwrap()
+        .to_string();
+    svc.call("set_gap", &json!({ "line_id": line, "gap_s": 2.0 }))
+        .unwrap();
+    export(&mut svc, json!(["1"]), settings(dialogue_only));
+    let have = names(&current);
+    assert!(!have.contains(&"E01_S01_Mix.wav".to_string()), "{have:?}");
+    assert!(have.contains(&"E01_S01_Dialogue_PAUL.wav".to_string()));
+    assert!(manifest(&current)
+        .files
+        .iter()
+        .all(|f| f.version == Some(3)));
+    manifest_holds(&current);
 }

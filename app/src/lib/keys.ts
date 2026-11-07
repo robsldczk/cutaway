@@ -34,6 +34,13 @@ export function tourMouse(e: MouseEvent) {
 }
 
 export function onKey(e: KeyboardEvent) {
+  // ⌘, opens Settings anywhere (in the app the menu has it first)
+  if ((e.metaKey || e.ctrlKey) && e.key === ',' && !app.tour && !app.asking) {
+    e.preventDefault();
+    e.stopPropagation();
+    app.overlay = app.overlay === 'settings' ? null : 'settings';
+    return;
+  }
   // nothing's open: the shelf has the keys, and only help is left for the map below
   if (app.welcomeUi) {
     if (app.welcomeUi.key(e)) {
@@ -128,6 +135,13 @@ export function onKey(e: KeyboardEvent) {
   }
 }
 
+/** The review column walks its cards as they're laid out, so a line with no time of its own is
+ *  reached too. */
+function stepReview(d: number) {
+  if (app.reviewUi) app.reviewUi.step(d);
+  else app.go(d);
+}
+
 /** Review has keys of its own, and none that would reach for the cut. */
 function reviewKey(e: KeyboardEvent) {
   const k = e.key;
@@ -144,8 +158,8 @@ function reviewKey(e: KeyboardEvent) {
   else if (k === ' ' && e.shiftKey) void app.playFromLocator();
   else if (k === ' ') void app.togglePlay();
   else if (k === 'Enter') void app.playLineInContext();
-  else if (k === 'ArrowUp') app.go(-1);
-  else if (k === 'ArrowDown') app.go(1);
+  else if (k === 'ArrowUp') stepReview(-1);
+  else if (k === 'ArrowDown') stepReview(1);
   else if (k === 'ArrowLeft') app.stepScene(-1);
   else if (k === 'ArrowRight') app.stepScene(1);
   else if (k === 'm' || k === 'M') app.reviewUi?.marker();

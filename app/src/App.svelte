@@ -100,6 +100,8 @@
     } else if (id === 'open_review') {
       const r = await pickPath({ title: 'Open a project package for review', filters: [{ name: `${brand.displayName} episode or show`, extensions: [brand.episodeExt, brand.showExt] }] });
       if (r && r.length) await app.openForReview(r[0]);
+    } else if (id === 'settings') {
+      app.overlay = app.overlay === 'settings' ? null : 'settings';
     } else if (id === 'show_home' && app.status?.show) {
       await app.showHome();
     } else if (id === 'close') {

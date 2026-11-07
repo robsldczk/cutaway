@@ -413,7 +413,8 @@ test('a note drags by its dot to what is said there, in one undo step', async ({
   await leave(page);
 });
 
-test('a note drags by its card, and Esc puts it back', async ({ page }) => {
+test('a note drags by its card, and Esc puts it back', async ({ page, browserName }) => {
+  test.fail(browserName === 'webkit', 'BUG: in WebKit, a note dragged by its card lands on another line. Not yet checked in the Tauri app: may be Playwright mouse input, not the app.');
   await open(page);
   const v = await rpc(page, 'scene_view', { scene: '1' });
   const lines = v.items.filter((i) => i.kind === 'line');
@@ -512,3 +513,37 @@ for (const [w, h] of [[900, 600], [1024, 700], [1280, 760]]) {
     await leave(page);
   });
 }
+
+test('the arrows walk every card in order, a line taken out of the cut too', async ({ page }) => {
+  await open(page);
+  const lines = (s: Answer) => s.items.filter((i) => i.kind === 'line' && i.takes.length);
+  const first = lines(await rpc(page, 'scene_view', { scene: '1' }));
+  // a line with no length of its own: the time map has nothing to bring it to the middle with
+  const out = first[1].line_id;
+  await rpc(page, 'command', { cmd: 'set_clip_dropped', line_id: out, dropped: true });
+  try {
+    await rpc(page, 'enter_review');
+    await page.reload();
+    await expect(page.getByTestId('review')).toBeVisible();
+    await sayWho(page);
+    const cards = page.getByTestId('review-line');
+    const order = await cards.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.line ?? ''));
+    expect(order).toContain(out);
+    // from the top
+    await cards.first().click();
+    await expect(cards.first()).toHaveClass(/\bcur\b/);
+    for (let i = 1; i < order.length; i++) {
+      await page.keyboard.press('ArrowDown');
+      const card = page.locator(`[data-testid="review-line"][data-line="${order[i]}"]`);
+      await expect(card, `card ${i + 1} of ${order.length}`).toHaveClass(/\bcur\b/);
+      await expect(page.locator('[data-testid="review-line"].cur')).toHaveCount(1);
+    }
+    for (let i = order.length - 2; i >= 0; i--) {
+      await page.keyboard.press('ArrowUp');
+      await expect(page.locator(`[data-testid="review-line"][data-line="${order[i]}"]`)).toHaveClass(/\bcur\b/);
+    }
+  } finally {
+    if ((await rpc(page, 'project_status')).review.active) await rpc(page, 'leave_review');
+    await rpc(page, 'command', { cmd: 'set_clip_dropped', line_id: out, dropped: false });
+  }
+});

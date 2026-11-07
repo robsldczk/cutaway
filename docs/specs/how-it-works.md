@@ -132,6 +132,8 @@ Comped or edited boxes export as several clips on the same role track, with cros
 
 *Changed in implementation (D108–D114, D132, D134, D135):* an export is a version folder per scene (`Exports/Sc02_Canteen/v003_2026-11-05/` in the episode's folder; `Exports/Ep02/Sc02_Canteen/…` in a pipeline folder, D117) with a manifest, never overwritten. Folder names are ASCII with no spaces; in every name an export writes, `_` separates the parts and `-` holds a part together (`Sc03_Colonels-Office`, `E02_S03_v002_Dialogue_THE-COLONEL.wav`). One file is the range as a single mix, in an episode version (`Exports/Episode/v004_2026-11-05/`), scene after scene with a 2 s pause. Stems are every track at the full length of the scene, from one render path, and add up to the mix. Loudness applies to the mix alone. An exported scene locks its timing in the command bus.
 
+*Changed in implementation (D165):* the versions of a scene sit in its `versions/` folder (`Exports/Sc02_Canteen/versions/v003_2026-11-05/`, `Exports/Episode/versions/v004_2026-11-05/`), and its `current/` folder holds a copy of the newest under names without the version (`Exports/Sc02_Canteen/current/E02_S02_Mix.wav`), so another app can point at it once. Each export refreshes `current/`. *(D166)* It holds the newest of each track: a version that exported only the dialogue again leaves the mix of the version before in `current/`, as long as the scene's cut is the same.
+
 ## Tech stack
 
 See `architecture.md` for the stack, the project folder, the importer and the AI provider. In short:

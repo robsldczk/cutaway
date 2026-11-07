@@ -23,7 +23,7 @@ test('room strip: shared gap between takes, slides with the take, raw only in de
   await page.screenshot({ path: 'test-results/room-strip-take1.png' });
 
   await page.getByRole('button', { name: 'Settings' }).click();
-  await page.getByTestId('dev-switch').check();
+  await page.getByTestId('dev-switch').getByRole('radio', { name: 'On' }).click();
   await page.keyboard.press('Escape');
   await expect(strip.locator('details').first()).toBeVisible();
 

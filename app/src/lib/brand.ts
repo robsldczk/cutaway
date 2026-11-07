@@ -10,6 +10,10 @@ export interface Brand {
   reviewExt: string;
   bundleId: string;
   tagline: string;
+  /** Who the app belongs to (the imprint, the bundle's publisher). */
+  owner: string;
+  /** The copyright line: Settings > Licenses, the About box, the bundle. */
+  copyright: string;
 }
 
 export const brand: Brand = brandJson;

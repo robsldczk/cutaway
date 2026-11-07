@@ -36,7 +36,7 @@ const planned = (number: number, v: number, unchanged_since: number | null = nul
 
 const plan = (scenes: ScenePlan[], episode_version: number | null = null): ExportPlan => ({ scenes, one_file: null, empty: [], episode_version, files: 18, bytes: 780e6 });
 
-const settings = (s: Partial<ExportSettings>): ExportSettings => ({ mode: 'stems', tracks: { dialogue: true, room_voices: true, effects: true, room_effects: true, ambience: true, music: true, mix: true, split_dialogue: false }, codec: 'wav', sample_rate: 48000, bit_depth: 24, loudness: -16, fcpxml: true, fcpxml_source: 'original', subtitles: true, cut_list: null, lock_after: true, save_to: 'episode', ...s });
+const settings = (s: Partial<ExportSettings>): ExportSettings => ({ mode: 'stems', tracks: { dialogue: true, room_voices: true, effects: true, room_effects: true, ambience: true, music: true, mix: true, split_dialogue: false, split_mono: false }, codec: 'wav', sample_rate: 48000, bit_depth: 24, loudness: -16, fcpxml: true, fcpxml_source: 'original', subtitles: true, cut_list: null, lock_after: true, save_to: 'episode', ...s });
 
 describe('the boxes of the Range', () => {
   const five = [1, 2, 3, 4, 5].map((n) => scene(n, 60));
@@ -94,7 +94,7 @@ describe('one file', () => {
   });
 
   it('says what it becomes and whether anything changed', () => {
-    expect(savedCaption(one(null))).toBe('Saved as E02 v004. Versions count up on their own, nothing is overwritten.');
+    expect(savedCaption(one(null))).toBe('Saved as E02 v004. Each version is kept in versions/, and current/ always holds the newest.');
     expect(unchangedCaption(one(null))).toBe('');
     expect(unchangedCaption(one(3))).toBe('These scenes are unchanged since v003.');
   });
@@ -149,9 +149,9 @@ describe('captions', () => {
   });
 
   it('say what the next versions are', () => {
-    expect(savedCaption(plan([planned(2, 3), planned(3, 1)]))).toBe('Saved as Sc02 v003 and Sc03 v001. Versions count up on their own, nothing is overwritten.');
+    expect(savedCaption(plan([planned(2, 3), planned(3, 1)]))).toBe('Saved as Sc02 v003 and Sc03 v001. Each version is kept in versions/, and current/ always holds the newest.');
     const long = plan([1, 2, 3, 4, 5].map((n) => planned(n, 1)), 2);
-    expect(savedCaption(long)).toBe('Saved as 5 scenes, each its next version. The episode becomes v002. Versions count up on their own, nothing is overwritten.');
+    expect(savedCaption(long)).toBe('Saved as 5 scenes, each its next version. The episode becomes v002. Each version is kept in versions/, and current/ always holds the newest.');
   });
 
   it('warn of a delivery that would be a duplicate', () => {

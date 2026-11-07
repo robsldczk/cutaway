@@ -353,6 +353,16 @@
                     {@render tick(s.tracks[t.key], (v) => s && (s.tracks[t.key] = v), t.name, t.sub, t.color, `track-${t.key}`)}
                   {/each}
                 </div>
+                {#if s.tracks.split_dialogue}
+                  <div class="splitpan">
+                    <span class="dim">Each character</span>
+                    <div class="seg" role="radiogroup" aria-label="Pan of the character files">
+                      <button class="tab sm" class:on={!s.tracks.split_mono} role="radio" aria-checked={!s.tracks.split_mono} onclick={() => s && (s.tracks.split_mono = false)} data-testid="split-keep-pan">Keep pan · stereo</button>
+                      <button class="tab sm" class:on={s.tracks.split_mono} role="radio" aria-checked={s.tracks.split_mono} onclick={() => s && (s.tracks.split_mono = true)} data-testid="split-mono">No pan · mono</button>
+                    </div>
+                  </div>
+                  <div class="cap">{s.tracks.split_mono ? 'Every voice in the centre, as one channel, for panning in the mix.' : 'Every voice where it stands in the scene, in stereo.'}</div>
+                {/if}
                 <div class="cap">Voices and effects stay dry. Their room reverb goes to the two room tracks.</div>
               </div>
             </div>
@@ -675,6 +685,20 @@
   }
   .as svg {
     flex: none;
+  }
+  .splitpan {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .splitpan .seg {
+    display: inline-flex;
+  }
+  .tab.sm {
+    height: 26px;
+    padding: 0 12px;
+    font-size: 12px;
   }
   .two {
     display: grid;

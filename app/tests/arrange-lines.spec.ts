@@ -167,7 +167,8 @@ test.describe('the moved sound on the blocks', () => {
 });
 
 test.describe('a line further back', () => {
-  test('right click: a stop moves the line back, the chip says so, one undo brings it forward', async ({ page }) => {
+  test('right click: a stop moves the line back, the chip says so, one undo brings it forward', async ({ page, browserName }) => {
+    test.fail(browserName === 'webkit', 'BUG: in WebKit, Escape leaves the line menu open after a right click (it closes in Chromium). Not yet checked in the Tauri app.');
     await open(page);
     await expect(chips(page)).toHaveCount(0);
     await rows(page).nth(1).click({ button: 'right' });

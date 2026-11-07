@@ -223,6 +223,9 @@ pub struct ExportTracks {
     pub mix: bool,
     /// One full-length file per character instead of one dialogue file.
     pub split_dialogue: bool,
+    /// The per-character files without pan: each voice in the centre, written as one mono
+    /// channel. Off, they keep the scene's pan, in stereo (D160).
+    pub split_mono: bool,
 }
 
 impl Default for ExportTracks {
@@ -236,6 +239,7 @@ impl Default for ExportTracks {
             music: true,
             mix: true,
             split_dialogue: false,
+            split_mono: false,
         }
     }
 }

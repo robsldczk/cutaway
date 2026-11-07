@@ -67,7 +67,7 @@ pub enum NoteCmd {
         to_word: Option<usize>,
         #[arg(long)]
         sound: Option<String>,
-        /// performance, timing, sound or music.
+        /// performance, timing, sound, music or script.
         #[arg(long)]
         tag: Option<String>,
         #[command(flatten)]
@@ -297,8 +297,17 @@ pub enum Cmd {
         #[command(subcommand)]
         cmd: ReviewCmd,
     },
-    /// Every scene's lock and export history.
-    Exports,
+    /// Every scene's lock and export history. --reorganize brings the episode's export folders
+    /// to the versions/ and current/ layout; with --folder, that export folder alone, without
+    /// opening any episode.
+    Exports {
+        /// Move versions into versions/ and make each current/ the newest.
+        #[arg(long)]
+        reorganize: bool,
+        /// An `Exports` folder (or a pipeline's `Exports/Ep02`) to reorganize.
+        #[arg(long, requires = "reorganize")]
+        folder: Option<PathBuf>,
+    },
     /// The show's pipeline folder, or a proposal; --set with --yes confirms one.
     Pipeline {
         #[arg(long)]
@@ -399,6 +408,9 @@ pub struct DeliverSettings {
     /// One full-length file per character instead of one dialogue file.
     #[arg(long)]
     split_dialogue: bool,
+    /// With --split-dialogue: each character's file without pan, in the centre and mono.
+    #[arg(long, requires = "split_dialogue")]
+    split_mono: bool,
     /// wav, flac, or mp3 (mix and one-file only).
     #[arg(long, default_value = "wav")]
     format: String,
@@ -461,6 +473,7 @@ impl DeliverSettings {
                 "effects": on("effects"), "room_effects": on("room-effects"),
                 "ambience": on("ambience"), "music": on("music"), "mix": on("mix"),
                 "split_dialogue": self.split_dialogue,
+                "split_mono": self.split_mono,
             },
             "codec": self.format,
             "sample_rate": self.rate,
@@ -901,6 +914,18 @@ fn call(sess: &mut Session, m: &str, params: Value) -> anyhow::Result<Value> {
 pub fn run(cli: Cli) -> anyhow::Result<Value> {
     let confirm = cli.yes;
     match &cli.cmd {
+        // a folder alone: no episode is opened, so nothing beside it is touched
+        Cmd::Exports {
+            folder: Some(folder),
+            ..
+        } => {
+            if !folder.is_dir() {
+                anyhow::bail!("{} isn't a folder", folder.display());
+            }
+            Ok(serde_json::to_value(apc_export::current::reorganize(
+                folder,
+            )?)?)
+        }
         Cmd::Show {
             cmd: ShowCmd::New { name, parent },
         } => {
@@ -1246,7 +1271,12 @@ pub fn run(cli: Cli) -> anyhow::Result<Value> {
                         call(&mut sess, "send_review", json!({ "path": s(path) }))
                     }
                 },
-                Cmd::Exports => call(&mut sess, "export_status", json!({})),
+                Cmd::Exports {
+                    reorganize: false, ..
+                } => call(&mut sess, "export_status", json!({})),
+                Cmd::Exports {
+                    reorganize: true, ..
+                } => call(&mut sess, "reorganize_exports", json!({})),
                 Cmd::Pipeline { set } => match set {
                     Some(p) => call(
                         &mut sess,

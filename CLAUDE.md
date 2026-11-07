@@ -9,6 +9,11 @@ Owner: Rob. Read the specs before changing behaviour:
 - `docs/BUILD_BRIEF.md`: milestones, acceptance tests, scope of the current run
 - `docs/reference/stage0/`: the Python prototype that proved the matching. Port its logic, don't copy its shortcuts.
 
+What is open right now:
+- `docs/STATUS.md`: open questions for Rob and known problems
+- `docs/human-tasks.md`: tasks that only a person can do
+- `docs/later.md`: ideas outside the current scope
+
 ## Git workflow
 
 - **Branches:**
@@ -73,10 +78,12 @@ Owner: Rob. Read the specs before changing behaviour:
 ## Commands
 
 ```
-scripts/check.sh            fmt, clippy, tests, UI lint/typecheck
+scripts/check.sh            fmt, clippy, tests, UI lint/typecheck, licenses
+scripts/dock-app.sh         install the Dock app that builds the latest (--doctor, --build, --quit)
+node scripts/licenses.mjs   regenerate THIRD_PARTY_LICENSES.md after a dependency change
 scripts/clean-target.sh     keep Rust build output under 20 GB (--dry-run, --limit <GB>)
 scripts/install-cleaner.sh  run that hourly through a LaunchAgent (--uninstall)
 cargo run -p apc-cli -- --help
 cargo test --workspace
-cd app && npm install && npm run tauri dev
+cd app && npm ci && npm run tauri dev
 ```

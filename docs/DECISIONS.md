@@ -1243,3 +1243,134 @@ One entry per decision: context, choice, reason. Newest at the bottom.
 - **Locate… carries the spot** to the new path. It was keyed by the old one, so a relinked project would have started over.
 - **A show opens on the episode last worked in,** from the recent list, instead of its first with a project.
 - **Unchanged:** a spot is per machine (D131), and a package opened for review keeps none (D143).
+### D155 A Dock app that builds the latest on every open (Albert, 2026-11-07)
+- **Asked for:** an App It launcher that builds the latest Cutaway on every open.
+- **Options:** the App It Swift web shell, which has no Tauri commands and can't run this app. A snapshot `tauri build` rebuilt in the background, which is the vibekit default. A small launcher that builds at open. The third is what was asked for.
+- **Choice:** `scripts/dock-app.sh` installs `Cutaway Latest.app`, which pulls, runs `tauri build --bundles app` and opens the result. The price is a wait at each open after new code lands.
+- **No change, no build:** the commit of the last build is kept in `target/dock/built-commit`. A clean checkout at that commit opens at once.
+- **Background rebuild is opt-in** (`--background`), a LaunchAgent every 15 minutes. It skips while Cutaway is open. It spends disk and CPU without being asked, so it stays off by default.
+- **Pull:** only on `dev` with a clean tree, fast-forward only. Otherwise it builds what is on disk, so it can't touch local work.
+- **Already open:** Cutaway comes to the front with no build. A build would replace the app under a running session.
+- **Own target folder, `target/dock/`:** on a case-insensitive disk `target/release/Cutaway` and the CLI's `target/release/cutaway` are one file, and the README's MCP setup runs the second. The price is a second copy of the release build. `clean-target.sh` removes it last.
+- **Unchanged:** it shares the bundle ID and data of any other Cutaway build on the machine.
+### D156 A generated license list (Albert, 2026-11-07)
+- **Why:** nothing listed the third-party licenses, and `CLAUDE.md` asks for a DECISIONS entry before any GPL or LGPL dependency. Nothing checked that.
+- **Choice:** `scripts/licenses.mjs` writes `THIRD_PARTY_LICENSES.md` from `Cargo.lock` (through `cargo metadata`) and `app/package-lock.json`. It needs no new dependency. `check.sh` runs it with `--check`.
+- **The check fails when:** the file is stale, a package has no license, or a license is GPL, AGPL or LGPL with no permissive alternative. A deliberate copyleft dependency goes into `ALLOWED_COPYLEFT` in the script, with its own DECISIONS entry.
+- **Optional peer npm packages are left out.** npm doesn't install them, and npm versions disagree on whether the lockfile lists them.
+- **All platforms are listed,** Windows crates on a Mac too, so the file is the same on every machine.
+- **Found at the start:** none blocked. Two crates are `MIT OR Apache-2.0 OR LGPL-2.1-or-later` and pass. MPL-2.0 packages are listed; `docs/STATUS.md` asks Rob about them.
+### D157 The UI tests run in WebKit too (Albert, 2026-11-07)
+- **Why:** the app ships in WKWebView on macOS, and the UI tests ran only in Chromium.
+- **Choice:** two Playwright projects, `chromium` and `webkit`, run one per call (`npm run test:e2e`, `npm run test:e2e:webkit`). The tests share and change one demo session, so one call with both engines would give the second engine the first one's leftovers. CI runs both on macOS.
+- **The first WebKit run:** 230 of 236 passed. The six failures also fail when run alone, and pass in Chromium. Each is marked `test.fail` for WebKit with a `BUG:` reason, and the test itself is unchanged. `docs/STATUS.md` lists them.
+- **Playwright's WebKit is not WKWebView.** It is the closest test engine to it, but a failure there still needs a check in the real app.
+### D158 `tauri dev` keeps its own data folder (Albert, 2026-11-07)
+- **Why:** `tauri dev` wrote to the same folder as an installed build: `<data dir>/cutaway`, which holds covers, show indexes, review packages and the reviewer's name. A dev build could change or migrate them.
+- **Choice:** `npm run tauri` goes through `scripts/tauri.mjs`, which sets `CUTAWAY_DATA_DIR` to `<data dir>/cutaway-dev` for `tauri dev` only. A value already set wins, so `CUTAWAY_DATA_DIR=… npm run tauri dev` still reaches any folder, the real one included. `tauri build`, the CLI and the MCP server are unchanged.
+- **What a developer sees:** the first `tauri dev` after this starts with no covers, show indexes or reviewer name. Projects are not affected: they live in their own folders, and the welcome list was already separate (localStorage is per origin, and dev runs on `localhost:1420`).
+- **Not changed:** the bundle ID. The Keychain entry for API keys is named after it (`crates/apc-sound/src/secrets.rs`), so dev and real builds share saved keys. Changing the ID needs a key migration; `docs/STATUS.md` asks Rob.
+- **Not done:** a dev bundle ID through a second Tauri config. The app uses no Tauri path API, so it would change almost nothing.
+
+### D159 A review package that won't open again (Albert, 2026-11-07)
+- **Reported:** after Done in review, the package wouldn't open again to send the notes: `database error: unable to open database: …/Application Support/cutaway/review/678d391023194881/copy_xz0jv9c8w19w.cutaway`.
+- **What the message says:** "unable to open database: <path>" (without "file") is SQLite's ATTACH failing, and `VACUUM INTO` attaches its target. So the fresh private copy couldn't be created in the package's private folder. The folder is made just before.
+- **Not reproduced.** Tests reopen a package three times, with the editor closed and with it still writing (a live log, as Syncthing delivers it), with a data folder named like `Application Support`. All pass. Descriptor counts stay flat across five open, play, note and close cycles with audio off.
+- **Likely cause, not proven:** the open-file limit. An app started from the Dock gets a soft limit of 256. The mixer kept one file open for every source it had played, sounds included, with no cap, and SQLite needs three files for each episode. A long review of a scene full of sounds can reach 256. Then creating the copy fails with exactly this message.
+- **Done:**
+  - The app and the `cutaway` binary raise the soft limit towards the hard one at start, up to 10,240 (`apc_app::limits`).
+  - The mixer keeps at most 32 readers open. Decoded clips are cached anyway.
+  - The copy is tried three times, and a failed try leaves nothing behind.
+  - If no new copy can be made, the last copy opens again, with everything said in it. The next look at the package tries a fresh copy.
+  - The error now names the package and the private folder.
+- **Rob or Albert to confirm:** whether it still happens on Albert's Mac. If it does, the full message and `ulimit -n` from Terminal will say more.
+### D160 Split dialogue with or without pan (Rob, 2026-11-07)
+- **Asked for:** after "Split dialogue · by character", a choice to keep the pan or to have none, with the track mono.
+- **Choice:** `tracks.split_mono` on the export settings, off by default, so presets and manifests from before mean the same. In the UI it's a pair under the tracks, shown only while Split dialogue is ticked: *Keep pan · stereo* / *No pan · mono*. CLI: `--split-mono` (needs `--split-dialogue`). MCP takes the same settings.
+- **No pan means all of it:**
+  - The scene's pan of the character, the lane's pan on Edit, and a breath's pan on the dialogue lane all go.
+  - What D122 takes from the direct sound of a panned voice ("pan into the room") goes too: centred, nothing is taken.
+  - The file is the middle of a centred render, one channel. A centred voice is the same on both sides, so nothing is lost.
+- **Kept:** a line's depth (D129). It's where the line stands, not where it's panned.
+- **Rendered from its own schedule** (`schedule_centred`, `MixSettings::centre_voices`), so the other stems and the mix are unchanged. The FCPXML gives a mono stem one channel, and the size estimate counts one.
+### D161 Imprint, licenses, and what Jetplane does that Cutaway didn't (Rob, 2026-11-07)
+- **Asked for:** a Licenses tab, an imprint with Rob's details from robertsladeczek.com, and a comparison with Jetplane's legal setup.
+- **Jetplane has, and Cutaway lacked:**
+  1. The imprint in Settings, English then the German original.
+  2. A Licenses tab: the app's name, copyright, a proprietary statement, and every package with its license text, searchable.
+  3. License texts in the generated notices, not only names.
+  4. A list of allowed licenses that stops anything new.
+  5. Work that isn't a package listed by hand (Jetplane: its depth model).
+  6. `LICENSE.md`.
+  7. Proprietary license fields in `Cargo.toml` and `package.json`.
+  8. Copyright and publisher in the app bundle.
+  9. An About box with the copyright, and Settings… in the app menu.
+  10. A copyable version.
+- **All ten built:**
+  - **Imprint:** § 5 DDG, Robert Sladeczek, c/o Autorenglück #16657, Albert-Einstein-Str. 47, 02977 Hoyerswerda, the e-mail written `[at]` as on the site. English first, as in Jetplane.
+  - Left out from the website: the "responsible for content" line (§ 18 Abs. 2 MStV), because it's about the site's editorial content and the app has none. Also left out: liability and copyright paragraphs. Jetplane's consumer dispute sentence isn't on Rob's site, so it isn't here either.
+  - **License list:** `scripts/licenses.mjs` now writes `app/src/legal/third-party-licenses.json` (the tab, loaded only when it opens, 620 KB) and `THIRD_PARTY_LICENSES.md` with every text. What ships is the normal dependencies of the app and the `cutaway` binary on every platform, plus the npm packages that aren't development tools: 602 entries, 270 distinct texts. Development tools are listed by name only.
+  - **A choice of licenses** ("MIT OR Apache-2.0"): the one with the fewest obligations, and only its text.
+  - **Standard texts:** for the 47 packages that name a license without its text, from `scripts/licenses/`. The MIT and Apache texts come from `serde`, BSD from `alloc-no-stdlib`, MPL from `cssparser`, and ISC as the OSI publishes it.
+  - **Allowed:** MIT, MIT-0, 0BSD, ISC, BSD-2/3-Clause, Zlib, Apache-2.0 (also WITH LLVM-exception), Unlicense, CC0-1.0, BSL-1.0, Unicode-3.0/DFS-2016, OFL-1.1, bzip2-1.0.6, MPL-2.0, CDLA-Permissive-2.0 and CC-BY-4.0. Anything else fails `check.sh` until it's decided. The copyleft check of D156 still covers every package, development tools included.
+  - **CDLA-Permissive-2.0** (`webpki-roots`, the root certificates HTTPS checks against) is a permissive data license. It's allowed here and asked about in STATUS.
+  - **Listed by hand:** the Parakeet model (CC-BY-4.0, NVIDIA; downloaded at first use; credit and a link to the license, which the license allows), and the libraries inside the prebuilt sherpa-onnx library: ONNX Runtime, the Kaldi parts, OpenFst, SentencePiece, KISS FFT, utf8proc and PortAudio.
+  - **`LICENSE.md`:** proprietary, © 2026 Robert Sladeczek. `Cargo.toml` says `LicenseRef-Proprietary` (`UNLICENSED` isn't an SPDX id), and `package.json` says `UNLICENSED` (npm's word for it).
+  - **`brand.json`** has `owner` and `copyright`; the UI, the About box and `tauri.conf.json` (bundle copyright and publisher) use them, and a test keeps the bundle in step.
+  - **About and Settings…:** on macOS, About Cutaway shows the version, the commit and the copyright, and the app menu has Settings… (⌘,). Elsewhere both are at the end of the Show menu.
+- **Written independently:** the generator follows Jetplane's design, but no code was copied. Jetplane's `LICENSE.md` keeps its code to Peak State.
+- **Not done:** a privacy notice. Neither app has one. Cutaway sends text to the AI provider, and API keys reach Epidemic Sound and ElevenLabs, so it's asked about in STATUS. The imprint wasn't checked by a lawyer.
+### D162 The version is the release and the commit (Rob, 2026-11-07)
+- **Choice:** Settings shows `0.1.0 · 3c70818` beside the tabs, as Jetplane shows its commit. A click copies `Cutaway 0.1.0 (3c70818)`, ready for a bug report.
+- **`-modified`** is added when tracked files differ from the commit. Vite reads the commit at build time; the Tauri build script does the same for About.
+- **Why both:** Jetplane shows only the commit. Cutaway also has a release number, which manifests and exports already record.
+### D163 Settings in tabs (Rob, 2026-11-07)
+- **Asked for:** Settings that look like Jetplane's.
+- **Choice:** a fixed-size sheet, so switching tabs doesn't make it jump. Tabs as a pill (General, Pacing, Connections, Imprint, Licenses), the version beside them, a fading line under them. Rows have the name and a hint on the left and On / Off on the right; small capitals head the groups.
+- **What moved where:**
+  - **General:** appearance, follow playhead, the Dev page, playback level, room tone.
+  - **Pacing:** the scene's tightness and room tone, then the episode's breath gap, lead-in, tail, edge fade and pan into the room. With no episode open, it says so.
+  - **Connections:** the sound services and the AI model.
+- **Checkboxes became On / Off pairs**, as in Jetplane. Settings opens on General each time.
+- **Reachable everywhere:** ⌘, (menu and keys), the ⚙ in the header, and a new ⚙ on the welcome screen, so the imprint and licenses are there without an episode.
+### D164 Review: the arrows walk the cards, and a Script tag (Albert, 2026-11-07)
+- **Reported:** ↑ ↓ in review skipped some lines, always the same ones, and it felt bouncy.
+- **Cause:** the arrows set the playhead to the next line's start, and the column scrolled to wherever that moment falls. A line with no length of its own (taken out of the cut, or no take), or one wholly under the line before it (an overlap, a line beside another), adds nothing to the time map. The column landed on its neighbour, and the time-based highlight lit that card. The +0.4 s grace often lit two cards at once.
+- **Every layout refresh** (the review sync reloads the scene) also dropped the held position and snapped to the playhead's row: the bounce.
+- **Fix:**
+  - The arrows walk the cards as laid out, and the column centres on the card.
+  - Stopped, the card lit is the current line, one card only. Playing, it's still the one under the playhead.
+  - Playing, an arrow carries on from the line.
+  - A card the arrows or a click brought up stays in the middle across refreshes.
+  - A Playwright test drops a line from the cut and walks every card down and up. It fails on the old code.
+- **Script tag:** Albert called wrong words and missing lines "a script issue". Notes can now be tagged Script beside Performance, Timing, Sound and Music.
+- **Older builds** reading a review file with a Script note can't read that file, as with any new tag. Rob and Albert build from the same `dev`.
+### D165 Exports: `current/` for the newest, `versions/` for all (Rob, 2026-11-07)
+- **Asked for:** the newest export in a `current` folder, so an app using the file always gets the newest, and the dated versions in a `versions` folder. The same for what's already on disk.
+- **Layout:** `Sc02_Canteen/versions/v002_2026-11-07/E02_S02_v002_Mix.wav` and `Sc02_Canteen/current/E02_S02_Mix.wav`. The whole-episode folder has the same pair: `Episode/versions/…` and `Episode/current/E02_Mix.mp3`. The same holds in a pipeline's `Exports/Ep02/`.
+- **Rob's answers:**
+  1. No version in the names in `current/`, or a link would break at the next export.
+  2. `current/` is a copy of the newest, and `versions/` keeps every version, the newest too.
+- **How `current/` is made** (`apc_export::current`), after each export:
+  - The version is copied with `_v002` taken out of every name. On APFS a copy is a clone and takes no room on that disk; Syncthing still sends it as a file of its own.
+  - The FCPXML and cut list of the copy point at the copies.
+  - Its manifest lists the copies, with the version number of the export it came from.
+  - It's built in a hidden folder beside the old one and swapped in, so a reader sees the old export or the new one, never half of one.
+- **Not part of the history:** `current/` doesn't count as a version. History reads `versions/` and, for older ones, version folders straight in the scene's folder.
+- **Reorganizing:**
+  - `reorganize_exports` (MCP), `cutaway exports --reorganize`, and every export before it writes do the same: versions straight in a scene's folder move into `versions/`, their FCPXML paths and manifest checksums follow, and each `current/` becomes the newest.
+  - Run again, it does nothing.
+  - `--folder <Exports>` does it to a folder without opening any episode, so the episode file and its lock aren't touched.
+- **Changes the "never overwrite" promise (D112):** `current/` is replaced at each export. The versions are still never overwritten.
+- **Episode 2 on the share, at Rob's word:** rehearsed on an APFS clone, then run on the share, with a clone of the folder as it was kept in the scratchpad for the session. 28 versions moved, 17 `current/` folders made, 13 FCPXMLs rewritten. A separate check went over 45 manifests and 30 links into the exports: all good except one file.
+- **That file was already wrong:** `Sc03_Colonels-Office/…/v002_2026-11-07/E02_S03_v002_Dialogue_SARA.wav` has 64,754 bytes after the end of its audio chunk, and its manifest has the size without them. Its header and length match the other voices, so it plays the same. Why is not known; asked about in STATUS.
+### D166 `current/` holds the newest of each track (Rob, 2026-11-07)
+- **Asked for:** `current/` should hold everything that's current. A version that replaced only the dialogue goes in, but the mix from the version before stays, so a technical change to the dialogue doesn't need the mix exported again. D165 copied the newest version folder whole, so Sc02 and Sc03 lost their mix and stems after a dialogue-only v002.
+- **Choice:** `current/` takes each track from the newest version that has it. Its manifest says, per file, which version that is (`version`), and its `version` is the newest.
+- **Rob's answers:**
+  1. **Older files count only while the scene is unchanged:** the same timeline hash as the newest version. Once the cut moved, an older mix no longer lines up, so it leaves `current/` and stays in `versions/`.
+  2. **Matched by what a file is, not by its name:** the track in the manifest, with `_` and `-` alike, so `Dialogue_THE_COLONEL` (before D135) and `Dialogue_THE-COLONEL` are one track. A WAV and an MP3 of the same track are one too.
+  3. **Sets:** the dialogue as one file and per character are one family, and the newest version with any of it gives all of it, so the dialogue is never there twice. Individual clips are a family too, so clips of takes no longer in the cut don't linger.
+- **Text files** (FCPXML, subtitles, cut list) come from the version they belong to, rewritten to point into `current/`.
+- **When it changes:** `current/` is rebuilt only when what it should hold changed, at each export and with `cutaway exports --reorganize`. It's still swapped in whole.
+- **Episode 2 on the share:** rehearsed on a clone, then all 17 `current/` folders rebuilt. Sc02 and Sc03 now have v002's dialogue with v001's mix, stems and cut list. The checker compared every file in `current/` with the version it names, found no track twice and no older file from a different cut, and a second run changed nothing. The SARA file of D165 is unchanged.

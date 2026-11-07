@@ -44,7 +44,7 @@ test('Export is the fourth page, with the defaults of the sheet', async ({ page 
   await expect(page.getByTestId('lock-after')).toBeChecked();
   await expect(page.getByTestId('save-to')).toHaveValue('episode');
   await expect(page.getByTestId('range-caption')).toContainText('1 of 2 scenes');
-  await expect(page.getByTestId('saved-caption')).toContainText('Versions count up on their own');
+  await expect(page.getByTestId('saved-caption')).toContainText('current/ always holds the newest');
   if (shots) await page.screenshot({ path: `${shots}/export.png`, fullPage: true });
 });
 
@@ -218,7 +218,7 @@ test('the episode goes out as one file, and folders need no quoting', async ({ p
   const status = await rpc<{ scenes: { lock: unknown }[]; episode_versions: { folder: string; files: number }[] }>(page, 'export_status');
   expect(status.scenes.every((s) => !s.lock)).toBe(true);
   const newest = status.episode_versions[status.episode_versions.length - 1];
-  expect(newest.folder.split('/Exports/')[1]).toMatch(/^Episode\/v\d{3}_\d{4}-\d{2}-\d{2}$/);
+  expect(newest.folder.split('/Exports/')[1]).toMatch(/^Episode\/versions\/v\d{3}_\d{4}-\d{2}-\d{2}$/);
 
   // it's in the history, and the same scenes say so
   await expect(page.getByTestId('unchanged-caption')).toContainText('unchanged since');

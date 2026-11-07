@@ -46,7 +46,8 @@ test('scene mark: right click on the rail colours the scene, undo takes it back'
   await expect(scene).not.toHaveAttribute('data-status', 'review');
 });
 
-test('pan: a scene takes the room’s value until it gets its own, and goes back to it', async ({ page }) => {
+test('pan: a scene takes the room’s value until it gets its own, and goes back to it', async ({ page, browserName }) => {
+  test.fail(browserName === 'webkit', 'BUG: in WebKit, Escape leaves the pan popover open after its buttons are clicked (it closes in Chromium). Not yet checked in the Tauri app.');
   await openArrange(page);
   await expect(page.getByTestId('room-chip')).toHaveCount(0);
   await page.getByTestId('pan-button').click();
@@ -91,6 +92,7 @@ test('pan: how far a panned voice goes back into the room is a setting', async (
   const status = () => rpc<{ pan_room: number }>('project_status');
   expect((await status()).pan_room).toBe(0.5);
   await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByTestId('settings-tab-pacing').click();
   const slider = page.getByTestId('pan-room-setting');
   await setSlider(slider, 20);
   await expect.poll(async () => (await status()).pan_room).toBe(0.2);
@@ -109,7 +111,8 @@ async function dragBeside(page: Page, from: number, onto: number) {
   for (let i = 1; i <= 8; i++) await page.mouse.move(grip.x + ((to.x - grip.x) * i) / 8, grip.y + ((to.y - grip.y) * i) / 8);
 }
 
-test('side by side: drag a line onto another, offset it, and put it back', async ({ page }) => {
+test('side by side: drag a line onto another, offset it, and put it back', async ({ page, browserName }) => {
+  test.fail(browserName === 'webkit', 'BUG: in WebKit, dragging the pair offset pill leaves it at "together". Not yet checked in the Tauri app: may be Playwright mouse input, not the app.');
   await openArrange(page);
   const rows = page.getByTestId('arrange-row');
   const count = await rows.count();

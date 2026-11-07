@@ -8,6 +8,7 @@ test('import › sounds: search Epidemic, drag into buckets, pages of 5', async 
 
   // connect (the key goes to the in-memory store of the test server)
   await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByTestId('settings-tab-connections').click();
   await page.getByRole('textbox', { name: 'Epidemic Sound API key' }).fill('e2e-key-12345');
   await page.getByRole('button', { name: 'Connect' }).first().click();
   await expect(page.getByText('Connected').first()).toBeVisible();
@@ -44,6 +45,7 @@ test('import › sounds: search Epidemic, drag into buckets, pages of 5', async 
 
   // leave the test server as the other tests expect it: not connected
   await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByTestId('settings-tab-connections').click();
   await page.getByRole('button', { name: 'Disconnect' }).click();
   await expect(page.getByRole('textbox', { name: 'Epidemic Sound API key' })).toBeVisible();
   await page.keyboard.press('Escape');

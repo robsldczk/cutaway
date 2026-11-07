@@ -11,6 +11,12 @@ app/src-tauri/gen/
 app/test-results/
 app/playwright-report/
 
+# An `npm install` in the wrong folder writes this. The real lockfile is in app/
+/package-lock.json
+
+# Files handed to a person for review
+review/
+
 # Local state
 .env
 .env.*

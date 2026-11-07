@@ -4,7 +4,7 @@
 # and deletes in this order, stopping once the total is under the limit:
 #   1. the whole target/ of other worktrees, least recently built first
 #   2. the main checkout's incremental cache
-#   3. the main checkout's compiled output, then its release build
+#   3. the main checkout's compiled output, its release build, then the Dock app's build
 # target/debug/cutaway and cutaway-app are always kept: the MCP server launches
 # from the first, and a running app can carry on. The cost of a clean is a slower
 # next build, nothing else. A run is skipped while cargo or rustc is working.
@@ -150,5 +150,6 @@ if over; then wipe "incremental cache" "$debug/incremental"; fi
 # Together: a fingerprint left behind would describe output that is gone.
 if over; then wipe "compiled output" "$debug/deps" "$debug/build" "$debug/.fingerprint" "$debug/examples"; fi
 if over; then wipe "release build" "$main/target/release"; fi
+if over; then wipe "Dock app build" "$main/target/dock"; fi
 
 finish

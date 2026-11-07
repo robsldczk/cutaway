@@ -104,6 +104,29 @@ pub fn any_export(paths: &EpisodePaths, name: &str) -> bool {
             })
 }
 
+/// Brings an export folder to the versions/ and current/ layout (D165), when it's there.
+fn tidy(base: &Path) -> Result<apc_export::current::Reorganized> {
+    if !base.is_dir() {
+        return Ok(Default::default());
+    }
+    Ok(apc_export::current::reorganize(base)?)
+}
+
+/// `reorganize_exports`: both destinations of the open episode.
+pub fn reorganize(svc: &Service) -> Result<Value> {
+    let ep = episode_tag(&svc.name(), &svc.paths);
+    let mut out = vec![
+        json!({ "folder": svc.paths.exports.to_string_lossy(), "done": tidy(&svc.paths.exports)? }),
+    ];
+    if let Some(dir) = svc.paths.show.as_ref().and_then(Show::pipeline_dir) {
+        let base = exports_in(&dir).join(ep.folder());
+        if base != svc.paths.exports {
+            out.push(json!({ "folder": base.to_string_lossy(), "done": tidy(&base)? }));
+        }
+    }
+    Ok(json!({ "folders": out }))
+}
+
 /// Every version of the open episode.
 pub fn episode_history(svc: &Service) -> History {
     history(&svc.paths, episode_tag(&svc.name(), &svc.paths))
@@ -332,6 +355,7 @@ fn run_one_file(
 ) -> Result<Value> {
     let ep = episode_tag(&svc.name(), &svc.paths);
     let base = base_dir(&svc.paths, ep, settings.save_to)?;
+    tidy(&base)?;
     let h = history(&svc.paths, ep);
     let title = svc.name();
     let now = Local::now();
@@ -392,6 +416,8 @@ pub fn run(svc: &mut Service, p: &ExportRunP, progress: &dyn Fn(f64, &str)) -> R
     }
     let ep = episode_tag(&svc.name(), &svc.paths);
     let base = base_dir(&svc.paths, ep, settings.save_to)?;
+    // an older layout first, so a new version never lands beside old ones
+    tidy(&base)?;
     let h = history(&svc.paths, ep);
     let title = svc.name();
     let now = Local::now();
